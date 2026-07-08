@@ -1021,18 +1021,60 @@
 
 @media (max-width: 900px) {
   .control-grid { grid-template-columns: 1fr; }
-  .control-hero-body { flex-direction: column; }
-  .control-quick-actions {
-    flex-direction: row;
+  .control-hero { border-radius: 18px; }
+  .control-hero-body {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.05rem 1.15rem;
+  }
+  .control-hero-main {
+    min-width: 0;
     width: 100%;
   }
-  .ctrl-quick-btn { flex: 1; }
+  .control-status-chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
+    justify-content: end;
+    gap: 0.45rem;
+  }
+  .ctrl-chip {
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.38rem 0.7rem;
+    white-space: nowrap;
+  }
+  .control-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+  .ctrl-quick-btn {
+    min-height: 54px;
+    padding: 0.7rem 0.5rem;
+  }
 }
 
 @media (max-width: 768px) {
   .mgmt-grid-2 { grid-template-columns: 1fr; }
-  .control-config-bar { padding: 0.65rem; }
-  .cfg-chip { flex: 1 1 calc(50% - 0.5rem); min-width: 0; }
+  .control-config-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    padding: 0.65rem;
+  }
+  .cfg-chip {
+    min-width: 0;
+    width: 100%;
+  }
+  .cfg-chip-action { grid-column: 1 / -1; }
+  .control-config-bar .cfg-chip:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .cfg-chip-val {
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   .process-card.v2 .process-actions {
     width: 100%;
     justify-content: flex-end;
@@ -1041,8 +1083,11 @@
 }
 
 @media (max-width: 400px) {
-  .control-quick-actions { flex-direction: column; }
-  .cfg-chip { flex: 1 1 100%; }
+  .control-quick-actions { grid-template-columns: 1fr; }
+  .control-status-chips,
+  .control-config-bar {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ══════════════════════════════════════
@@ -3068,6 +3113,43 @@
   font-size: 0.58rem;
   color: var(--text-dim);
   margin-top: 0.15rem;
+}
+
+@media (max-width: 768px) {
+  .symbols-panel-top {
+    align-items: stretch;
+  }
+
+  .symbols-panel-top > div {
+    min-width: 0;
+  }
+
+  .symbols-panel-top .btn-compact {
+    min-height: 48px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .symbols-preview {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .sym-preview-chip {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+    padding-inline: 0.55rem;
+    text-align: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .symbols-preview {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Modal */
