@@ -50,6 +50,7 @@ _signals_full_cache: dict = {"mtime": 0.0, "signals": []}
 _telegram_cache: dict = {"mtime": 0.0, "days": 0, "limit": 0, "entries": []}
 _pm2_cache: dict = {"ts": 0.0, "data": []}
 _system_micro_cache: dict = {"ts": 0.0, "data": None}
+_enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "enriched": []}
 _cpu_primed = False
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
@@ -205,20 +206,24 @@ def _pm2_list_cached(max_age: float = 2.0) -> list[dict]:
     return data
 
 
-def _proc_info(name: str) -> dict:
-    for p in _pm2_list_cached():
-        if p.get("name") == name:
-            env = p.get("pm2_env") or {}
-            monit = p.get("monit") or {}
-            return {
-                "name": name,
-                "status": env.get("status", "unknown"),
-                "pid": p.get("pid", 0),
-                "uptime": env.get("pm_uptime"),
-                "restarts": env.get("restart_time", 0),
-                "memory_mb": round((monit.get("memory") or 0) / 1024 / 1024, 1),
-                "cpu": monit.get("cpu", 0),
-            }
+def _pm2_by_name() -> dict[str, dict]:
+    return {p.get("name"): p for p in _pm2_list_cached() if p.get("name")}
+
+
+def _proc_info(name: str, pm2_map: dict[str, dict] | None = None) -> dict:
+    p = (pm2_map or _pm2_by_name()).get(name)
+    if p:
+        env = p.get("pm2_env") or {}
+        monit = p.get("monit") or {}
+        return {
+            "name": name,
+            "status": env.get("status", "unknown"),
+            "pid": p.get("pid", 0),
+            "uptime": env.get("pm_uptime"),
+            "restarts": env.get("restart_time", 0),
+            "memory_mb": round((monit.get("memory") or 0) / 1024 / 1024, 1),
+            "cpu": monit.get("cpu", 0),
+        }
     return {"name": name, "status": "not_found", "pid": 0, "restarts": 0, "memory_mb": 0, "cpu": 0}
 
 
@@ -288,6 +293,35 @@ def _mask(val: str) -> str:
     if len(val) <= 8:
         return "••••••••"
     return val[:4] + "•" * (len(val) - 8) + val[-4:]
+
+
+def _enriched_source_mtime() -> tuple[float, float]:
+    sig = SIGNAL_LOG.stat().st_mtime if SIGNAL_LOG.exists() else 0.0
+    tg = TELEGRAM_DELIVERY_LOG.stat().st_mtime if TELEGRAM_DELIVERY_LOG.exists() else 0.0
+    return sig, tg
+
+
+def _get_enriched_all() -> list[dict]:
+    """Enrich full signal log once; reuse until signal or telegram log changes."""
+    sig_m, tg_m = _enriched_source_mtime()
+    cached = _enriched_full_cache
+    if cached["sig_mtime"] == sig_m and cached["tg_mtime"] == tg_m and cached["enriched"]:
+        return cached["enriched"]
+    all_signals = _get_all_signals_full()
+    telegram = _parse_telegram_deliveries(days=30, limit=5000)
+    enriched = _enrich_signals(all_signals, telegram)
+    cached["sig_mtime"] = sig_m
+    cached["tg_mtime"] = tg_m
+    cached["enriched"] = enriched
+    return enriched
+
+
+def _get_enriched_signals(days: int | None = 30) -> list[dict]:
+    enriched = _get_enriched_all()
+    if days is None:
+        return list(enriched)
+    cutoff = datetime.now() - timedelta(days=days)
+    return [s for s in enriched if _signal_after(s, cutoff)]
 
 
 def _parse_all_signals(days: int | None = None) -> list[dict]:
@@ -1467,16 +1501,17 @@ def _build_status_payload(
     stats_signals: list[dict] | None = None,
     enriched_recent: list[dict] | None = None,
 ) -> dict:
+    pm2_map = _pm2_by_name()
     procs = []
     for name in PROCESSES:
-        info = _proc_info(name)
+        info = _proc_info(name, pm2_map)
         info["uptime_human"] = _uptime_str(info.get("uptime"))
         info["controllable"] = True
         procs.append(info)
 
     all_procs = []
     for name in DISPLAY_PROCESSES:
-        info = _proc_info(name)
+        info = _proc_info(name, pm2_map)
         info["uptime_human"] = _uptime_str(info.get("uptime"))
         info["controllable"] = name in PROCESSES
         all_procs.append(info)
@@ -1485,9 +1520,7 @@ def _build_status_payload(
     env = _parse_env()
     signal_stats = _live_signal_stats()
     if enriched_recent is None:
-        telegram_recent = _parse_telegram_deliveries(days=7, limit=500)
-        all_recent = _parse_all_signals(days=7)
-        enriched_recent = _enrich_signals(all_recent, telegram_recent)
+        enriched_recent = _get_enriched_signals(days=7)
 
     last_signal_human = {}
     for sym, ts in (state.get("last_signal_at") or {}).items():
@@ -1560,12 +1593,12 @@ def api_version():
 @auth_required
 def api_bootstrap():
     """Single payload for fast dashboard boot — parse signal log once."""
+    enriched_30 = _get_enriched_signals(days=30)
+    enriched_7d = _get_enriched_signals(days=7)
+    signals_7d = _parse_all_signals(days=7)
     all_signals = _parse_all_signals(days=30)
-    cutoff_7 = datetime.now() - timedelta(days=7)
-    signals_7d = [s for s in all_signals if _signal_after(s, cutoff_7)]
     telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
-    enriched_30 = _enrich_signals(all_signals, telegram_30)
-    enriched_7d = [s for s in enriched_30 if _signal_after(s, cutoff_7)]
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     return jsonify(
         {
@@ -1581,6 +1614,17 @@ def api_bootstrap():
             "telegram": {
                 "summary": _telegram_summary(telegram_30, 30),
                 "entries": telegram_30[:100],
+            },
+            "analytics_30": {
+                "symbols": {
+                    "symbols": _symbol_analytics_from(enriched_30),
+                    "days": 30,
+                    "generated_at": generated_at,
+                },
+                "hourly": {
+                    "hours": _hourly_distribution_from(all_signals),
+                    "days": 30,
+                },
             },
             "ops": _ops_config(),
             "cooldowns": _cooldown_status(),
@@ -1625,9 +1669,7 @@ def api_signals():
     days = min(max(days, 1), 365)
     limit = min(max(limit, 1), 500)
 
-    raw = _parse_all_signals(days=days)
-    telegram = _parse_telegram_deliveries(days=days, limit=3000)
-    enriched = _enrich_signals(raw, telegram)
+    enriched = _get_enriched_signals(days=days)
 
     if delivery in ("sent", "failed", "unsent"):
         enriched = [s for s in enriched if s.get("delivery_status") == delivery]
@@ -1852,10 +1894,7 @@ def api_telegram_retry():
     return jsonify({"ok": True, "message": "سیگنال مجدداً ارسال شد", **result})
 
 
-def _symbol_analytics(days: int = 30) -> list[dict]:
-    raw = _parse_all_signals(days=days)
-    telegram = _parse_telegram_deliveries(days=days, limit=5000)
-    enriched = _enrich_signals(raw, telegram)
+def _symbol_analytics_from(enriched: list[dict]) -> list[dict]:
     buckets: dict[str, dict] = {}
     for s in enriched:
         sym = _normalize_symbol(str(s.get("symbol", "?")))
@@ -1898,6 +1937,10 @@ def _symbol_analytics(days: int = 30) -> list[dict]:
         result.append(row)
     result.sort(key=lambda r: r["total"], reverse=True)
     return result
+
+
+def _symbol_analytics(days: int = 30) -> list[dict]:
+    return _symbol_analytics_from(_get_enriched_signals(days=days))
 
 
 def _cooldown_status() -> dict:
@@ -1952,12 +1995,11 @@ def _cooldown_status() -> dict:
     }
 
 
-def _hourly_distribution(days: int = 30) -> list[dict]:
-    raw = _parse_all_signals(days=days)
+def _hourly_distribution_from(signals: list[dict]) -> list[dict]:
     totals = [0] * 24
     buys = [0] * 24
     sells = [0] * 24
-    for sig in raw:
+    for sig in signals:
         ts = _parse_ts(sig.get("timestamp", ""))
         if not ts:
             continue
@@ -1972,6 +2014,10 @@ def _hourly_distribution(days: int = 30) -> list[dict]:
         {"hour": h, "label": f"{h:02d}:00", "total": totals[h], "buy": buys[h], "sell": sells[h]}
         for h in range(24)
     ]
+
+
+def _hourly_distribution(days: int = 30) -> list[dict]:
+    return _hourly_distribution_from(_parse_all_signals(days=days))
 
 
 @app.route("/api/analytics/symbols")

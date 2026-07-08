@@ -351,6 +351,15 @@
     }
   }
 
+  function applyAnalyticsPayload(payload, days = 30) {
+    if (!payload) return;
+    renderSymbolReportTable(
+      payload.symbols?.symbols,
+      payload.symbols?.generated_at ? `بروزرسانی ${payload.symbols.generated_at}` : null
+    );
+    renderHourlyHeatmap(payload.hourly?.hours || []);
+  }
+
   function applyAllCachedData() {
     const status = DataCache.get("status");
     if (status) applyStatusData(status);
@@ -358,10 +367,14 @@
     if (sys) updateSystem(sys);
     const report7 = DataCache.get("report:7");
     if (report7) applyReportData(report7, 7);
+    const report30 = DataCache.get("report:30");
+    if (report30) applyReportData(report30, 30);
     const sig = DataCache.get(signalsCacheKey(30, "all", "all", "all"));
     if (sig) applySignalsPayload(sig);
     const tg = DataCache.get("telegram:30:all");
     if (tg) applyTelegramData(tg);
+    const analytics30 = DataCache.get("analytics:30");
+    if (analytics30) applyAnalyticsPayload(analytics30, 30);
     const ops = DataCache.get("ops");
     if (ops) applyOpsConfig(ops);
     const cooldowns = DataCache.get("cooldowns");
@@ -377,6 +390,7 @@
       fetchOpsConfig({ force: false }).catch(() => {}),
       fetchCooldowns({ force: false }).catch(() => {}),
       fetchUptimeHistory({ force: false }).catch(() => {}),
+      fetchReport(30, { force: false }).catch(() => {}),
       fetchReportAnalytics(30, { force: false }).catch(() => {}),
     ];
     Promise.allSettled(jobs);
@@ -1320,6 +1334,12 @@
 
   async function fetchReportAnalytics(days = 30, { force = false } = {}) {
     const key = `analytics:${days}`;
+    if (!force && days === 30 && isBootstrapFresh() && DataCache.get(key)) {
+      const cached = DataCache.get(key);
+      applyAnalyticsPayload(cached, days);
+      return cached;
+    }
+    await waitForBootstrap();
     const data = await DataCache.load(
       key,
       async () => {
@@ -1332,14 +1352,10 @@
       CACHE_TTL.analytics,
       {
         force,
-        onStale: (payload) => {
-          renderSymbolReportTable(payload.symbols?.symbols, payload.symbols?.generated_at ? `بروزرسانی ${payload.symbols.generated_at}` : null);
-          renderHourlyHeatmap(payload.hourly?.hours || []);
-        },
+        onStale: (payload) => applyAnalyticsPayload(payload, days),
       }
     );
-    renderSymbolReportTable(data.symbols?.symbols, data.symbols?.generated_at ? `بروزرسانی ${data.symbols.generated_at}` : null);
-    renderHourlyHeatmap(data.hourly?.hours || []);
+    applyAnalyticsPayload(data, days);
     return data;
   }
 
@@ -1751,6 +1767,12 @@
       DataCache.set("uptime", payload.uptime);
       renderUptimeHistory(payload.uptime);
     }
+    if (payload.analytics_30) {
+      DataCache.set("analytics:30", payload.analytics_30);
+      if (activePage === "reports" && Number($("#reportDays")?.value || 30) === 30) {
+        applyAnalyticsPayload(payload.analytics_30, 30);
+      }
+    }
     DataCache.set("bootstrap", payload);
     bootstrapCompletedAt = Date.now();
   }
@@ -1895,7 +1917,7 @@
 
   async function fetchReport(days = 30, { force = false } = {}) {
     const key = reportCacheKey(days);
-    if (!force && days === 7 && isBootstrapFresh() && DataCache.get(key)) {
+    if (!force && isBootstrapFresh() && DataCache.get(key)) {
       const cached = DataCache.get(key);
       applyReportData(cached, days);
       return cached;
@@ -1984,8 +2006,8 @@
 
   async function ensurePageData(page, { force = false } = {}) {
     const needs = PAGE_NEEDS[page] || [];
+    applyPageFromCache(page);
     if (!force && isBootstrapFresh()) {
-      applyPageFromCache(page);
       return;
     }
 
@@ -3167,7 +3189,7 @@
       const msg = data.message || "انجام شد";
       toast(msg);
       logControlActivity(msg, "ok");
-      invalidateCache("status", "system", "bootstrap", "report:7", "report:30", "telegram:30", "cooldowns");
+      invalidateCache("status", "system", "bootstrap", "report:*", "telegram:*", "cooldowns");
       await fetchStatus({ force: true });
       if (action === "toggle_debug") refreshReports({ force: true });
       if (action === "restart_dashboard") {
