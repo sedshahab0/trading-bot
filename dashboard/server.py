@@ -2146,15 +2146,21 @@ def api_management():
 
     if action == "pause_notifications":
         _write_env({"NOTIFICATIONS_PAUSED": "1"})
-        _run(["pm2", "stop", "signal-engine"])
+        code, out, err = _run(["pm2", "stop", "signal-engine"])
         _run(["pm2", "save"])
-        return jsonify({"ok": True, "message": "Notifications paused — engine stopped"})
+        if code != 0:
+            return jsonify({"ok": False, "error": f"توقف موتور ناموفق: {err or out or 'pm2 error'}"}), 500
+        _audit("pause_notifications", "manual pause")
+        return jsonify({"ok": True, "message": "نوتیفیکیشن متوقف شد — موتور سیگنال خاموش شد"})
 
     if action == "resume_notifications":
         _write_env({"NOTIFICATIONS_PAUSED": "0"})
-        _run(["pm2", "start", "signal-engine"])
+        code, out, err = _run(["pm2", "start", "signal-engine"])
         _run(["pm2", "save"])
-        return jsonify({"ok": True, "message": "Notifications resumed — engine started"})
+        if code != 0:
+            return jsonify({"ok": False, "error": f"راه‌اندازی موتور ناموفق: {err or out or 'pm2 error'}"}), 500
+        _audit("resume_notifications", "manual resume")
+        return jsonify({"ok": True, "message": "نوتیفیکیشن از سر گرفته شد — موتور سیگنال روشن شد"})
 
     if action == "toggle_debug":
         env = _parse_env()

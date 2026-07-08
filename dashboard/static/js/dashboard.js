@@ -786,9 +786,14 @@
 
   function statusFingerprint(data) {
     if (!data) return "";
+    const procs = (data.processes || [])
+      .map((p) => `${p.name}:${p.status}`)
+      .join(",");
     return [
       data.overall,
       data.server_time,
+      data.config?.notifications_paused,
+      procs,
       data.signal_stats?.today,
       data.signal_stats?.total,
       data.outcome_summary?.win_rate,
@@ -3224,11 +3229,16 @@
         method: "POST",
         body: JSON.stringify({ action }),
       });
+      if (data.ok === false) {
+        throw new Error(data.error || "عملیات ناموفق بود");
+      }
       const msg = data.message || "انجام شد";
       toast(msg);
       logControlActivity(msg, "ok");
       invalidateCache("status", "system", "bootstrap", "report:*", "telegram:*", "cooldowns");
+      lastStatusFingerprint = null;
       await fetchStatus({ force: true });
+      applyControlPage(DataCache.get("status"));
       if (action === "toggle_debug") refreshReports({ force: true });
       if (action === "restart_dashboard") {
         setTimeout(() => window.location.reload(), 1500);
@@ -3244,7 +3254,11 @@
 
   $$(".mgmt-card[data-mgmt]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      mgmt(btn.dataset.mgmt, { confirmMsg: btn.dataset.confirm || null, btn });
+      const action = btn.dataset.mgmt;
+      const confirmMsg =
+        btn.dataset.confirm ||
+        (action === "pause_notifications" ? "ارسال نوتیفیکیشن و موتور سیگنال متوقف شوند؟" : null);
+      mgmt(action, { confirmMsg, btn });
     });
   });
 
