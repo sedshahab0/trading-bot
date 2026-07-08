@@ -32,6 +32,15 @@
   const controlActivity = [];
   const MAX_ACTIVITY = 20;
   let lastSignalStatsKey = null;
+  let symbolsDraft = [];
+  let lastEngineStateForSymbols = null;
+
+  const SYMBOL_PRESETS = [
+    "EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "USD/CHF",
+    "AUD/USD", "USD/CAD", "NZD/USD", "EUR/GBP", "BTC/USD",
+    "XAG/USD", "EUR/JPY",
+  ];
+  const MAX_SYMBOLS = 12;
   const resourceHistory = {
     labels: [],
     cpu: [],
@@ -53,7 +62,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.3", full: "2.3.0", major: 2, minor: 3, patch: 0 };
+  let dashboardVersion = { label: "v2.4", full: "2.4.0", major: 2, minor: 4, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -613,20 +622,237 @@
 
     const cfgBar = $("#controlConfigBar");
     if (cfgBar) {
+      const symList = parseSymbolsString(cfg.symbols || "");
+      const symDisplay = symList.length ? symList.join(", ") : "—";
       cfgBar.innerHTML = [
-        { lbl: "نمادها", val: (cfg.symbols || "—").replace(/,/g, ", ") },
+        {
+          lbl: "نمادها",
+          val: symDisplay,
+          action: true,
+          hint: symList.length ? `${symList.length} نماد — کلیک برای مدیریت` : "کلیک برای افزودن",
+        },
         { lbl: "حداقل امتیاز", val: cfg.min_score || "—" },
         { lbl: "فاصله بررسی", val: `${cfg.poll_seconds || "—"}s` },
         { lbl: "Provider", val: cfg.data_provider || "—" },
         { lbl: "Facebook", val: cfg.facebook_enable ? "فعال" : "غیرفعال" },
       ]
-        .map((c) => `<div class="cfg-chip"><span class="cfg-chip-lbl">${c.lbl}</span><span class="cfg-chip-val">${c.val}</span></div>`)
+        .map((c) =>
+          c.action
+            ? `<button type="button" class="cfg-chip cfg-chip-action" id="cfgSymbolsChip" data-open-symbols>
+                <span class="cfg-chip-lbl">${c.lbl}</span>
+                <span class="cfg-chip-val">${esc(c.val)}</span>
+                <span class="cfg-chip-action-hint">${c.hint}</span>
+               </button>`
+            : `<div class="cfg-chip"><span class="cfg-chip-lbl">${c.lbl}</span><span class="cfg-chip-val">${esc(String(c.val))}</span></div>`
+        )
         .join("");
+      $("#cfgSymbolsChip")?.addEventListener("click", openSymbolsModal);
     }
+
+    lastEngineStateForSymbols = data.engine_state || null;
+    renderSymbolsPreview(parseSymbolsString(cfg.symbols || ""), lastEngineStateForSymbols);
 
     if ($("#btnPauseNotif")) $("#btnPauseNotif").classList.toggle("active-state", !!cfg.notifications_paused);
     if ($("#btnResumeNotif")) $("#btnResumeNotif").classList.toggle("active-state", !cfg.notifications_paused);
     if ($("#btnToggleDebug")) $("#btnToggleDebug").classList.toggle("active-state", !!cfg.engine_debug);
+  }
+
+  function parseSymbolsString(raw) {
+    if (!raw) return [];
+    return raw
+      .split(/[,;\n]+/)
+      .map((s) => normalizeSymbolInput(s))
+      .filter(Boolean);
+  }
+
+  function formatSymbolsString(list) {
+    return list.join(",");
+  }
+
+  function normalizeSymbolInput(raw) {
+    let s = String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!s) return "";
+    if (s.includes("/")) {
+      const [a, b] = s.split("/");
+      return a && b ? `${a}/${b}` : "";
+    }
+    if (s.length === 6) return `${s.slice(0, 3)}/${s.slice(3)}`;
+    if (s.endsWith("USD") && s.length > 3) return `${s.slice(0, -3)}/USD`;
+    if (s.startsWith("XAU") || s.startsWith("XAG")) {
+      return s.length === 6 ? `${s.slice(0, 3)}/${s.slice(3)}` : s.replace(/(.{3})(.{3})/, "$1/$2");
+    }
+    return s;
+  }
+
+  function symbolCategory(sym) {
+    const u = sym.toUpperCase();
+    if (u.includes("XAU") || u.includes("XAG")) return "metal";
+    if (u.includes("BTC") || u.includes("ETH")) return "crypto";
+    return "forex";
+  }
+
+  function renderSymbolsPreview(symbols, engineState) {
+    const el = $("#symbolsPreview");
+    if (!el) return;
+    if (!symbols.length) {
+      el.innerHTML = '<p class="sym-preview-empty">نمادی تنظیم نشده — «مدیریت نمادها» را بزنید</p>';
+      return;
+    }
+    el.innerHTML = symbols
+      .map((sym) => {
+        const cat = symbolCategory(sym);
+        return `<button type="button" class="sym-preview-chip ${cat}" data-open-symbols title="مدیریت نمادها">
+          <span class="sym-dot"></span>${esc(sym)}
+        </button>`;
+      })
+      .join("");
+    el.querySelectorAll("[data-open-symbols]").forEach((btn) => {
+      btn.addEventListener("click", openSymbolsModal);
+    });
+  }
+
+  function renderSymbolsPresets() {
+    const el = $("#symbolsPresets");
+    if (!el) return;
+    el.innerHTML = SYMBOL_PRESETS.map((sym) => {
+      const added = symbolsDraft.includes(sym);
+      return `<button type="button" class="sym-preset-btn${added ? " added" : ""}" data-preset="${esc(sym)}" ${added ? "disabled" : ""}>${added ? "✓ " : ""}${esc(sym)}</button>`;
+    }).join("");
+    el.querySelectorAll("[data-preset]").forEach((btn) => {
+      btn.addEventListener("click", () => addSymbolToDraft(btn.dataset.preset));
+    });
+  }
+
+  function renderSymbolsModalLists() {
+    const listEl = $("#symbolsActiveList");
+    const emptyEl = $("#symbolsEmptyHint");
+    const countEl = $("#symbolsActiveCount");
+    if (countEl) countEl.textContent = String(symbolsDraft.length);
+    if (!listEl) return;
+
+    if (!symbolsDraft.length) {
+      listEl.innerHTML = "";
+      if (emptyEl) emptyEl.hidden = false;
+    } else {
+      if (emptyEl) emptyEl.hidden = true;
+      listEl.innerHTML = symbolsDraft
+        .map(
+          (sym) => `
+        <div class="sym-tag ${symbolCategory(sym)}">
+          <span>${esc(sym)}</span>
+          <button type="button" class="sym-tag-remove" data-remove="${esc(sym)}" aria-label="حذف ${esc(sym)}">×</button>
+        </div>`
+        )
+        .join("");
+      listEl.querySelectorAll("[data-remove]").forEach((btn) => {
+        btn.addEventListener("click", () => removeSymbolFromDraft(btn.dataset.remove));
+      });
+    }
+
+    const engineEl = $("#symbolsEngineList");
+    if (engineEl) {
+      const bars = lastEngineStateForSymbols?.last_bars || {};
+      const signals = lastEngineStateForSymbols?.last_signal_at || {};
+      if (!symbolsDraft.length) {
+        engineEl.innerHTML = '<p class="sym-hint">پس از افزودن نماد، وضعیت موتور اینجا نمایش داده می‌شود.</p>';
+      } else {
+        engineEl.innerHTML = symbolsDraft
+          .map((sym) => {
+            const key = Object.keys(signals).find((k) => k.replace("/", "") === sym.replace("/", "")) || sym;
+            const sigTime = signals[key] || signals[sym] || null;
+            const barTime = bars[key] || bars[sym] || null;
+            const active = Boolean(sigTime || barTime);
+            const meta = sigTime
+              ? `آخرین سیگنال: ${esc(String(sigTime).split(" ")[1] || sigTime)}`
+              : barTime
+                ? `آخرین bar: ${esc(String(barTime))}`
+                : "هنوز فعالیتی ثبت نشده";
+            return `
+            <div class="sym-engine-row">
+              <span class="sym-name">${esc(sym)}</span>
+              <span class="sym-meta">${meta}</span>
+              <span class="sym-status ${active ? "ok" : "idle"}">${active ? "فعال" : "منتظر"}</span>
+            </div>`;
+          })
+          .join("");
+      }
+    }
+
+    renderSymbolsPresets();
+  }
+
+  function openSymbolsModal() {
+    const cfg = DataCache.get("status")?.config || {};
+    symbolsDraft = parseSymbolsString(cfg.symbols || $("#cfgSymbols")?.value || "");
+    renderSymbolsModalLists();
+    const overlay = $("#symbolsModalOverlay");
+    if (overlay) {
+      overlay.classList.add("open");
+      overlay.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+      setTimeout(() => $("#symbolAddInput")?.focus(), 120);
+    }
+  }
+
+  function closeSymbolsModal() {
+    const overlay = $("#symbolsModalOverlay");
+    if (overlay) {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }
+    const input = $("#symbolAddInput");
+    if (input) input.value = "";
+  }
+
+  function addSymbolToDraft(raw) {
+    const sym = normalizeSymbolInput(raw);
+    if (!sym) {
+      toast("فرمت نماد نامعتبر است", "error");
+      return false;
+    }
+    if (symbolsDraft.includes(sym)) {
+      toast("این نماد قبلاً اضافه شده", "error");
+      return false;
+    }
+    if (symbolsDraft.length >= MAX_SYMBOLS) {
+      toast(`حداکثر ${MAX_SYMBOLS} نماد مجاز است`, "error");
+      return false;
+    }
+    symbolsDraft.push(sym);
+    renderSymbolsModalLists();
+    return true;
+  }
+
+  function removeSymbolFromDraft(sym) {
+    symbolsDraft = symbolsDraft.filter((s) => s !== sym);
+    renderSymbolsModalLists();
+  }
+
+  async function saveSymbolsDraft() {
+    if (!symbolsDraft.length) {
+      toast("حداقل یک نماد لازم است", "error");
+      return;
+    }
+    const btn = $("#symbolsModalSave");
+    try {
+      if (btn) btn.classList.add("loading");
+      const value = formatSymbolsString(symbolsDraft);
+      await api("/api/config", {
+        method: "PATCH",
+        body: JSON.stringify({ SYMBOLS: value }),
+      });
+      if ($("#cfgSymbols")) $("#cfgSymbols").value = value;
+      toast("نمادها ذخیره شد — برای اعمال کامل ربات را ری‌استارت کنید");
+      logControlActivity(`نمادها بروز شد: ${symbolsDraft.join(", ")}`, "ok");
+      invalidateCache("status", "bootstrap");
+      await fetchStatus({ force: true });
+      closeSymbolsModal();
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      if (btn) btn.classList.remove("loading");
+    }
   }
 
   function logControlActivity(message, type = "ok") {
@@ -2064,6 +2290,30 @@
   $("#btnClearActivity")?.addEventListener("click", () => {
     controlActivity.length = 0;
     renderControlActivity();
+  });
+
+  $("#btnManageSymbols")?.addEventListener("click", openSymbolsModal);
+  $("#symbolsModalClose")?.addEventListener("click", closeSymbolsModal);
+  $("#symbolsModalCancel")?.addEventListener("click", closeSymbolsModal);
+  $("#symbolsModalOverlay")?.addEventListener("click", (e) => {
+    if (e.target === $("#symbolsModalOverlay")) closeSymbolsModal();
+  });
+  $("#symbolsModalSave")?.addEventListener("click", saveSymbolsDraft);
+  $("#symbolAddBtn")?.addEventListener("click", () => {
+    const input = $("#symbolAddInput");
+    if (addSymbolToDraft(input?.value || "")) input.value = "";
+  });
+  $("#symbolAddInput")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const input = $("#symbolAddInput");
+      if (addSymbolToDraft(input?.value || "")) input.value = "";
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("#symbolsModalOverlay")?.classList.contains("open")) {
+      closeSymbolsModal();
+    }
   });
 
   $("#reportDays")?.addEventListener("change", () => refreshReports({ force: true }));

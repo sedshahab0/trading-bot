@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=10" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=10" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=11" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=11" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.3</span>
+            <span class="version-badge" id="loginVersion">v2.4</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.3</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.4</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.3.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.4.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -351,6 +351,21 @@
 
           <!-- Config snapshot -->
           <section class="control-config-bar" id="controlConfigBar"></section>
+
+          <!-- Symbols preview -->
+          <article class="panel symbols-panel" id="controlSymbolsPanel">
+            <div class="panel-top symbols-panel-top">
+              <div>
+                <h3 class="panel-heading">نمادهای تحلیل</h3>
+                <p class="panel-desc">نمادهایی که موتور روی آن‌ها سیگنال تولید می‌کند</p>
+              </div>
+              <button type="button" class="btn btn-primary btn-compact" id="btnManageSymbols">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
+                مدیریت نمادها
+              </button>
+            </div>
+            <div class="symbols-preview" id="symbolsPreview"></div>
+          </article>
 
           <div class="control-grid">
             <!-- Management sections -->
@@ -627,6 +642,58 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
-  <script src="/static/js/dashboard.js?v=6"></script>
+
+  <!-- Symbol Manager Modal -->
+  <div class="modal-overlay" id="symbolsModalOverlay" aria-hidden="true">
+    <div class="modal-sheet symbols-modal" id="symbolsModal" role="dialog" aria-labelledby="symbolsModalTitle" aria-modal="true">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title" id="symbolsModalTitle">مدیریت نمادها</h2>
+          <p class="modal-sub">افزودن، حذف و ویرایش نمادهای تحلیل ربات</p>
+        </div>
+        <button type="button" class="modal-close" id="symbolsModalClose" aria-label="بستن">✕</button>
+      </div>
+
+      <div class="modal-body symbols-modal-body">
+        <section class="sym-section">
+          <div class="sym-section-head">
+            <h3>نمادهای فعال</h3>
+            <span class="sym-count" id="symbolsActiveCount">0</span>
+          </div>
+          <div class="symbols-active-list" id="symbolsActiveList"></div>
+          <p class="sym-empty" id="symbolsEmptyHint" hidden>هنوز نمادی اضافه نشده — از پیشنهادها یا فیلد زیر استفاده کنید.</p>
+        </section>
+
+        <section class="sym-section">
+          <h3>افزودن نماد</h3>
+          <div class="sym-add-row">
+            <input type="text" id="symbolAddInput" class="sym-input" placeholder="مثال: EUR/USD یا XAUUSD" autocomplete="off" inputmode="text" />
+            <button type="button" class="btn btn-primary sym-add-btn" id="symbolAddBtn">افزودن</button>
+          </div>
+          <p class="sym-hint">فرمت: EUR/USD، GBPUSD یا XAU/USD — حداکثر ۱۲ نماد</p>
+        </section>
+
+        <section class="sym-section">
+          <h3>پیشنهاد سریع</h3>
+          <div class="sym-presets" id="symbolsPresets"></div>
+        </section>
+
+        <section class="sym-section">
+          <div class="sym-section-head">
+            <h3>وضعیت موتور</h3>
+            <span class="sym-hint-inline">آخرین فعالیت هر نماد</span>
+          </div>
+          <div class="sym-engine-list" id="symbolsEngineList"></div>
+        </section>
+      </div>
+
+      <div class="modal-footer symbols-modal-footer">
+        <button type="button" class="btn btn-ghost" id="symbolsModalCancel">انصراف</button>
+        <button type="button" class="btn btn-primary" id="symbolsModalSave">ذخیره و اعمال</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/dashboard.js?v=7"></script>
 </body>
 </html>
