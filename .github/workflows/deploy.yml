@@ -43,12 +43,24 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SERVER_SSH_PASSWORD: ${{ secrets.SERVER_SSH_PASSWORD }}
         run: |
           HOST="${DEPLOY_HOST:-65.109.179.227}"
           USER="${DEPLOY_USER:-root}"
           PATH_ON_SERVER="${DEPLOY_PATH:-/opt/trading-bot}"
           echo "Deploying to ${USER}@${HOST}:${PATH_ON_SERVER}"
-          rsync -avz --delete \
+
+          if [[ -n "${SERVER_SSH_PASSWORD:-}" ]]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+            export SSHPASS="${SERVER_SSH_PASSWORD}"
+            SSH_CMD=(sshpass -e ssh -o StrictHostKeyChecking=accept-new)
+            RSYNC_SSH="sshpass -e ssh -o StrictHostKeyChecking=accept-new"
+          else
+            SSH_CMD=(ssh -o StrictHostKeyChecking=accept-new)
+            RSYNC_SSH="ssh -o StrictHostKeyChecking=accept-new"
+          fi
+
+          rsync -avz --delete -e "${RSYNC_SSH}" \
             --exclude '__pycache__' \
             --exclude '*.pyc' \
             --exclude '.env' \
@@ -58,9 +70,9 @@ jobs:
             --exclude 'run_engine.py' \
             --exclude 'engine/' \
             dashboard/ "${USER}@${HOST}:${PATH_ON_SERVER}/dashboard/"
-          rsync -avz deploy/ "${USER}@${HOST}:${PATH_ON_SERVER}/deploy/"
-          rsync -avz deploy/nginx/agennews.store.conf "${USER}@${HOST}:/etc/nginx/sites-available/agennews.store"
-          ssh "${USER}@${HOST}" "nginx -t && systemctl reload nginx && pm2 restart dashboard && pm2 save"
+          rsync -avz -e "${RSYNC_SSH}" deploy/ "${USER}@${HOST}:${PATH_ON_SERVER}/deploy/"
+          rsync -avz -e "${RSYNC_SSH}" deploy/nginx/agennews.store.conf "${USER}@${HOST}:/etc/nginx/sites-available/agennews.store"
+          "${SSH_CMD[@]}" "${USER}@${HOST}" "nginx -t && systemctl reload nginx && pm2 restart dashboard && pm2 save"
           echo "deploy_method=ssh" >> "$GITHUB_OUTPUT"
 
       - name: Deploy via HTTP hook (fallback)
