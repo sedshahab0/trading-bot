@@ -773,6 +773,26 @@ def api_management():
         _write_env({"ENGINE_DEBUG": "0" if current else "1"})
         return jsonify({"ok": True, "debug": not current, "message": f"Debug mode {'enabled' if not current else 'disabled'}"})
 
+    if action == "pull_and_restart":
+        branch = os.environ.get("DEPLOY_BRANCH", "cursor/trading-bot-dashboard-ba88")
+        git_dir = BOT_ROOT
+        if not (git_dir / ".git").exists():
+            return jsonify({"error": "Not a git repository"}), 400
+        steps = [
+            ["git", "-C", str(git_dir), "fetch", "origin", branch],
+            ["git", "-C", str(git_dir), "checkout", branch],
+            ["git", "-C", str(git_dir), "reset", "--hard", f"origin/{branch}"],
+        ]
+        outputs = []
+        for cmd in steps:
+            code, out, err = _run(cmd, timeout=60)
+            outputs.append({"cmd": " ".join(cmd), "ok": code == 0, "output": out or err})
+            if code != 0:
+                return jsonify({"ok": False, "message": "Git pull failed", "steps": outputs}), 500
+        _run(["pm2", "restart", "dashboard"])
+        _run(["pm2", "save"])
+        return jsonify({"ok": True, "message": f"Pulled {branch} and restarted dashboard", "steps": outputs})
+
     return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
