@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import sqlite3
 import secrets
 import subprocess
 import sys
@@ -65,6 +66,7 @@ ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
 VERSION_FILE = Path(__file__).parent / "version.json"
 CLIENT_DIAGNOSTIC_LOG = Path(__file__).parent / "client-diagnostics.log"
+CACHE_DB = Path(os.environ.get("DASHBOARD_CACHE_DB", str(BOT_ROOT / ".cache" / "dashboard-cache.sqlite3")))
 
 PROCESSES = ("signal-engine", "signal-server")
 DISPLAY_PROCESSES = ("signal-engine", "signal-server", "dashboard")
@@ -261,6 +263,97 @@ def _read_json(path: Path) -> dict | list | None:
         return json.loads(path.read_text())
     except Exception:
         return None
+
+
+def _cache_db() -> sqlite3.Connection:
+    CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(CACHE_DB, timeout=0.4)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=400")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cache (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            expires_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at)")
+    return conn
+
+
+def _cache_get(key: str):
+    now = time.time()
+    try:
+        with _cache_db() as conn:
+            row = conn.execute(
+                "SELECT value, expires_at FROM cache WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if not row:
+                return None
+            if row["expires_at"] <= now:
+                conn.execute("DELETE FROM cache WHERE key = ?", (key,))
+                return None
+            return json.loads(row["value"])
+    except Exception:
+        return None
+
+
+def _cache_set(key: str, value, ttl_seconds: int) -> None:
+    expires_at = time.time() + max(ttl_seconds, 1)
+    payload = json.dumps(value, ensure_ascii=False, default=str)
+    try:
+        with _cache_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO cache (key, value, expires_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    expires_at = excluded.expires_at,
+                    updated_at = excluded.updated_at
+                """,
+                (key, payload, expires_at, time.time()),
+            )
+    except Exception:
+        pass
+
+
+def _cache_delete_prefix(prefix: str) -> None:
+    try:
+        with _cache_db() as conn:
+            conn.execute("DELETE FROM cache WHERE key LIKE ?", (f"{prefix}%",))
+    except Exception:
+        pass
+
+
+def _cache_json(key: str, ttl_seconds: int, loader):
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    value = loader()
+    _cache_set(key, value, ttl_seconds)
+    return value
+
+
+def _invalidate_dashboard_cache() -> None:
+    for prefix in (
+        "bootstrap:",
+        "signals:v1:",
+        "reports:summary:v1:",
+        "telegram:log:v1:",
+        "telegram:summary:v1:",
+        "analytics:symbols:v1:",
+        "analytics:hourly:v1:",
+    ):
+        _cache_delete_prefix(prefix)
 
 
 def _parse_env() -> dict[str, str]:
@@ -2051,13 +2144,13 @@ def api_client_log():
 @auth_required
 def api_bootstrap():
     """Single payload for fast dashboard boot — parse signal log once."""
-    enriched_30 = _get_enriched_signals(days=30)
-    enriched_7d = _get_enriched_signals(days=7)
-    signals_7d = _parse_all_signals(days=7)
-    telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
+    def _load():
+        enriched_30 = _get_enriched_signals(days=30)
+        enriched_7d = _get_enriched_signals(days=7)
+        signals_7d = _parse_all_signals(days=7)
+        telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
 
-    return jsonify(
-        {
+        return {
             "version": _dashboard_version(),
             "status": _build_status_payload(enriched_recent=enriched_7d or enriched_30[:10]),
             "system": _system_stats_with_ops(),
@@ -2074,7 +2167,8 @@ def api_bootstrap():
             "cooldowns": _cooldown_status(),
             "uptime": _pm2_restarts_24h(),
         }
-    )
+
+    return jsonify(_cache_json("bootstrap:v1", 10, _load))
 
 
 @app.after_request
@@ -2116,35 +2210,40 @@ def api_signals():
     days = min(max(days, 1), 365)
     limit = min(max(limit, 1), 500)
 
-    enriched = _get_enriched_signals(days=days)
+    cache_key = f"signals:v1:{days}:{limit}:{delivery}:{direction}:{outcome}:{symbol}"
 
-    if delivery in ("sent", "failed", "unsent"):
-        enriched = [s for s in enriched if s.get("delivery_status") == delivery]
-    elif delivery == "mistaken":
-        enriched = [s for s in enriched if s.get("quality") in ("mistaken", "duplicate")]
-    elif delivery == "duplicate":
-        enriched = [s for s in enriched if s.get("duplicate")]
+    def _load():
+        enriched = _get_enriched_signals(days=days)
 
-    if direction in ("BUY", "SELL"):
-        enriched = [s for s in enriched if str(s.get("direction", "")).upper() == direction]
+        if delivery in ("sent", "failed", "unsent"):
+            enriched = [s for s in enriched if s.get("delivery_status") == delivery]
+        elif delivery == "mistaken":
+            enriched = [s for s in enriched if s.get("quality") in ("mistaken", "duplicate")]
+        elif delivery == "duplicate":
+            enriched = [s for s in enriched if s.get("duplicate")]
 
-    if outcome in ("tp1", "tp2", "sl", "open", "win", "loss"):
-        if outcome == "win":
-            enriched = [s for s in enriched if s.get("outcome") in ("tp1", "tp2")]
-        elif outcome == "loss":
-            enriched = [s for s in enriched if s.get("outcome") == "sl"]
-        else:
-            enriched = [s for s in enriched if s.get("outcome") == outcome]
+        if direction in ("BUY", "SELL"):
+            enriched = [s for s in enriched if str(s.get("direction", "")).upper() == direction]
 
-    if symbol:
-        enriched = [s for s in enriched if symbol in _normalize_symbol(str(s.get("symbol", ""))).replace("/", "")]
+        if outcome in ("tp1", "tp2", "sl", "open", "win", "loss"):
+            if outcome == "win":
+                enriched = [s for s in enriched if s.get("outcome") in ("tp1", "tp2")]
+            elif outcome == "loss":
+                enriched = [s for s in enriched if s.get("outcome") == "sl"]
+            else:
+                enriched = [s for s in enriched if s.get("outcome") == outcome]
 
-    summary = _signals_page_summary(enriched)
-    return jsonify({
-        "signals": enriched[:limit],
-        "summary": summary,
-        "stats": _signal_stats(enriched),
-    })
+        if symbol:
+            enriched = [s for s in enriched if symbol in _normalize_symbol(str(s.get("symbol", ""))).replace("/", "")]
+
+        summary = _signals_page_summary(enriched)
+        return {
+            "signals": enriched[:limit],
+            "summary": summary,
+            "stats": _signal_stats(enriched),
+        }
+
+    return jsonify(_cache_json(cache_key, 15, _load))
 
 
 @app.route("/api/logs")
@@ -2197,6 +2296,7 @@ def api_config_patch():
         return jsonify({"error": "No valid fields"}), 400
     _write_env(updates)
     _audit("config_update", ", ".join(f"{k}={updates[k]}" for k in updates.keys()))
+    _invalidate_dashboard_cache()
     env = _parse_env()
     return jsonify({
         "ok": True,
@@ -2239,6 +2339,7 @@ def api_control():
 
     if action in ("start", "stop", "restart"):
         _run(["pm2", "save"])
+        _invalidate_dashboard_cache()
 
     return jsonify({"results": results, "overall": _overall_status([_proc_info(t) for t in PROCESSES])})
 
@@ -2248,12 +2349,17 @@ def api_control():
 def api_reports_summary():
     days = request.args.get("days", 30, type=int)
     days = min(days, 365)
-    signals = _parse_all_signals(days=days)
-    summary = _report_summary(signals, days=days)
-    env = _parse_env()
-    summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
-    summary["engine_debug"] = env.get("ENGINE_DEBUG", "0") == "1"
-    return jsonify(summary)
+    cache_key = f"reports:summary:v1:{days}"
+
+    def _load():
+        signals = _parse_all_signals(days=days)
+        summary = _report_summary(signals, days=days)
+        env = _parse_env()
+        summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
+        summary["engine_debug"] = env.get("ENGINE_DEBUG", "0") == "1"
+        return summary
+
+    return jsonify(_cache_json(cache_key, 30, _load))
 
 
 @app.route("/api/telegram/log")
@@ -2262,33 +2368,41 @@ def api_telegram_log():
     days = request.args.get("days", 30, type=int)
     limit = request.args.get("limit", 100, type=int)
     status = request.args.get("status", "all")
-    entries = _parse_telegram_deliveries(days=min(days, 365), limit=min(limit, 500))
-    if status == "ok":
-        entries = [e for e in entries if e.get("ok")]
-    elif status == "failed":
-        entries = [e for e in entries if not e.get("ok")]
-    summary = _telegram_summary(_parse_telegram_deliveries(days=min(days, 365), limit=500), days=days)
-    env = _parse_env()
-    return jsonify(
-        {
+    cache_key = f"telegram:log:v1:{days}:{limit}:{status}"
+
+    def _load():
+        entries = _parse_telegram_deliveries(days=min(days, 365), limit=min(limit, 500))
+        if status == "ok":
+            entries = [e for e in entries if e.get("ok")]
+        elif status == "failed":
+            entries = [e for e in entries if not e.get("ok")]
+        summary = _telegram_summary(_parse_telegram_deliveries(days=min(days, 365), limit=500), days=days)
+        env = _parse_env()
+        return {
             "entries": entries,
             "summary": summary,
             "telegram_configured": bool(env.get("TELEGRAM_BOT_TOKEN")),
             "notifications_paused": env.get("NOTIFICATIONS_PAUSED", "0") == "1",
         }
-    )
+
+    return jsonify(_cache_json(cache_key, 30, _load))
 
 
 @app.route("/api/telegram/summary")
 @auth_required
 def api_telegram_summary():
     days = request.args.get("days", 30, type=int)
-    entries = _parse_telegram_deliveries(days=min(days, 365), limit=500)
-    summary = _telegram_summary(entries, days=days)
-    env = _parse_env()
-    summary["telegram_configured"] = bool(env.get("TELEGRAM_BOT_TOKEN"))
-    summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
-    return jsonify(summary)
+    cache_key = f"telegram:summary:v1:{days}"
+
+    def _load():
+        entries = _parse_telegram_deliveries(days=min(days, 365), limit=500)
+        summary = _telegram_summary(entries, days=days)
+        env = _parse_env()
+        summary["telegram_configured"] = bool(env.get("TELEGRAM_BOT_TOKEN"))
+        summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
+        return summary
+
+    return jsonify(_cache_json(cache_key, 30, _load))
 
 
 @app.route("/api/telegram/test", methods=["POST"])
@@ -2312,6 +2426,7 @@ def api_telegram_test():
         http_status=result.get("http_status"),
         message_type="test",
     )
+    _invalidate_dashboard_cache()
     if not result.get("ok"):
         return jsonify(result), 502
     return jsonify({"ok": True, "message": "پیام تست ارسال شد", **result})
@@ -2486,13 +2601,16 @@ def _hourly_distribution(days: int = 30) -> list[dict]:
 @auth_required
 def api_analytics_symbols():
     days = min(max(request.args.get("days", 30, type=int), 1), 365)
-    return jsonify(
-        {
+    cache_key = f"analytics:symbols:v1:{days}"
+
+    def _load():
+        return {
             "symbols": _symbol_analytics(days),
             "days": days,
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
-    )
+
+    return jsonify(_cache_json(cache_key, 45, _load))
 
 
 @app.route("/api/analytics/cooldowns")
@@ -2505,13 +2623,16 @@ def api_analytics_cooldowns():
 @auth_required
 def api_analytics_hourly():
     days = min(max(request.args.get("days", 30, type=int), 1), 365)
-    return jsonify(
-        {
+    cache_key = f"analytics:hourly:v1:{days}"
+
+    def _load():
+        return {
             "hours": _hourly_distribution(days),
             "days": days,
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
-    )
+
+    return jsonify(_cache_json(cache_key, 45, _load))
 
 
 @app.route("/api/export/telegram.csv")
@@ -2595,11 +2716,13 @@ def api_management():
             code, out, err = _run(["pm2", "restart", t])
             results.append({"process": t, "ok": code == 0})
         _run(["pm2", "save"])
+        _invalidate_dashboard_cache()
         return jsonify({"ok": True, "message": "All bot processes restarted", "results": results})
 
     if action == "restart_dashboard":
         code, out, err = _run(["pm2", "restart", "dashboard"])
         _run(["pm2", "save"])
+        _invalidate_dashboard_cache()
         return jsonify({"ok": code == 0, "message": "Dashboard restarted", "output": out or err})
 
     if action == "flush_logs":
@@ -2611,6 +2734,7 @@ def api_management():
         state["last_signal_at"] = {}
         state["updated_at"] = datetime.now(timezone.utc).isoformat()
         STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+        _invalidate_dashboard_cache()
         return jsonify({"ok": True, "message": "Signal cooldowns reset"})
 
     if action == "reset_startup_flag":
@@ -2618,12 +2742,14 @@ def api_management():
         state["startup_sent"] = False
         state["updated_at"] = datetime.now(timezone.utc).isoformat()
         STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+        _invalidate_dashboard_cache()
         return jsonify({"ok": True, "message": "Startup message flag reset"})
 
     if action == "pause_notifications":
         _write_env({"NOTIFICATIONS_PAUSED": "1"})
         code, out, err = _stop_signal_engine()
         _run(["pm2", "save"])
+        _invalidate_dashboard_cache()
         if code != 0:
             return jsonify({"ok": False, "error": f"توقف موتور ناموفق: {err or out or 'pm2 error'}"}), 500
         _audit("pause_notifications", "manual pause")
@@ -2638,6 +2764,7 @@ def api_management():
         _write_env({"NOTIFICATIONS_PAUSED": "0"})
         ok, msg = _start_signal_engine(force=True)
         _run(["pm2", "save"])
+        _invalidate_dashboard_cache()
         if not ok:
             return jsonify({"ok": False, "error": f"راه‌اندازی موتور ناموفق: {msg}"}), 500
         _audit("resume_notifications", "manual resume")
@@ -2647,6 +2774,7 @@ def api_management():
         env = _parse_env()
         current = env.get("ENGINE_DEBUG", "0") == "1"
         _write_env({"ENGINE_DEBUG": "0" if current else "1"})
+        _invalidate_dashboard_cache()
         return jsonify({"ok": True, "debug": not current, "message": f"Debug mode {'enabled' if not current else 'disabled'}"})
 
     if action == "pull_and_restart":
@@ -2702,6 +2830,7 @@ def _git_deploy(branch: str) -> dict:
             return {"ok": False, "message": "Git pull failed", "steps": outputs}
     _run(["pm2", "restart", "dashboard"])
     _run(["pm2", "save"])
+    _invalidate_dashboard_cache()
     return {"ok": True, "message": f"Pulled {branch} and restarted dashboard", "steps": outputs}
 
 
@@ -2772,6 +2901,7 @@ def api_ops_config_patch():
         return jsonify({"error": "No valid fields"}), 400
     _write_env(updates)
     _audit("ops_config", ", ".join(updates.keys()))
+    _invalidate_dashboard_cache()
     return jsonify({"ok": True, "config": _ops_config()})
 
 
@@ -2891,6 +3021,7 @@ def api_strategy_upload():
     manifest["history"] = history[:30]
     _save_strategy_manifest(manifest)
     _audit("strategy_upload", f"{original} ({entry_id})")
+    _invalidate_dashboard_cache()
     return jsonify({"ok": True, "entry": entry, "strategy": _strategy_status_payload()})
 
 
@@ -2917,6 +3048,7 @@ def api_strategy_apply():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     result["strategy"] = _strategy_status_payload()
+    _invalidate_dashboard_cache()
     return jsonify(result)
 
 
@@ -2980,6 +3112,7 @@ def api_config_restore():
         return jsonify({"error": "No valid config keys"}), 400
     _write_env(updates)
     _audit("config_restore", ", ".join(updates.keys()))
+    _invalidate_dashboard_cache()
     return jsonify({"ok": True, "restored": list(updates.keys())})
 
 
