@@ -1428,7 +1428,6 @@
     if ($("#opsAlertCpu")) $("#opsAlertCpu").value = cfg.alert_cpu_threshold ?? 90;
     if ($("#opsAlertRam")) $("#opsAlertRam").value = cfg.alert_ram_threshold ?? 90;
     if ($("#opsAlertDisk")) $("#opsAlertDisk").value = cfg.alert_disk_threshold ?? 92;
-    if ($("#opsAlertTelegram")) $("#opsAlertTelegram").checked = !!cfg.alert_telegram;
     if ($("#opsWebhookDiscord")) $("#opsWebhookDiscord").value = cfg.webhook_discord_url || "";
     if ($("#opsWebhookSlack")) $("#opsWebhookSlack").value = cfg.webhook_slack_url || "";
     if ($("#opsWebhookOnSignal")) $("#opsWebhookOnSignal").checked = !!cfg.webhook_on_signal;
@@ -1457,7 +1456,6 @@
       alert_cpu_threshold: Number($("#opsAlertCpu")?.value || 90),
       alert_ram_threshold: Number($("#opsAlertRam")?.value || 90),
       alert_disk_threshold: Number($("#opsAlertDisk")?.value || 92),
-      alert_telegram: $("#opsAlertTelegram")?.checked,
       webhook_discord_url: $("#opsWebhookDiscord")?.value?.trim() || "",
       webhook_slack_url: $("#opsWebhookSlack")?.value?.trim() || "",
       webhook_on_signal: $("#opsWebhookOnSignal")?.checked,

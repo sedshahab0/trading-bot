@@ -73,7 +73,6 @@ OPS_CONFIG_KEYS = {
     "ALERT_CPU_THRESHOLD",
     "ALERT_RAM_THRESHOLD",
     "ALERT_DISK_THRESHOLD",
-    "ALERT_TELEGRAM",
     "WEBHOOK_DISCORD_URL",
     "WEBHOOK_SLACK_URL",
     "WEBHOOK_ON_SIGNAL",
@@ -1231,7 +1230,6 @@ def _ops_config() -> dict:
         "alert_cpu_threshold": int(env.get("ALERT_CPU_THRESHOLD", "90") or 90),
         "alert_ram_threshold": int(env.get("ALERT_RAM_THRESHOLD", "90") or 90),
         "alert_disk_threshold": int(env.get("ALERT_DISK_THRESHOLD", "92") or 92),
-        "alert_telegram": env.get("ALERT_TELEGRAM", "1") == "1",
         "webhook_discord_url": env.get("WEBHOOK_DISCORD_URL", ""),
         "webhook_slack_url": env.get("WEBHOOK_SLACK_URL", ""),
         "webhook_on_signal": env.get("WEBHOOK_ON_SIGNAL", "0") == "1",
@@ -1271,8 +1269,7 @@ def _check_resource_alerts(stats: dict) -> list[dict]:
                 _LAST_ALERT_TS[key] = now
                 msg = f"{label} usage {value}% (threshold {threshold}%)"
                 alerts.append({"type": key, "message": msg, "value": value, "threshold": threshold})
-                if cfg["alert_telegram"]:
-                    _telegram_send(f"⚠️ <b>TradeChi Alert</b>\n{msg}")
+                # Resource alerts stay dashboard-only; Telegram is reserved for trading signals.
     return alerts
 
 
@@ -2270,7 +2267,6 @@ def api_ops_config_patch():
         "alert_cpu_threshold": "ALERT_CPU_THRESHOLD",
         "alert_ram_threshold": "ALERT_RAM_THRESHOLD",
         "alert_disk_threshold": "ALERT_DISK_THRESHOLD",
-        "alert_telegram": "ALERT_TELEGRAM",
         "webhook_discord_url": "WEBHOOK_DISCORD_URL",
         "webhook_slack_url": "WEBHOOK_SLACK_URL",
         "webhook_on_signal": "WEBHOOK_ON_SIGNAL",
@@ -2281,7 +2277,7 @@ def api_ops_config_patch():
     for js_key, env_key in mapping.items():
         if js_key in data:
             val = data[js_key]
-            if js_key in ("alert_telegram", "webhook_on_signal", "maintenance_enabled"):
+            if js_key in ("webhook_on_signal", "maintenance_enabled"):
                 updates[env_key] = "1" if val else "0"
             else:
                 updates[env_key] = str(val)
