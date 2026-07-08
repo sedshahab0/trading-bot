@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=11" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=11" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=12" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=12" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -290,7 +290,10 @@
                   <span class="legend-dot" style="background:#63ffd0"></span> RAM
                 </div>
               </div>
-              <div class="chart-box monitor-chart"><canvas id="resourceHistoryChart"></canvas></div>
+              <div class="chart-box monitor-chart">
+                <canvas id="resourceHistoryChart"></canvas>
+                <p class="chart-empty-hint" id="resourceChartEmpty">در حال دریافت داده زنده...</p>
+              </div>
             </article>
 
             <article class="panel">
@@ -694,6 +697,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=7"></script>
+  <script src="/static/js/dashboard.js?v=8"></script>
 </body>
 </html>

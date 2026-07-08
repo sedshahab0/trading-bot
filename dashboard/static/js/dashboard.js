@@ -22,6 +22,7 @@
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
+  let monitorInterval = null;
   let isAuthenticated = false;
   let sseReconnectTimer = null;
   let allSignals = [];
@@ -1070,8 +1071,8 @@
           renderMonitorProcesses(status.processes);
         }
         requestAnimationFrame(() => {
-          updateSparkCharts();
-          renderResourceHistoryChart();
+          refreshMonitorLiveCharts({ recreate: true });
+          setTimeout(() => refreshMonitorLiveCharts(), 400);
         });
         break;
       }
@@ -1381,8 +1382,27 @@
       });
     }
 
+    if (page === "monitor") {
+      const sys = DataCache.get("system");
+      if (sys && !resourceHistory.labels.length) pushResourceHistory(sys);
+      requestAnimationFrame(() => {
+        refreshMonitorLiveCharts({ recreate: true });
+        setTimeout(() => refreshMonitorLiveCharts(), 400);
+      });
+    }
+
     if (revalidate) ensurePageData(page).catch(() => {});
     syncLogPolling();
+    syncMonitorPolling();
+  }
+
+  function syncMonitorPolling() {
+    clearInterval(monitorInterval);
+    monitorInterval = null;
+    if (activePage === "monitor" && isAuthenticated) {
+      fetchSystem({ force: true }).catch(() => {});
+      monitorInterval = setInterval(() => fetchSystem().catch(() => {}), 5000);
+    }
   }
 
   function openSidebar() {
@@ -1497,13 +1517,26 @@
   }
 
   function pushResourceHistory(sys) {
-    if (!sys) return;
+    if (!sys?.cpu || !sys?.ram) return;
     const label = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const cpu = Number(sys.cpu.total);
+    const ram = Number(sys.ram.used_pct);
+    if (Number.isNaN(cpu) || Number.isNaN(ram)) return;
+
+    const lastIdx = resourceHistory.labels.length - 1;
+    if (lastIdx >= 0 && resourceHistory.labels[lastIdx] === label) {
+      resourceHistory.cpu[lastIdx] = cpu;
+      resourceHistory.ram[lastIdx] = ram;
+      resourceHistory.net[lastIdx] = Math.max(sys.network?.down_kbps || 0, sys.network?.up_kbps || 0);
+      resourceHistory.disk[lastIdx] = Number(sys.disk?.used_pct) || 0;
+      return;
+    }
+
     resourceHistory.labels.push(label);
-    resourceHistory.cpu.push(sys.cpu.total);
-    resourceHistory.ram.push(sys.ram.used_pct);
-    resourceHistory.net.push(Math.max(sys.network.down_kbps, sys.network.up_kbps));
-    resourceHistory.disk.push(sys.disk.used_pct);
+    resourceHistory.cpu.push(cpu);
+    resourceHistory.ram.push(ram);
+    resourceHistory.net.push(Math.max(sys.network?.down_kbps || 0, sys.network?.up_kbps || 0));
+    resourceHistory.disk.push(Number(sys.disk?.used_pct) || 0);
     if (resourceHistory.labels.length > resourceHistory.max) {
       resourceHistory.labels.shift();
       resourceHistory.cpu.shift();
@@ -1511,6 +1544,37 @@
       resourceHistory.net.shift();
       resourceHistory.disk.shift();
     }
+  }
+
+  function destroyResourceHistoryChart() {
+    if (resourceHistoryChart) {
+      resourceHistoryChart.destroy();
+      resourceHistoryChart = null;
+    }
+  }
+
+  function updateResourceChartEmptyState() {
+    const box = $(".chart-box.monitor-chart");
+    const hint = $("#resourceChartEmpty");
+    const hasData = resourceHistory.labels.length > 0;
+    box?.classList.toggle("has-data", hasData);
+    if (hint) hint.hidden = hasData;
+  }
+
+  function refreshMonitorLiveCharts({ recreate = false } = {}) {
+    const canvas = $("#resourceHistoryChart");
+    if (!canvas) return;
+
+    const tooSmall = canvas.offsetWidth < 16 || canvas.offsetHeight < 16;
+    if (recreate || tooSmall) destroyResourceHistoryChart();
+
+    updateSparkCharts();
+    renderResourceHistoryChart();
+
+    resourceHistoryChart?.resize();
+    resourceHistoryChart?.update("none");
+    [cpuSparkChart, ramSparkChart, diskSparkChart, netSparkChart].forEach((c) => c?.resize());
+    updateResourceChartEmptyState();
   }
 
   function sparkOptions(color) {
@@ -1563,69 +1627,78 @@
 
   function renderResourceHistoryChart() {
     const canvas = $("#resourceHistoryChart");
-    if (!canvas) return;
-    if (resourceHistoryChart) {
-      resourceHistoryChart.data.labels = resourceHistory.labels;
-      resourceHistoryChart.data.datasets[0].data = resourceHistory.cpu;
-      resourceHistoryChart.data.datasets[1].data = resourceHistory.ram;
-      resourceHistoryChart.update("none");
-      return;
+    if (!canvas || typeof Chart === "undefined") return;
+
+    try {
+      if (resourceHistoryChart) {
+        resourceHistoryChart.data.labels = [...resourceHistory.labels];
+        resourceHistoryChart.data.datasets[0].data = [...resourceHistory.cpu];
+        resourceHistoryChart.data.datasets[1].data = [...resourceHistory.ram];
+        resourceHistoryChart.update("none");
+        updateResourceChartEmptyState();
+        return;
+      }
+
+      resourceHistoryChart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: [...resourceHistory.labels],
+          datasets: [
+            {
+              label: "CPU",
+              data: [...resourceHistory.cpu],
+              borderColor: "#5b9cf6",
+              backgroundColor: "rgba(91,156,246,0.08)",
+              fill: true,
+              tension: 0.35,
+              pointRadius: resourceHistory.labels.length <= 2 ? 3 : 0,
+              pointHoverRadius: 4,
+              borderWidth: 2,
+            },
+            {
+              label: "RAM",
+              data: [...resourceHistory.ram],
+              borderColor: "#63ffd0",
+              backgroundColor: "rgba(99,255,208,0.06)",
+              fill: true,
+              tension: 0.35,
+              pointRadius: resourceHistory.labels.length <= 2 ? 3 : 0,
+              pointHoverRadius: 4,
+              borderWidth: 2,
+            },
+          ],
+        },
+        options: {
+          ...chartDefaults(),
+          animation: { duration: 350 },
+          interaction: { intersect: false, mode: "index" },
+          scales: {
+            x: {
+              ticks: { color: "#5a6478", maxTicksLimit: 8, font: CHART_FONT },
+              grid: { color: "rgba(255,255,255,0.04)" },
+            },
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { color: "#5a6478", callback: (v) => `${v}%`, font: CHART_FONT },
+              grid: { color: "rgba(255,255,255,0.04)" },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(8,12,24,0.95)",
+              titleFont: CHART_FONT,
+              bodyFont: CHART_FONT,
+              callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%` },
+            },
+          },
+        },
+      });
+      updateResourceChartEmptyState();
+    } catch {
+      destroyResourceHistoryChart();
     }
-    resourceHistoryChart = new Chart(canvas, {
-      type: "line",
-      data: {
-        labels: resourceHistory.labels,
-        datasets: [
-          {
-            label: "CPU",
-            data: resourceHistory.cpu,
-            borderColor: "#5b9cf6",
-            backgroundColor: "rgba(91,156,246,0.08)",
-            fill: true,
-            tension: 0.35,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            borderWidth: 2,
-          },
-          {
-            label: "RAM",
-            data: resourceHistory.ram,
-            borderColor: "#63ffd0",
-            backgroundColor: "rgba(99,255,208,0.06)",
-            fill: true,
-            tension: 0.35,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            borderWidth: 2,
-          },
-        ],
-      },
-      options: {
-        ...chartDefaults(),
-        interaction: { intersect: false, mode: "index" },
-        scales: {
-          x: {
-            ticks: { color: "#5a6478", maxTicksLimit: 8, font: CHART_FONT },
-            grid: { color: "rgba(255,255,255,0.04)" },
-          },
-          y: {
-            beginAtZero: true,
-            max: 100,
-            ticks: { color: "#5a6478", callback: (v) => `${v}%`, font: CHART_FONT },
-            grid: { color: "rgba(255,255,255,0.04)" },
-          },
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: "rgba(8,12,24,0.95)",
-            titleFont: CHART_FONT,
-            bodyFont: CHART_FONT,
-            callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%` },
-          },
-        },
-      },
-    });
   }
 
   function renderMonitorProcesses(procs) {
@@ -1709,8 +1782,7 @@
       $("#monitorSyncTime").textContent = `آخرین بروزرسانی: ${new Date().toLocaleTimeString("fa-IR")}`;
     }
     if (activePage === "monitor") {
-      updateSparkCharts();
-      renderResourceHistoryChart();
+      refreshMonitorLiveCharts();
     }
   }
 
@@ -2469,7 +2541,9 @@
     clearTimeout(sseReconnectTimer);
     clearInterval(statusInterval);
     clearInterval(logInterval);
+    clearInterval(monitorInterval);
     logInterval = null;
+    monitorInterval = null;
   }
 
   // Background cache refresh hooks
