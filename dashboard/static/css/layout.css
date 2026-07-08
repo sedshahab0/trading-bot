@@ -2389,13 +2389,80 @@
 }
 
 @media (max-width: 768px) {
-  .monitor-hero-body { grid-template-columns: 1fr; }
-  .monitor-score-ring { margin: 0 auto; }
+  .monitor-hero {
+    border-radius: 18px;
+    margin-bottom: 1rem;
+  }
+
+  .monitor-hero-body {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .monitor-hero-main {
+    min-width: 0;
+  }
+
+  .monitor-hero .hero-title {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .monitor-hero .hero-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    direction: ltr;
+  }
+
+  .monitor-hero .hero-chip:first-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .monitor-hero .hero-chip:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .monitor-hero .hero-chip:nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .monitor-hero .hero-chip:nth-child(4) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: end;
+    width: min(190px, 100%);
+  }
+
+  .monitor-score-ring {
+    width: 112px;
+    height: 112px;
+    margin: 0 auto;
+  }
+
   .engine-cards { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
   .monitor-gauges { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 400px) {
+  .monitor-hero .hero-chips {
+    grid-template-columns: 1fr;
+  }
+
+  .monitor-hero .hero-chip:first-child,
+  .monitor-hero .hero-chip:nth-child(2),
+  .monitor-hero .hero-chip:nth-child(3),
+  .monitor-hero .hero-chip:nth-child(4) {
+    grid-column: auto;
+    grid-row: auto;
+    justify-self: stretch;
+    width: auto;
+  }
 }
 
 /* ══════════════════════════════════════
