@@ -2749,6 +2749,74 @@
   }
 }
 
+@media (max-width: 480px) {
+  .page-content {
+    padding: 0.8rem 0.7rem 1rem;
+  }
+
+  .page#page-reports .page-toolbar {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .page#page-reports .page-toolbar .btn {
+    min-height: 42px;
+  }
+
+  .report-kpi {
+    gap: 0.45rem;
+  }
+
+  .report-stat {
+    padding: 0.65rem 0.5rem;
+    min-height: 72px;
+    align-content: center;
+  }
+
+  .report-num {
+    font-size: 1.15rem;
+    line-height: 1.05;
+  }
+
+  .report-lbl {
+    font-size: 0.68rem;
+    line-height: 1.15;
+  }
+
+  .page#page-reports .panel {
+    padding: 0.85rem 0.8rem 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .page#page-reports .grid-2 {
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .page#page-reports .panel-heading {
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .grid-2 .panel .chart-box.tall,
+  .grid-2 .panel .chart-box.wide {
+    height: 176px;
+  }
+
+  .symbol-report-table-wrap {
+    padding-inline: 0.45rem;
+  }
+
+  .symbol-report-table {
+    font-size: 0.68rem;
+  }
+
+  .symbol-report-table th,
+  .symbol-report-table td {
+    padding: 0.35rem 0.3rem;
+  }
+}
+
 @media (max-width: 400px) {
   .page#page-reports .page-toolbar {
     grid-template-columns: 1fr;
@@ -2760,7 +2828,7 @@
 
   .grid-2 .panel .chart-box.tall,
   .grid-2 .panel .chart-box.wide {
-    height: 190px;
+    height: 160px;
   }
 }
 

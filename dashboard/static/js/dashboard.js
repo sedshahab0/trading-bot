@@ -78,6 +78,13 @@
     }
   }
 
+  function chartFont(size = 11) {
+    return {
+      family: CHART_FONT.family,
+      size: isMobileViewport() ? Math.max(8, size - 2) : size,
+    };
+  }
+
   function isMobileViewport() {
     return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
   }
@@ -126,6 +133,14 @@
     const report = reportPayloadCache.get(days);
     const analytics = analyticsPayloadCache.get(days);
     if (!report && !analytics) return;
+    const dims = {
+      daily: $("#dailyChart") ? { w: $("#dailyChart").clientWidth, h: $("#dailyChart").clientHeight } : null,
+      direction: $("#directionChart") ? { w: $("#directionChart").clientWidth, h: $("#directionChart").clientHeight } : null,
+      symbol: $("#symbolBarChart") ? { w: $("#symbolBarChart").clientWidth, h: $("#symbolBarChart").clientHeight } : null,
+      telegram: $("#telegramReportChart") ? { w: $("#telegramReportChart").clientWidth, h: $("#telegramReportChart").clientHeight } : null,
+      heatmap: $("#hourlyHeatmapChart") ? { w: $("#hourlyHeatmapChart").clientWidth, h: $("#hourlyHeatmapChart").clientHeight } : null,
+    };
+    logClientEvent("report-rebuild", { days, dims, viewport: { w: window.innerWidth, h: window.innerHeight } });
     destroyReportCharts();
     if (report) applyReportData(report, days);
     if (analytics) applyAnalyticsPayload(analytics, days);
@@ -1511,8 +1526,13 @@
             x: { ticks: { color: "#5c6578", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
             y: { beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
           },
-          plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, boxWidth: 10 } } },
+          plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
         },
+      });
+      logClientEvent("chart-created", {
+        chart: "hourlyHeatmap",
+        dims: { canvas: { w: canvas.clientWidth, h: canvas.clientHeight }, box: canvas.parentElement?.clientWidth ? { w: canvas.parentElement.clientWidth, h: canvas.parentElement.clientHeight } : null },
+        devicePixelRatio: window.devicePixelRatio || 1,
       });
     } catch (err) {
       reportClientError("renderHourlyHeatmap", err, { hasChart: !!window.Chart, canvas: { w: canvas.clientWidth, h: canvas.clientHeight } });
@@ -1912,11 +1932,16 @@
         options: {
           ...chartDefaults(),
           scales: {
-            x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
-            y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
-          },
-          plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT } } },
+          x: { stacked: true, ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
         },
+        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9) } } },
+      },
+      });
+      logClientEvent("chart-created", {
+        chart: "telegramReport",
+        dims: { canvas: { w: canvas.clientWidth, h: canvas.clientHeight }, box: canvas.parentElement?.clientWidth ? { w: canvas.parentElement.clientWidth, h: canvas.parentElement.clientHeight } : null },
+        devicePixelRatio: window.devicePixelRatio || 1,
       });
     } catch (err) {
       reportClientError("renderTelegramReportChart", err, { hasChart: !!window.Chart, canvas: { w: canvas.clientWidth, h: canvas.clientHeight } });
@@ -3030,7 +3055,7 @@
       responsive: true,
       maintainAspectRatio: false,
       devicePixelRatio: isMobileViewport() ? Math.min(dpr, 1.5) : Math.min(dpr, 2),
-      plugins: { legend: { labels: { color: "#8b95a8", font: CHART_FONT } } },
+      plugins: { legend: { labels: { color: "#8b95a8", font: chartFont(10) } } },
       animation: isMobileViewport() ? false : { duration: 300 },
     };
   }
@@ -3059,7 +3084,7 @@
         ...chartDefaults(),
         cutout: "62%",
         plugins: {
-          legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, padding: 16 } },
+          legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
         },
       },
     });
@@ -3097,6 +3122,14 @@
         },
         plugins: { legend: { display: false } },
       },
+    });
+    logClientEvent("chart-created", {
+      chart: "symbolBar",
+      dims: {
+        canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
+        box: canvas.parentElement ? { w: canvas.parentElement.clientWidth, h: canvas.parentElement.clientHeight } : null,
+      },
+      devicePixelRatio: window.devicePixelRatio || 1,
     });
   }
 
@@ -3193,10 +3226,10 @@
       options: {
         ...chartDefaults(),
         scales: {
-          x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+          x: { stacked: true, ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
         },
-        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, boxWidth: 10 } } },
+        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
       },
     });
   }
@@ -3234,9 +3267,17 @@
         ...chartDefaults(),
         cutout: "62%",
         plugins: {
-          legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, padding: 16 } },
+          legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
         },
       },
+    });
+    logClientEvent("chart-created", {
+      chart: "direction",
+      dims: {
+        canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
+        box: canvas.parentElement ? { w: canvas.parentElement.clientWidth, h: canvas.parentElement.clientHeight } : null,
+      },
+      devicePixelRatio: window.devicePixelRatio || 1,
     });
   }
 
@@ -3483,11 +3524,16 @@
           ...chartDefaults(),
           interaction: { mode: "index", intersect: false },
           scales: {
-            x: { ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
-            y: { beginAtZero: true, ticks: { color: "#5c6578", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+            x: { ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: "#5c6578", font: chartFont(9), stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
           },
           animation: { duration: 700 },
         },
+      });
+      logClientEvent("chart-created", {
+        chart: "daily",
+        dims: { canvas: { w: canvas.clientWidth, h: canvas.clientHeight }, box: canvas.parentElement?.clientWidth ? { w: canvas.parentElement.clientWidth, h: canvas.parentElement.clientHeight } : null },
+        devicePixelRatio: window.devicePixelRatio || 1,
       });
     } catch (err) {
       reportClientError("renderDailyChart", err, { hasChart: !!window.Chart, canvas: { w: canvas.clientWidth, h: canvas.clientHeight } });
