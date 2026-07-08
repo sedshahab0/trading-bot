@@ -27,6 +27,9 @@
   let activePage = "home";
   let lastEngineState = null;
   let lastProcesses = [];
+  const controlActivity = [];
+  const MAX_ACTIVITY = 20;
+  let mgmtBusy = false;
   const resourceHistory = {
     labels: [],
     cpu: [],
@@ -39,7 +42,7 @@
   const PAGE_META = {
     home: { title: "داشبورد", sub: "نمای کلی ربات" },
     monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم" },
-    control: { title: "کنترل ربات", sub: "مدیریت PM2 و عملیات" },
+    control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور" },
     signals: { title: "سیگنال‌ها", sub: "تاریخچه سیگنال‌های ارسالی" },
     reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel" },
     telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام" },
@@ -48,7 +51,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.1", full: "2.1.0", major: 2, minor: 1, patch: 0 };
+  let dashboardVersion = { label: "v2.2", full: "2.2.0", major: 2, minor: 2, patch: 0 };
 
   const NAV_ICONS = {
     home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
@@ -369,20 +372,34 @@
 
   // ── Control ──
   async function control(action, process = "all") {
+    const labels = { start: "راه‌اندازی", stop: "توقف", restart: "ری‌استارت" };
+    const label = labels[action] || action;
+    const target = process === "all" ? "همه فرآیندها" : process;
     try {
+      setControlBusy(true);
       const data = await api("/api/control", {
         method: "POST",
         body: JSON.stringify({ action, process }),
       });
-      const labels = { start: "راه‌اندازی", stop: "توقف", restart: "ری‌استارت" };
-      toast(`${labels[action]} انجام شد`);
+      toast(`${label} ${target} انجام شد`);
+      logControlActivity(`${label} ${target}`, "ok");
       invalidateCache("status", "system", "bootstrap");
-      fetchStatus({ force: true });
-      fetchSystem({ force: true });
+      await fetchStatus({ force: true });
       return data;
     } catch (err) {
+      logControlActivity(`${label} ${target}: ${err.message}`, "err");
       toast(err.message, "error");
+    } finally {
+      setControlBusy(false);
     }
+  }
+
+  function setControlBusy(busy) {
+    mgmtBusy = busy;
+    $$(".ctrl-quick-btn, .mgmt-card[data-mgmt], .btn-icon").forEach((el) => {
+      if (el.matches(".btn-icon")) el.disabled = busy;
+      else el.disabled = busy;
+    });
   }
 
   $("#btnStartAll")?.addEventListener("click", () => control("start", "all"));
@@ -529,7 +546,8 @@
   function applyStatusData(data) {
     if (!data) return;
     updateStatusBanner(data.overall);
-    renderProcesses(data.processes);
+    renderProcesses(data.all_processes || data.processes);
+    applyControlPage(data);
     renderHomeProcesses(data.processes);
     renderMonitorProcesses(data.processes);
     renderEngineState(data.engine_state);
@@ -546,6 +564,79 @@
     if ($("#cfgFacebook")) $("#cfgFacebook").checked = cfg.facebook_enable;
     if ($("#cfgDebug")) $("#cfgDebug").checked = cfg.engine_debug;
     if ($("#debugStatus")) $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
+  }
+
+  function applyControlPage(data) {
+    if (!data) return;
+    const cfg = data.config || {};
+    const info = STATUS_FA[data.overall] || STATUS_FA.unknown;
+
+    if ($("#ctrlStatusDot")) $("#ctrlStatusDot").className = `status-indicator ${info.cls}`;
+    if ($("#ctrlStatusLabel")) $("#ctrlStatusLabel").textContent = info.label;
+    if ($("#ctrlStatusSub")) $("#ctrlStatusSub").textContent = info.sub || "مدیریت PM2، نوتیفیکیشن و عملیات موتور";
+    if ($("#ctrlUpdated")) $("#ctrlUpdated").textContent = data.server_time ? `بروزرسانی ${data.server_time}` : "—";
+
+    const chips = [];
+    chips.push({
+      cls: cfg.notifications_paused ? "warn" : "ok",
+      text: cfg.notifications_paused ? "نوتیفیکیشن متوقف" : "نوتیفیکیشن فعال",
+    });
+    chips.push({
+      cls: cfg.engine_debug ? "info" : "",
+      text: cfg.engine_debug ? "Debug روشن" : "Debug خاموش",
+    });
+    chips.push({
+      cls: cfg.telegram_configured ? "ok" : "bad",
+      text: cfg.telegram_configured ? "تلگرام متصل" : "تلگرام تنظیم نشده",
+    });
+    if (data.engine_state?.startup_sent) chips.push({ cls: "info", text: "Startup ارسال شده" });
+
+    const chipsEl = $("#controlStatusChips");
+    if (chipsEl) {
+      chipsEl.innerHTML = chips.map((c) => `<span class="ctrl-chip ${c.cls}">${c.text}</span>`).join("");
+    }
+
+    const cfgBar = $("#controlConfigBar");
+    if (cfgBar) {
+      cfgBar.innerHTML = [
+        { lbl: "نمادها", val: (cfg.symbols || "—").replace(/,/g, ", ") },
+        { lbl: "حداقل امتیاز", val: cfg.min_score || "—" },
+        { lbl: "فاصله بررسی", val: `${cfg.poll_seconds || "—"}s` },
+        { lbl: "Provider", val: cfg.data_provider || "—" },
+        { lbl: "Facebook", val: cfg.facebook_enable ? "فعال" : "غیرفعال" },
+      ]
+        .map((c) => `<div class="cfg-chip"><span class="cfg-chip-lbl">${c.lbl}</span><span class="cfg-chip-val">${c.val}</span></div>`)
+        .join("");
+    }
+
+    if ($("#btnPauseNotif")) $("#btnPauseNotif").classList.toggle("active-state", !!cfg.notifications_paused);
+    if ($("#btnResumeNotif")) $("#btnResumeNotif").classList.toggle("active-state", !cfg.notifications_paused);
+    if ($("#btnToggleDebug")) $("#btnToggleDebug").classList.toggle("active-state", !!cfg.engine_debug);
+  }
+
+  function logControlActivity(message, type = "ok") {
+    const time = new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    controlActivity.unshift({ time, message, type });
+    if (controlActivity.length > MAX_ACTIVITY) controlActivity.pop();
+    renderControlActivity();
+  }
+
+  function renderControlActivity() {
+    const el = $("#controlActivity");
+    if (!el) return;
+    if (!controlActivity.length) {
+      el.innerHTML = '<li class="control-activity-empty">هنوز عملیاتی ثبت نشده</li>';
+      return;
+    }
+    el.innerHTML = controlActivity
+      .map(
+        (a) => `
+      <li>
+        <span class="activity-time">${a.time}</span>
+        <span class="activity-msg ${a.type}">${a.message}</span>
+      </li>`
+      )
+      .join("");
   }
 
   function applySignalsList(signals) {
@@ -1039,26 +1130,46 @@
 
   function renderProcesses(procs) {
     const container = $("#processCards");
-    if (!container) return;
+    if (!container || !procs) return;
+    const labels = {
+      "signal-engine": "موتور سیگنال",
+      "signal-server": "سرور MT5/Facebook",
+      dashboard: "داشبورد",
+    };
     container.innerHTML = procs
-      .map(
-        (p) => `
-      <div class="process-card">
-        <div class="process-dot ${p.status}"></div>
-        <div class="process-info">
-          <div class="process-name">${p.name}</div>
-          <div class="process-meta">
-            ${p.status === "online" ? `PID ${p.pid} · ${p.memory_mb} MB · CPU ${p.cpu}%` : "متوقف"}
-            ${p.restarts ? ` · ${p.restarts} restart` : ""}
+      .map((p) => {
+        const online = p.status === "online";
+        const controllable = p.controllable !== false;
+        const badgeCls = p.status === "online" ? "online" : p.status === "stopped" ? "stopped" : "not_found";
+        const badgeText = online ? "Online" : p.status === "stopped" ? "Stopped" : p.status;
+        return `
+      <div class="process-card v2${controllable ? "" : " readonly"}">
+        <div class="process-head">
+          <div class="process-dot ${online ? "online" : p.status === "stopped" ? "stopped" : "unknown"}"></div>
+          <div class="process-info">
+            <div class="process-name">${p.name}</div>
+            <div class="process-meta">${labels[p.name] || p.name}</div>
           </div>
+          <span class="process-badge ${badgeCls}">${badgeText}</span>
         </div>
-        <div class="process-actions">
-          <button class="btn-icon" title="Start" onclick="window._ctrl('start','${p.name}')">▶</button>
-          <button class="btn-icon" title="Stop" onclick="window._ctrl('stop','${p.name}')">■</button>
+        <div class="process-stats">
+          <span class="process-stat">PID <strong>${online ? p.pid : "—"}</strong></span>
+          <span class="process-stat">RAM <strong>${online ? `${p.memory_mb} MB` : "—"}</strong></span>
+          <span class="process-stat">CPU <strong>${online ? `${p.cpu}%` : "—"}</strong></span>
+          <span class="process-stat">Uptime <strong>${p.uptime_human || "—"}</strong></span>
+          <span class="process-stat">Restarts <strong>${p.restarts ?? 0}</strong></span>
+        </div>
+        ${
+          controllable
+            ? `<div class="process-actions">
+          <button class="btn-icon" title="Start" ${online ? "disabled" : ""} onclick="window._ctrl('start','${p.name}')">▶</button>
+          <button class="btn-icon danger" title="Stop" ${!online ? "disabled" : ""} onclick="window._ctrl('stop','${p.name}')">■</button>
           <button class="btn-icon" title="Restart" onclick="window._ctrl('restart','${p.name}')">↻</button>
-        </div>
-      </div>`
-      )
+        </div>`
+            : ""
+        }
+      </div>`;
+      })
       .join("");
   }
 
@@ -1683,30 +1794,53 @@
     });
   }
 
-  async function mgmt(action) {
+  async function mgmt(action, { confirmMsg = null, btn = null } = {}) {
+    if (mgmtBusy) return;
+    if (confirmMsg && !confirm(confirmMsg)) return;
     try {
+      if (btn) btn.classList.add("loading");
+      setControlBusy(true);
       const data = await api("/api/management", {
         method: "POST",
         body: JSON.stringify({ action }),
       });
-      toast(data.message || "انجام شد");
+      const msg = data.message || "انجام شد";
+      toast(msg);
+      logControlActivity(msg, "ok");
       invalidateCache("status", "system", "bootstrap", "report:7", "report:30", "telegram:30");
-      fetchStatus({ force: true });
-      fetchSystem({ force: true });
+      await fetchStatus({ force: true });
       if (action === "toggle_debug") refreshReports({ force: true });
+      if (action === "restart_dashboard") {
+        setTimeout(() => window.location.reload(), 1500);
+      }
     } catch (err) {
+      logControlActivity(err.message, "err");
       toast(err.message, "error");
+    } finally {
+      if (btn) btn.classList.remove("loading");
+      setControlBusy(false);
     }
   }
 
-  $("#btnRestartAll")?.addEventListener("click", () => mgmt("restart_all"));
-  $("#btnPauseNotif")?.addEventListener("click", () => mgmt("pause_notifications"));
-  $("#btnResumeNotif")?.addEventListener("click", () => mgmt("resume_notifications"));
-  $("#btnResetCooldown")?.addEventListener("click", () => mgmt("reset_cooldowns"));
-  $("#btnFlushLogs")?.addEventListener("click", () => {
-    if (confirm("لاگ‌های PM2 پاک شوند؟")) mgmt("flush_logs");
+  $$(".mgmt-card[data-mgmt]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      mgmt(btn.dataset.mgmt, { confirmMsg: btn.dataset.confirm || null, btn });
+    });
   });
-  $("#btnToggleDebug")?.addEventListener("click", () => mgmt("toggle_debug"));
+
+  $("#ctrlStartAll")?.addEventListener("click", () => control("start", "all"));
+  $("#ctrlStopAll")?.addEventListener("click", () => {
+    if (confirm("همه فرآیندهای ربات متوقف شوند؟")) control("stop", "all");
+  });
+  $("#ctrlRestartAll")?.addEventListener("click", () => {
+    if (confirm("signal-engine و signal-server ری‌استارت شوند؟")) mgmt("restart_all");
+  });
+
+  $("#btnRefreshProcesses")?.addEventListener("click", () => fetchStatus({ force: true }));
+  $("#btnClearActivity")?.addEventListener("click", () => {
+    controlActivity.length = 0;
+    renderControlActivity();
+  });
 
   $("#reportDays")?.addEventListener("change", () => refreshReports({ force: true }));
 
@@ -1788,7 +1922,7 @@
       try {
         const data = JSON.parse(e.data);
         updateStatusBanner(data.overall);
-        renderProcesses(data.processes);
+        renderProcesses(data.all_processes || data.processes);
         renderHomeProcesses(data.processes);
         renderMonitorProcesses(data.processes);
         updateSystem(data.system);
@@ -1862,5 +1996,6 @@
   loadVersion();
   renderSidebarNav();
   initSidebarCollapse();
+  renderControlActivity();
   checkAuth();
 })();

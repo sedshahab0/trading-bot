@@ -1,10 +1,17 @@
 {
   "major": 2,
-  "minor": 1,
+  "minor": 2,
   "patch": 0,
-  "label": "v2.1",
+  "label": "v2.2",
   "released": "2026-07-08",
   "history": [
+    {
+      "version": "2.2.0",
+      "label": "v2.2",
+      "date": "2026-07-08",
+      "title": "Redesigned robot control page",
+      "level": "minor"
+    },
     {
       "version": "2.1.0",
       "label": "v2.1",

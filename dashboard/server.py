@@ -42,6 +42,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 VERSION_FILE = Path(__file__).parent / "version.json"
 
 PROCESSES = ("signal-engine", "signal-server")
+DISPLAY_PROCESSES = ("signal-engine", "signal-server", "dashboard")
 SECRET_KEYS = (
     "TWELVE_DATA_API_KEY",
     "TELEGRAM_BOT_TOKEN",
@@ -773,7 +774,15 @@ def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
     for name in PROCESSES:
         info = _proc_info(name)
         info["uptime_human"] = _uptime_str(info.get("uptime"))
+        info["controllable"] = True
         procs.append(info)
+
+    all_procs = []
+    for name in DISPLAY_PROCESSES:
+        info = _proc_info(name)
+        info["uptime_human"] = _uptime_str(info.get("uptime"))
+        info["controllable"] = name in PROCESSES
+        all_procs.append(info)
 
     state = _read_json(STATE_FILE) or {}
     env = _parse_env()
@@ -792,6 +801,7 @@ def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
     return {
         "overall": _overall_status(procs),
         "processes": procs,
+        "all_processes": all_procs,
         "engine_state": {
             "last_bars": state.get("last_bars", {}),
             "last_signal_at": last_signal_human,
@@ -1082,7 +1092,12 @@ def api_management():
             code, out, err = _run(["pm2", "restart", t])
             results.append({"process": t, "ok": code == 0})
         _run(["pm2", "save"])
-        return jsonify({"ok": True, "message": "All processes restarted", "results": results})
+        return jsonify({"ok": True, "message": "All bot processes restarted", "results": results})
+
+    if action == "restart_dashboard":
+        code, out, err = _run(["pm2", "restart", "dashboard"])
+        _run(["pm2", "save"])
+        return jsonify({"ok": code == 0, "message": "Dashboard restarted", "output": out or err})
 
     if action == "flush_logs":
         code, out, err = _run(["pm2", "flush"])
@@ -1195,10 +1210,22 @@ def api_deploy_hook():
 def api_stream():
     def generate():
         while True:
-            procs = [_proc_info(n) for n in PROCESSES]
+            procs = []
+            all_procs = []
+            for name in PROCESSES:
+                info = _proc_info(name)
+                info["uptime_human"] = _uptime_str(info.get("uptime"))
+                info["controllable"] = True
+                procs.append(info)
+            for name in DISPLAY_PROCESSES:
+                info = _proc_info(name)
+                info["uptime_human"] = _uptime_str(info.get("uptime"))
+                info["controllable"] = name in PROCESSES
+                all_procs.append(info)
             payload = {
                 "overall": _overall_status(procs),
                 "processes": procs,
+                "all_processes": all_procs,
                 "system": _system_stats(),
                 "server_time": datetime.now().strftime("%H:%M:%S"),
             }
