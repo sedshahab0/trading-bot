@@ -59,7 +59,24 @@
 
   let lastOverallStatus = null;
   let lastSignalNotifKey = null;
-  let browserNotifEnabled = localStorage.getItem("tc:browser-notif") === "1";
+  function safeLocalStorageGet(key, fallback = null) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return fallback;
+    }
+  }
+
+  function safeLocalStorageSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  let browserNotifEnabled = safeLocalStorageGet("tc:browser-notif", "0") === "1";
   const firedAlertKeys = new Set();
 
   const PAGE_META = {
@@ -1526,7 +1543,7 @@
       maintenance_window: $("#opsMaintenanceWindow")?.value?.trim() || "22:00-06:00",
     };
     browserNotifEnabled = !!$("#opsBrowserNotif")?.checked;
-    localStorage.setItem("tc:browser-notif", browserNotifEnabled ? "1" : "0");
+    safeLocalStorageSet("tc:browser-notif", browserNotifEnabled ? "1" : "0");
     if (browserNotifEnabled) await requestBrowserNotifPermission();
     const data = await api("/api/ops/config", { method: "PATCH", body: JSON.stringify(payload) });
     applyOpsConfig(data.config);
@@ -2163,7 +2180,7 @@
   // ── Dynamic expandable sidebar ──
   function getNavGroupState(id) {
     try {
-      const raw = localStorage.getItem("tc:nav-groups");
+      const raw = safeLocalStorageGet("tc:nav-groups");
       const map = raw ? JSON.parse(raw) : {};
       const group = NAV_GROUPS.find((g) => g.id === id);
       return map[id] ?? group?.defaultOpen ?? true;
@@ -2174,10 +2191,10 @@
 
   function setNavGroupState(id, open) {
     try {
-      const raw = localStorage.getItem("tc:nav-groups");
+      const raw = safeLocalStorageGet("tc:nav-groups");
       const map = raw ? JSON.parse(raw) : {};
       map[id] = open;
-      localStorage.setItem("tc:nav-groups", JSON.stringify(map));
+      safeLocalStorageSet("tc:nav-groups", JSON.stringify(map));
     } catch {}
   }
 
@@ -2238,14 +2255,14 @@
     const shell = $("#dashboard");
     sidebar?.classList.toggle("collapsed", collapsed);
     shell?.classList.toggle("sidebar-collapsed", collapsed);
-    localStorage.setItem("tc:sidebar-collapsed", collapsed ? "1" : "0");
+    safeLocalStorageSet("tc:sidebar-collapsed", collapsed ? "1" : "0");
   }
 
   function initSidebarCollapse() {
     const btn = $("#sidebarCollapseBtn");
     if (!btn) return;
 
-    setSidebarCollapsed(localStorage.getItem("tc:sidebar-collapsed") === "1");
+    setSidebarCollapsed(safeLocalStorageGet("tc:sidebar-collapsed", "0") === "1");
 
     btn.addEventListener("click", () => {
       const collapsed = !$("#sidebar")?.classList.contains("collapsed");
