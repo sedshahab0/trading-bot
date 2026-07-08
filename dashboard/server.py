@@ -2128,11 +2128,11 @@ def api_signals():
     if symbol:
         enriched = [s for s in enriched if symbol in _normalize_symbol(str(s.get("symbol", ""))).replace("/", "")]
 
-    summary = _signals_page_summary(_enrich_signals(raw, telegram))
+    summary = _signals_page_summary(enriched)
     return jsonify({
         "signals": enriched[:limit],
         "summary": summary,
-        "stats": _signal_stats(raw),
+        "stats": _signal_stats(enriched),
     })
 
 
