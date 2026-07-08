@@ -294,6 +294,38 @@ def _write_env(updates: dict[str, str]) -> None:
     ENV_FILE.write_text("\n".join(lines) + "\n")
 
 
+def _notifications_paused() -> bool:
+    return _parse_env().get("NOTIFICATIONS_PAUSED", "0") == "1"
+
+
+def _stop_signal_engine() -> tuple[int, str, str]:
+    return _run(["pm2", "stop", "signal-engine"])
+
+
+def _start_signal_engine(*, force: bool = False) -> tuple[bool, str]:
+    """Start engine unless notifications are paused (unless force=True)."""
+    if _notifications_paused() and not force:
+        _stop_signal_engine()
+        return False, "نوتیفیکیشن متوقف است — ابتدا «ادامه نوتیفیکیشن» را بزنید"
+    code, out, err = _run(["pm2", "start", "signal-engine"])
+    if code != 0:
+        return False, err or out or "pm2 start failed"
+    return True, out or "started"
+
+
+def _restart_signal_engine(*, force: bool = False) -> tuple[bool, str, bool]:
+    """Restart engine. Returns (ok, message, skipped_due_to_pause)."""
+    if _notifications_paused() and not force:
+        _stop_signal_engine()
+        _run(["pm2", "save"])
+        return True, "استراتژی ذخیره شد — موتور متوقف ماند (نوتیفیکیشن pause)", True
+    code, out, err = _run(["pm2", "restart", "signal-engine"])
+    _run(["pm2", "save"])
+    if code != 0:
+        return False, err or out or "pm2 restart failed", False
+    return True, out or "restarted", False
+
+
 def _mask(val: str) -> str:
     if not val:
         return ""
@@ -1325,16 +1357,17 @@ def _apply_strategy_file(entry: dict, content: str, *, restart_engine: bool = Tr
     _save_strategy_manifest(manifest)
     _audit("strategy_apply", f"{entry.get('original_name')} ({entry.get('id')})")
     restart_ok = None
+    restart_skipped = False
+    restart_note = ""
     if restart_engine:
-        code, out, err = _run(["pm2", "restart", "signal-engine"])
-        _run(["pm2", "save"])
-        restart_ok = code == 0
+        restart_ok, restart_note, restart_skipped = _restart_signal_engine()
         if not restart_ok:
             return {
                 "ok": True,
                 "applied": True,
                 "restart_engine": False,
-                "restart_error": err or out or "pm2 restart failed",
+                "restart_skipped": restart_skipped,
+                "restart_error": restart_note,
                 "entry": entry,
                 "min_score_synced": env_updates.get("MIN_SCORE"),
             }
@@ -1342,6 +1375,8 @@ def _apply_strategy_file(entry: dict, content: str, *, restart_engine: bool = Tr
         "ok": True,
         "applied": True,
         "restart_engine": restart_ok,
+        "restart_skipped": restart_skipped,
+        "restart_note": restart_note if restart_skipped else None,
         "entry": entry,
         "min_score_synced": env_updates.get("MIN_SCORE"),
     }
@@ -2175,6 +2210,16 @@ def api_control():
 
     results = []
     for t in targets:
+        if t == "signal-engine" and action in ("start", "restart") and _notifications_paused():
+            results.append(
+                {
+                    "process": t,
+                    "ok": False,
+                    "output": "نوتیفیکیشن متوقف است — از «ادامه نوتیفیکیشن» استفاده کنید",
+                }
+            )
+            _stop_signal_engine()
+            continue
         if action == "restart":
             code, out, err = _run(["pm2", "restart", t])
         else:
@@ -2525,6 +2570,17 @@ def api_management():
     if action == "restart_all":
         results = []
         for t in PROCESSES:
+            if t == "signal-engine" and _notifications_paused():
+                _stop_signal_engine()
+                results.append(
+                    {
+                        "process": t,
+                        "ok": True,
+                        "skipped": True,
+                        "message": "left stopped (notifications paused)",
+                    }
+                )
+                continue
             code, out, err = _run(["pm2", "restart", t])
             results.append({"process": t, "ok": code == 0})
         _run(["pm2", "save"])
@@ -2555,19 +2611,24 @@ def api_management():
 
     if action == "pause_notifications":
         _write_env({"NOTIFICATIONS_PAUSED": "1"})
-        code, out, err = _run(["pm2", "stop", "signal-engine"])
+        code, out, err = _stop_signal_engine()
         _run(["pm2", "save"])
         if code != 0:
             return jsonify({"ok": False, "error": f"توقف موتور ناموفق: {err or out or 'pm2 error'}"}), 500
         _audit("pause_notifications", "manual pause")
-        return jsonify({"ok": True, "message": "نوتیفیکیشن متوقف شد — موتور سیگنال خاموش شد"})
+        return jsonify(
+            {
+                "ok": True,
+                "message": "نوتیفیکیشن متوقف شد — موتور سیگنال خاموش شد و تا Resume ارسال نمی‌شود",
+            }
+        )
 
     if action == "resume_notifications":
         _write_env({"NOTIFICATIONS_PAUSED": "0"})
-        code, out, err = _run(["pm2", "start", "signal-engine"])
+        ok, msg = _start_signal_engine(force=True)
         _run(["pm2", "save"])
-        if code != 0:
-            return jsonify({"ok": False, "error": f"راه‌اندازی موتور ناموفق: {err or out or 'pm2 error'}"}), 500
+        if not ok:
+            return jsonify({"ok": False, "error": f"راه‌اندازی موتور ناموفق: {msg}"}), 500
         _audit("resume_notifications", "manual resume")
         return jsonify({"ok": True, "message": "نوتیفیکیشن از سر گرفته شد — موتور سیگنال روشن شد"})
 

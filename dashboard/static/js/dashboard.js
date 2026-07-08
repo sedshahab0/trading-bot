@@ -3825,7 +3825,8 @@
       await fetchStatus({ force: true });
       let msg = "استراتژی فعال شد";
       if (data.min_score_synced) msg += ` — MIN_SCORE=${data.min_score_synced}`;
-      if (data.restart_engine === false) msg += " (ری‌استارت موتور ناموفق بود)";
+      if (data.restart_skipped) msg += " — موتور متوقف ماند (نوتیفیکیشن pause)";
+      else if (data.restart_engine === false) msg += " (ری‌استارت موتور ناموفق بود)";
       toast(msg);
       logControlActivity(`استراتژی فعال: ${data.entry?.original_name || id}`, "ok");
     } catch (err) {
