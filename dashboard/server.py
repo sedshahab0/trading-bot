@@ -1313,6 +1313,15 @@ def _apply_strategy_file(entry: dict, content: str, *, restart_engine: bool = Tr
         if row.get("id") == entry["id"]:
             manifest["history"][idx] = entry
             break
+    manifest.setdefault("activation_log", []).append(
+        {
+            "entry_id": entry["id"],
+            "applied_at": ts,
+            "version": entry.get("version"),
+            "original_name": entry.get("original_name"),
+        }
+    )
+    manifest["activation_log"] = manifest["activation_log"][-120:]
     _save_strategy_manifest(manifest)
     _audit("strategy_apply", f"{entry.get('original_name')} ({entry.get('id')})")
     restart_ok = None
@@ -1338,18 +1347,284 @@ def _apply_strategy_file(entry: dict, content: str, *, restart_engine: bool = Tr
     }
 
 
+def _empty_strategy_perf() -> dict:
+    return {
+        "signals": 0,
+        "buy": 0,
+        "sell": 0,
+        "wins": 0,
+        "losses": 0,
+        "open": 0,
+        "closed": 0,
+        "win_rate": None,
+        "tp1": 0,
+        "tp2": 0,
+        "avg_score": None,
+        "delivery_sent": 0,
+        "delivery_rate": None,
+        "activations": 0,
+        "active_hours": 0.0,
+        "first_active_at": None,
+        "last_active_at": None,
+        "top_symbols": [],
+    }
+
+
+def _parse_audit_strategy_activations() -> list[dict]:
+    events: list[dict] = []
+    for row in _parse_audit_log(limit=1000):
+        if row.get("action") != "strategy_apply":
+            continue
+        detail = str(row.get("detail") or "")
+        m = re.search(r"\((\d{8}-\d{6})\)", detail)
+        if not m:
+            continue
+        ts = str(row.get("ts") or "").strip()
+        if not ts:
+            continue
+        events.append({"entry_id": m.group(1), "applied_at": ts})
+    return events
+
+
+def _strategy_activation_events(manifest: dict) -> list[dict]:
+    logged = list(manifest.get("activation_log") or [])
+    if logged:
+        events = logged
+    else:
+        events = []
+        seen: set[tuple[str, str]] = set()
+        for ev in _parse_audit_strategy_activations():
+            key = (ev["entry_id"], ev["applied_at"])
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append(ev)
+        for row in manifest.get("history", []):
+            applied = row.get("applied_at")
+            if not applied:
+                continue
+            key = (row["id"], applied)
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append({"entry_id": row["id"], "applied_at": applied})
+    events.sort(
+        key=lambda ev: _parse_ts(str(ev.get("applied_at", "")).replace(" UTC", ""))
+        or datetime.min
+    )
+    return events
+
+
+def _strategy_activation_periods(manifest: dict) -> list[dict]:
+    active_id = manifest.get("active_id")
+    events = _strategy_activation_events(manifest)
+    now = datetime.now()
+    periods: list[dict] = []
+    for i, ev in enumerate(events):
+        start = _parse_ts(str(ev.get("applied_at", "")).replace(" UTC", ""))
+        if not start:
+            continue
+        end = (
+            _parse_ts(str(events[i + 1].get("applied_at", "")).replace(" UTC", ""))
+            if i + 1 < len(events)
+            else now
+        )
+        if not end:
+            end = now
+        duration_secs = max(0, int((end - start).total_seconds()))
+        periods.append(
+            {
+                "entry_id": ev["entry_id"],
+                "started_at": ev.get("applied_at"),
+                "ended_at": events[i + 1].get("applied_at") if i + 1 < len(events) else None,
+                "is_active": (i + 1 >= len(events)) and ev["entry_id"] == active_id,
+                "duration_secs": duration_secs,
+                "_start": start,
+                "_end": end,
+            }
+        )
+    return periods
+
+
+def _signals_between(signals: list[dict], start: datetime, end: datetime) -> list[dict]:
+    out: list[dict] = []
+    for sig in signals:
+        ts = _parse_ts(str(sig.get("timestamp", ""))[:19])
+        if not ts or ts < start or ts >= end:
+            continue
+        out.append(sig)
+    return out
+
+
+def _compute_strategy_signal_stats(signals: list[dict]) -> dict:
+    if not signals:
+        return _empty_strategy_perf()
+    wins = [s for s in signals if s.get("outcome") in ("tp1", "tp2")]
+    losses = [s for s in signals if s.get("outcome") == "sl"]
+    open_ = [s for s in signals if s.get("outcome") in (None, "open")]
+    closed = len(wins) + len(losses)
+    buy = sum(1 for s in signals if str(s.get("direction", "")).upper() == "BUY")
+    sell = sum(1 for s in signals if str(s.get("direction", "")).upper() == "SELL")
+    scores = [int(s["score"]) for s in signals if s.get("score") is not None]
+    sent = [s for s in signals if s.get("delivery_status") == "sent"]
+    sym_counts: dict[str, int] = defaultdict(int)
+    for s in signals:
+        sym = str(s.get("symbol") or "?")
+        sym_counts[sym] += 1
+    top_symbols = sorted(sym_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    return {
+        "signals": len(signals),
+        "buy": buy,
+        "sell": sell,
+        "wins": len(wins),
+        "losses": len(losses),
+        "open": len(open_),
+        "closed": closed,
+        "win_rate": round(len(wins) / closed * 100, 1) if closed else None,
+        "tp1": sum(1 for s in signals if s.get("outcome") == "tp1"),
+        "tp2": sum(1 for s in signals if s.get("outcome") == "tp2"),
+        "avg_score": round(sum(scores) / len(scores), 1) if scores else None,
+        "delivery_sent": len(sent),
+        "delivery_rate": round(len(sent) / len(signals) * 100, 1) if signals else None,
+        "top_symbols": [{"symbol": sym, "count": cnt} for sym, cnt in top_symbols],
+    }
+
+
+def _merge_strategy_perf(base: dict, extra: dict) -> dict:
+    merged = dict(base)
+    for key in ("signals", "buy", "sell", "wins", "losses", "open", "closed", "tp1", "tp2", "delivery_sent"):
+        merged[key] = base.get(key, 0) + extra.get(key, 0)
+    closed = merged["closed"]
+    merged["win_rate"] = round(merged["wins"] / closed * 100, 1) if closed else None
+    total = merged["signals"]
+    merged["delivery_rate"] = round(merged["delivery_sent"] / total * 100, 1) if total else None
+    sym_map: dict[str, int] = defaultdict(int)
+    for row in base.get("top_symbols") or []:
+        sym_map[row["symbol"]] += row["count"]
+    for row in extra.get("top_symbols") or []:
+        sym_map[row["symbol"]] += row["count"]
+    merged["top_symbols"] = [
+        {"symbol": sym, "count": cnt}
+        for sym, cnt in sorted(sym_map.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+    scores_weight = []
+    if base.get("avg_score") is not None and base.get("signals"):
+        scores_weight.append((base["avg_score"], base["signals"]))
+    if extra.get("avg_score") is not None and extra.get("signals"):
+        scores_weight.append((extra["avg_score"], extra["signals"]))
+    if scores_weight:
+        total_w = sum(w for _, w in scores_weight)
+        merged["avg_score"] = round(sum(v * w for v, w in scores_weight) / total_w, 1)
+    else:
+        merged["avg_score"] = None
+    return merged
+
+
+def _strategy_performance_by_entry(
+    manifest: dict,
+    signals: list[dict],
+    periods: list[dict],
+) -> dict[str, dict]:
+    perf: dict[str, dict] = {}
+    meta_by_id = {row["id"]: row for row in manifest.get("history", []) if row.get("id")}
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for period in periods:
+        grouped[period["entry_id"]].append(period)
+    for entry_id, entry_periods in grouped.items():
+        base = _empty_strategy_perf()
+        base["activations"] = len(entry_periods)
+        base["active_hours"] = round(sum(p["duration_secs"] for p in entry_periods) / 3600, 1)
+        starts = [p.get("started_at") for p in entry_periods if p.get("started_at")]
+        if starts:
+            base["first_active_at"] = min(starts)
+            base["last_active_at"] = max(starts)
+        for period in entry_periods:
+            chunk = _signals_between(signals, period["_start"], period["_end"])
+            stats = _compute_strategy_signal_stats(chunk)
+            base = _merge_strategy_perf(base, stats)
+        if entry_periods and entry_periods[-1].get("is_active"):
+            base["is_active_now"] = True
+        entry = meta_by_id.get(entry_id) or {}
+        base["version"] = entry.get("version")
+        base["original_name"] = entry.get("original_name")
+        perf[entry_id] = base
+    return perf
+
+
+def _strategy_legacy_stats(signals: list[dict], periods: list[dict]) -> dict:
+    if not signals:
+        return _empty_strategy_perf()
+    if not periods:
+        return _compute_strategy_signal_stats(signals)
+    first_start = min(p["_start"] for p in periods)
+    legacy = _signals_between(signals, datetime.min, first_start)
+    stats = _compute_strategy_signal_stats(legacy)
+    stats["label"] = "قبل از ثبت نسخه‌ها"
+    return stats
+
+
 def _strategy_status_payload() -> dict:
     manifest = _load_strategy_manifest()
     active = _strategy_entry_by_id(manifest, manifest.get("active_id") or "")
     active_exists = STRATEGY_ACTIVE.exists()
     legacy_exists = STRATEGY_LEGACY.exists()
+    enriched = _get_enriched_all()
+    periods_raw = _strategy_activation_periods(manifest)
+    perf_by_id = _strategy_performance_by_entry(manifest, enriched, periods_raw)
+    legacy_perf = _strategy_legacy_stats(enriched, periods_raw)
+    periods_public = [
+        {k: v for k, v in p.items() if not k.startswith("_")} for p in periods_raw
+    ]
+    history: list[dict] = []
+    for row in manifest.get("history", [])[:20]:
+        item = dict(row)
+        item["performance"] = perf_by_id.get(row.get("id") or "", _empty_strategy_perf())
+        history.append(item)
+    active_id = manifest.get("active_id")
+    active_perf = perf_by_id.get(active_id, _empty_strategy_perf()) if active_id else None
+    comparison = []
+    for row in history:
+        perf = row.get("performance") or _empty_strategy_perf()
+        if not perf.get("signals") and not row.get("applied_at"):
+            continue
+        comparison.append(
+            {
+                "id": row.get("id"),
+                "original_name": row.get("original_name"),
+                "version": row.get("version"),
+                "is_active": row.get("id") == active_id,
+                "applied_at": row.get("applied_at"),
+                "win_rate": perf.get("win_rate"),
+                "signals": perf.get("signals"),
+                "wins": perf.get("wins"),
+                "losses": perf.get("losses"),
+                "closed": perf.get("closed"),
+                "avg_score": perf.get("avg_score"),
+                "active_hours": perf.get("active_hours"),
+            }
+        )
+    comparison.sort(
+        key=lambda r: _parse_ts(str(r.get("applied_at") or "").replace(" UTC", ""))
+        or datetime.min,
+        reverse=True,
+    )
+    rated = [c for c in comparison if c.get("win_rate") is not None and (c.get("closed") or 0) > 0]
+    best = max(rated, key=lambda c: c["win_rate"], default=None)
     return {
         "active": active,
-        "active_id": manifest.get("active_id"),
+        "active_id": active_id,
         "active_path": str(STRATEGY_ACTIVE) if active_exists else None,
         "legacy_path": str(STRATEGY_LEGACY) if legacy_exists else None,
-        "history": manifest.get("history", [])[:20],
+        "history": history,
         "uploads_dir": str(STRATEGY_UPLOADS),
+        "performance_summary": {
+            "active": active_perf,
+            "legacy": legacy_perf,
+            "best_win_rate_id": best.get("id") if best else None,
+            "comparison": comparison,
+            "activation_timeline": periods_public,
+            "tracked_signals": len(enriched),
+        },
     }
 
 
@@ -2438,6 +2713,61 @@ def api_ops_uptime():
 @auth_required
 def api_strategy_get():
     return jsonify(_strategy_status_payload())
+
+
+@app.route("/api/strategy/performance")
+@auth_required
+def api_strategy_performance():
+    entry_id = (request.args.get("id") or "").strip()
+    manifest = _load_strategy_manifest()
+    if not entry_id:
+        entry_id = manifest.get("active_id") or ""
+    entry = _strategy_entry_by_id(manifest, entry_id)
+    if not entry:
+        return jsonify({"error": "نسخه استراتژی یافت نشد"}), 404
+    enriched = _get_enriched_all()
+    periods_raw = _strategy_activation_periods(manifest)
+    entry_periods = [p for p in periods_raw if p["entry_id"] == entry_id]
+    perf = _strategy_performance_by_entry(manifest, enriched, periods_raw).get(
+        entry_id, _empty_strategy_perf()
+    )
+    period_rows = []
+    for period in entry_periods:
+        chunk = _signals_between(enriched, period["_start"], period["_end"])
+        stats = _compute_strategy_signal_stats(chunk)
+        period_rows.append(
+            {
+                "started_at": period.get("started_at"),
+                "ended_at": period.get("ended_at"),
+                "is_active": period.get("is_active"),
+                "duration_hours": round(period.get("duration_secs", 0) / 3600, 1),
+                "stats": stats,
+            }
+        )
+    version_signals: list[dict] = []
+    for period in entry_periods:
+        version_signals.extend(_signals_between(enriched, period["_start"], period["_end"]))
+    version_signals.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
+    recent = []
+    for sig in version_signals[:20]:
+        recent.append(
+            {
+                "timestamp": sig.get("timestamp"),
+                "symbol": sig.get("symbol"),
+                "direction": sig.get("direction"),
+                "score": sig.get("score"),
+                "outcome": sig.get("outcome"),
+                "delivery_status": sig.get("delivery_status"),
+            }
+        )
+    return jsonify(
+        {
+            "entry": entry,
+            "performance": perf,
+            "periods": period_rows,
+            "recent_signals": recent,
+        }
+    )
 
 
 @app.route("/api/strategy/upload", methods=["POST"])

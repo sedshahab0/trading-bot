@@ -1,10 +1,17 @@
 {
   "major": 2,
-  "minor": 9,
+  "minor": 10,
   "patch": 0,
-  "label": "v2.9",
+  "label": "v2.10",
   "released": "2026-07-08",
   "history": [
+    {
+      "version": "2.10.0",
+      "label": "v2.10",
+      "date": "2026-07-08",
+      "title": "Strategy version performance — win rate & signals per .mq5 version",
+      "level": "minor"
+    },
     {
       "version": "2.9.0",
       "label": "v2.9",

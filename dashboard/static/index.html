@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css?v=19" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=19" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=20" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -837,13 +837,37 @@
             <div class="panel-top">
               <div>
                 <h3 class="panel-heading">استراتژی تحلیل (MT5)</h3>
-                <p class="panel-desc">آپلود فایل .mq5 توسط تحلیلگر — نسخه‌بندی، فعال‌سازی و استفاده توسط موتور ربات</p>
+                <p class="panel-desc">آپلود .mq5، مقایسه نسخه‌ها، Win Rate و سیگنال‌های هر نسخه فعال‌شده</p>
               </div>
               <button type="button" class="btn btn-sm btn-ghost" id="btnStrategyRefresh">↻ بروزرسانی</button>
             </div>
 
             <div class="strategy-current" id="strategyCurrent">
               <p class="panel-empty">در حال بارگذاری…</p>
+            </div>
+
+            <div class="strategy-perf-summary hidden" id="strategyPerfSummary">
+              <div class="strategy-perf-summary-head">
+                <h4 class="strategy-history-title">مقایسه نسخه‌ها</h4>
+                <span class="hint" id="strategyPerfMeta">—</span>
+              </div>
+              <div class="strategy-compare-grid" id="strategyCompareGrid"></div>
+            </div>
+
+            <div class="strategy-detail hidden" id="strategyDetail">
+              <div class="strategy-detail-head">
+                <div>
+                  <h4 class="strategy-detail-title" id="strategyDetailTitle">جزئیات نسخه</h4>
+                  <p class="strategy-detail-sub" id="strategyDetailSub">—</p>
+                </div>
+                <button type="button" class="btn btn-sm btn-ghost" id="btnStrategyDetailClose">✕</button>
+              </div>
+              <div class="strategy-detail-kpis" id="strategyDetailKpis"></div>
+              <div class="strategy-detail-periods" id="strategyDetailPeriods"></div>
+              <div class="strategy-detail-signals">
+                <h5 class="strategy-detail-section-title">سیگنال‌های این نسخه</h5>
+                <div class="strategy-signal-list" id="strategyDetailSignals"></div>
+              </div>
             </div>
 
             <div class="strategy-dropzone" id="strategyDropZone">
@@ -868,7 +892,8 @@
             <p class="hint strategy-apply-hint">فعال‌سازی: فایل به <code>strategy/active.mq5</code> کپی می‌شود، MIN_SCORE از InpMinConfluence همگام می‌شود، و signal-engine ری‌استارت می‌شود.</p>
 
             <div class="strategy-history-wrap">
-              <h4 class="strategy-history-title">آپلودهای اخیر</h4>
+              <h4 class="strategy-history-title">نسخه‌های سرور — آپلود و فعال‌سازی</h4>
+              <p class="hint strategy-history-hint">روی هر نسخه کلیک کنید تا Win Rate، سیگنال‌ها و دوره‌های فعال بودن را ببینید.</p>
               <div class="strategy-history" id="strategyHistory">
                 <p class="panel-empty">هنوز فایلی آپلود نشده</p>
               </div>
@@ -1049,6 +1074,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=20"></script>
+  <script src="/static/js/dashboard.js?v=21"></script>
 </body>
 </html>

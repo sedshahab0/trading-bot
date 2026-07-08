@@ -160,6 +160,7 @@
 
   let strategyPendingFile = null;
   let strategyLastUploadId = null;
+  let strategySelectedId = null;
 
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
@@ -2365,6 +2366,15 @@
     el.style.strokeDashoffset = String(max - (max * clamped) / 100);
   }
 
+  function setElementClass(el, className) {
+    if (!el) return;
+    if (el instanceof SVGElement) {
+      el.setAttribute("class", className);
+      return;
+    }
+    el.className = className;
+  }
+
   function healthFromPct(pct) {
     if (pct >= 75) return { cls: "good", label: "عالی" };
     if (pct >= 50) return { cls: "warn", label: "متوسط" };
@@ -2662,24 +2672,24 @@
     if (!sys?.cpu || !sys?.ram || !sys?.disk) return;
     const score = computeHealthScore(sys, procs || lastProcesses);
     const health = healthFromPct(score);
-    setGaugeArc($("#monitorScoreArc"), score, 327);
-    const arc = $("#monitorScoreArc");
-    if (arc) arc.className = `score-fill ${health.cls}`;
-    const scoreNum = $("#monitorScoreNum");
-    if (scoreNum) scoreNum.textContent = score;
-    if ($("#monHealthScore")) $("#monHealthScore").textContent = `${score}%`;
     setText("#monHost", sys.hostname || "—");
     setText("#monUptime", formatUptime(sys.uptime_secs ?? 0));
     setText("#monBotRam", `${sys.ram.bot_mb ?? 0} MB`);
+    if ($("#monHealthScore")) $("#monHealthScore").textContent = `${score}%`;
+    const scoreNum = $("#monitorScoreNum");
+    if (scoreNum) scoreNum.textContent = String(score);
     if ($("#monitorHostTitle")) $("#monitorHostTitle").textContent = sys.hostname || "سرور";
     if ($("#monitorHostSub")) {
       $("#monitorHostSub").textContent = `CPU ${sys.cpu.total ?? 0}% · RAM ${sys.ram.used_pct ?? 0}% · Disk ${sys.disk.used_pct ?? 0}%`;
     }
     if ($("#monitorHealthLabel")) $("#monitorHealthLabel").textContent = health.label;
     const dot = $("#monitorHealthDot");
-    if (dot) dot.className = `status-indicator ${health.cls === "good" ? "running" : health.cls === "warn" ? "partial" : "stopped"}`;
+    if (dot) setElementClass(dot, `status-indicator ${health.cls === "good" ? "running" : health.cls === "warn" ? "partial" : "stopped"}`);
     const pill = $("#monitorHealthPill");
-    if (pill) pill.className = `status-pill health-${health.cls}`;
+    if (pill) setElementClass(pill, `status-pill health-${health.cls}`);
+    setGaugeArc($("#monitorScoreArc"), score, 327);
+    const arc = $("#monitorScoreArc");
+    if (arc) setElementClass(arc, `score-fill ${health.cls}`);
   }
 
   function updateSystem(sys) {
@@ -3484,7 +3494,13 @@
       60000,
       { force, onStale: (d) => renderStrategyPanel(d) }
     );
+    if (!strategySelectedId && data?.active_id) {
+      strategySelectedId = data.active_id;
+    }
     renderStrategyPanel(data);
+    if (strategySelectedId) {
+      fetchStrategyDetail(strategySelectedId).catch(() => {});
+    }
     return data;
   }
 
@@ -3495,6 +3511,145 @@
     return `${(n / 1024 / 1024).toFixed(2)} MB`;
   }
 
+  function formatWinRate(rate) {
+    return rate != null ? `${rate}%` : "—";
+  }
+
+  function winRateBadgeClass(rate) {
+    if (rate == null) return "";
+    if (rate >= 60) return "win-good";
+    if (rate >= 45) return "win-warn";
+    return "win-bad";
+  }
+
+  function renderStrategyKpis(perf, container) {
+    if (!container || !perf) return;
+    const items = [
+      ["سیگنال", perf.signals ?? 0],
+      ["Win Rate", formatWinRate(perf.win_rate)],
+      ["برد", perf.wins ?? 0],
+      ["باخت", perf.losses ?? 0],
+      ["باز", perf.open ?? 0],
+      ["میانگین Score", perf.avg_score ?? "—"],
+      ["BUY", perf.buy ?? 0],
+      ["SELL", perf.sell ?? 0],
+      ["تلگرام", perf.delivery_rate != null ? `${perf.delivery_rate}%` : "—"],
+      ["فعال (ساعت)", perf.active_hours ?? 0],
+    ];
+    container.innerHTML = items
+      .map(
+        ([lbl, val]) =>
+          `<div class="strategy-kpi"><span class="strategy-kpi-lbl">${lbl}</span><span class="strategy-kpi-val">${esc(String(val))}</span></div>`
+      )
+      .join("");
+  }
+
+  function renderStrategyComparison(payload) {
+    const wrap = $("#strategyPerfSummary");
+    const grid = $("#strategyCompareGrid");
+    const meta = $("#strategyPerfMeta");
+    if (!wrap || !grid) return;
+    const summary = payload?.performance_summary;
+    const comparison = summary?.comparison || [];
+    if (!comparison.length) {
+      wrap.classList.add("hidden");
+      return;
+    }
+    wrap.classList.remove("hidden");
+    const bestId = summary?.best_win_rate_id;
+    if (meta) {
+      const tracked = summary?.tracked_signals ?? 0;
+      meta.textContent = `${comparison.length} نسخه · ${tracked} سیگنال ثبت‌شده`;
+    }
+    grid.innerHTML = comparison
+      .map((row) => {
+        const winCls = row.win_rate != null ? "" : " muted";
+        const badges = [
+          row.is_active ? "active" : "",
+          row.id === bestId && row.win_rate != null ? "best" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return `<article class="strategy-compare-card ${badges}" data-strategy-select="${esc(row.id)}">
+          <div class="strategy-compare-name">${esc(row.original_name || row.id)}${row.version ? ` <small>v${esc(row.version)}</small>` : ""}</div>
+          <div class="strategy-compare-win${winCls}">${formatWinRate(row.win_rate)}</div>
+          <div class="strategy-compare-meta">${row.signals ?? 0} sig · ${row.wins ?? 0}W/${row.losses ?? 0}L${row.is_active ? " · فعال" : ""}</div>
+        </article>`;
+      })
+      .join("");
+    grid.querySelectorAll("[data-strategy-select]").forEach((el) => {
+      el.addEventListener("click", () => selectStrategyVersion(el.dataset.strategySelect));
+    });
+  }
+
+  async function selectStrategyVersion(entryId) {
+    if (!entryId) return;
+    strategySelectedId = entryId;
+    const payload = DataCache.get("strategy");
+    if (payload) renderStrategyPanel(payload);
+    await fetchStrategyDetail(entryId).catch((e) => toast(e.message, "error"));
+  }
+
+  async function fetchStrategyDetail(entryId) {
+    const data = await api(`/api/strategy/performance?id=${encodeURIComponent(entryId)}`);
+    renderStrategyDetail(data);
+    return data;
+  }
+
+  function renderStrategyDetail(data) {
+    const panel = $("#strategyDetail");
+    if (!panel || !data?.entry) return;
+    panel.classList.remove("hidden");
+    const entry = data.entry;
+    const perf = data.performance || {};
+    if ($("#strategyDetailTitle")) {
+      $("#strategyDetailTitle").textContent = entry.original_name || entry.stored_name || "نسخه";
+    }
+    if ($("#strategyDetailSub")) {
+      const parts = [
+        entry.version ? `v${entry.version}` : null,
+        entry.applied_at ? `فعال از ${entry.applied_at}` : "هرگز فعال نشده",
+        perf.activations ? `${perf.activations} بار فعال‌سازی` : null,
+      ].filter(Boolean);
+      $("#strategyDetailSub").textContent = parts.join(" · ");
+    }
+    renderStrategyKpis(perf, $("#strategyDetailKpis"));
+    const periodsEl = $("#strategyDetailPeriods");
+    if (periodsEl) {
+      const periods = data.periods || [];
+      periodsEl.innerHTML = periods.length
+        ? periods
+            .map(
+              (p) => `<div class="strategy-period-row${p.is_active ? " active-period" : ""}">
+              <span class="strategy-period-meta">${esc(p.started_at || "—")}${p.ended_at ? ` → ${esc(p.ended_at)}` : " → now"}</span>
+              <span class="strategy-period-stats">${p.stats?.signals ?? 0} sig · ${formatWinRate(p.stats?.win_rate)} · ${p.duration_hours ?? 0}h</span>
+            </div>`
+            )
+            .join("")
+        : '<p class="panel-empty">این نسخه هنوز فعال نشده — پس از فعال‌سازی آمار جمع می‌شود.</p>';
+    }
+    const sigEl = $("#strategyDetailSignals");
+    if (sigEl) {
+      const recent = data.recent_signals || [];
+      sigEl.innerHTML = recent.length
+        ? recent
+            .map((s) => {
+              const dir = (s.direction || "").toUpperCase();
+              const meta = OUTCOME_META[s.outcome] || OUTCOME_META.open;
+              const time = s.timestamp ? String(s.timestamp).split(" ")[1] || s.timestamp : "—";
+              return `<div class="strategy-signal-row">
+                <span class="strategy-signal-time">${esc(time)}</span>
+                <span class="strategy-signal-symbol">${esc(s.symbol || "?")}</span>
+                <span class="sig-dir-badge ${dir === "BUY" ? "buy" : "sell"}">${dir || "—"}</span>
+                <span class="outcome-badge ${meta.cls}">${meta.label}</span>
+                <span>${s.score ?? "—"}</span>
+              </div>`;
+            })
+            .join("")
+        : '<p class="panel-empty">سیگنالی در دوره فعال بودن این نسخه ثبت نشده.</p>';
+    }
+  }
+
   function renderStrategyPanel(payload) {
     const currentEl = $("#strategyCurrent");
     const historyEl = $("#strategyHistory");
@@ -3502,17 +3657,24 @@
 
     const active = payload?.active;
     const activeId = payload?.active_id;
+    const activePerf = payload?.performance_summary?.active;
 
     if (!active && !(payload?.history || []).length) {
       currentEl.innerHTML = '<p class="panel-empty">هنوز استراتژی فعالی ثبت نشده — فایل .mq5 را آپلود کنید</p>';
     } else if (active) {
+      const perfLine = activePerf?.signals
+        ? `<div class="strategy-stat"><span class="strategy-stat-lbl">عملکرد فعال</span><span class="strategy-stat-val">${formatWinRate(activePerf.win_rate)} · ${activePerf.signals} sig · ${activePerf.wins ?? 0}W/${activePerf.losses ?? 0}L</span></div>`
+        : `<div class="strategy-stat"><span class="strategy-stat-lbl">عملکرد فعال</span><span class="strategy-stat-val">در انتظار سیگنال</span></div>`;
       currentEl.innerHTML = `
         <div class="strategy-stat"><span class="strategy-stat-lbl">فایل فعال</span><span class="strategy-stat-val">${esc(active.original_name || "—")}</span></div>
         <div class="strategy-stat"><span class="strategy-stat-lbl">نسخه / Inputs</span><span class="strategy-stat-val">${esc(active.version || "—")} · ${active.input_count ?? "—"}</span></div>
-        <div class="strategy-stat"><span class="strategy-stat-lbl">آخرین اعمال</span><span class="strategy-stat-val">${esc(active.applied_at || active.uploaded_at || "—")}</span></div>`;
+        <div class="strategy-stat"><span class="strategy-stat-lbl">آخرین اعمال</span><span class="strategy-stat-val">${esc(active.applied_at || active.uploaded_at || "—")}</span></div>
+        ${perfLine}`;
     } else {
       currentEl.innerHTML = '<p class="panel-empty">فایل آپلود شده ولی هنوز فعال نشده — «فعال‌سازی روی ربات» را بزنید</p>';
     }
+
+    renderStrategyComparison(payload);
 
     const rows = payload?.history || [];
     if (!rows.length) {
@@ -3521,10 +3683,21 @@
       historyEl.innerHTML = rows
         .map((row) => {
           const isActive = row.id === activeId;
-          return `<div class="strategy-history-row${isActive ? " active" : ""}">
+          const isSelected = row.id === strategySelectedId;
+          const perf = row.performance || {};
+          const winCls = winRateBadgeClass(perf.win_rate);
+          const applied = row.applied_at ? "اعمال‌شده" : "آپلود فقط";
+          return `<div class="strategy-history-row${isActive ? " active" : ""}${isSelected ? " selected" : ""}" data-strategy-select="${esc(row.id)}">
             <div>
               <strong>${esc(row.original_name || row.stored_name)}</strong>
-              <div class="strategy-history-meta">${esc(row.uploaded_at || "")} · ${formatBytes(row.size_bytes)} · ${esc(row.uploaded_by || "")}${row.version ? ` · v${esc(row.version)}` : ""}</div>
+              <div class="strategy-history-meta">${esc(row.uploaded_at || "")} · ${formatBytes(row.size_bytes)} · ${esc(row.uploaded_by || "")}${row.version ? ` · v${esc(row.version)}` : ""} · ${applied}</div>
+              <div class="strategy-history-badges">
+                ${isActive ? '<span class="strategy-badge active-badge">فعال</span>' : ""}
+                <span class="strategy-badge ${winCls}">WR ${formatWinRate(perf.win_rate)}</span>
+                <span class="strategy-badge">${perf.signals ?? 0} sig</span>
+                <span class="strategy-badge">${perf.wins ?? 0}W / ${perf.losses ?? 0}L</span>
+                ${perf.avg_score != null ? `<span class="strategy-badge">score ${perf.avg_score}</span>` : ""}
+              </div>
             </div>
             <div class="strategy-history-actions">
               <button type="button" class="btn btn-sm btn-ghost" data-strategy-apply="${esc(row.id)}">فعال</button>
@@ -3533,12 +3706,32 @@
           </div>`;
         })
         .join("");
+      historyEl.querySelectorAll("[data-strategy-select]").forEach((row) => {
+        row.addEventListener("click", (e) => {
+          if (e.target.closest("[data-strategy-apply], [data-strategy-dl]")) return;
+          selectStrategyVersion(row.dataset.strategySelect);
+        });
+      });
       historyEl.querySelectorAll("[data-strategy-apply]").forEach((btn) => {
-        btn.addEventListener("click", () => applyStrategy(btn.dataset.strategyApply));
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          applyStrategy(btn.dataset.strategyApply);
+        });
       });
       historyEl.querySelectorAll("[data-strategy-dl]").forEach((btn) => {
-        btn.addEventListener("click", () => downloadExport(`/api/strategy/download?id=${encodeURIComponent(btn.dataset.strategyDl)}`));
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          downloadExport(`/api/strategy/download?id=${encodeURIComponent(btn.dataset.strategyDl)}`);
+        });
       });
+    }
+
+    if (strategySelectedId) {
+      const stillExists = rows.some((r) => r.id === strategySelectedId);
+      if (!stillExists) {
+        strategySelectedId = null;
+        $("#strategyDetail")?.classList.add("hidden");
+      }
     }
 
     const applyBtn = $("#btnStrategyApply");
@@ -3623,6 +3816,10 @@
       DataCache.set("strategy", data.strategy);
       renderStrategyPanel(data.strategy);
       strategyLastUploadId = null;
+      if (data.entry?.id) {
+        strategySelectedId = data.entry.id;
+        await fetchStrategyDetail(data.entry.id).catch(() => {});
+      }
       lastStatusFingerprint = null;
       invalidateCache("status", "bootstrap");
       await fetchStatus({ force: true });
@@ -3673,6 +3870,12 @@
     $("#btnStrategyApply")?.addEventListener("click", () => applyStrategy());
     $("#btnStrategyDownload")?.addEventListener("click", () => downloadExport("/api/strategy/download?active=1"));
     $("#btnStrategyRefresh")?.addEventListener("click", () => fetchStrategy({ force: true }).catch((e) => toast(e.message, "error")));
+    $("#btnStrategyDetailClose")?.addEventListener("click", () => {
+      strategySelectedId = null;
+      $("#strategyDetail")?.classList.add("hidden");
+      const payload = DataCache.get("strategy");
+      if (payload) renderStrategyPanel(payload);
+    });
   }
 
   // ── Config Save ──
