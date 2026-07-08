@@ -28,6 +28,7 @@
   let mgmtBusy = false;
   let sseReconnectTimer = null;
   let allSignals = [];
+  let signalPage = 1;
   let allTelegramEntries = [];
   let activePage = "home";
   let lastEngineState = null;
@@ -46,6 +47,7 @@
     "XAG/USD", "EUR/JPY",
   ];
   const MAX_SYMBOLS = 12;
+  const SIGNALS_PAGE_SIZE = 10;
   const resourceHistory = {
     labels: [],
     cpu: [],
@@ -1285,6 +1287,10 @@
       direction: $("#signalDirection")?.value || "all",
       outcome: $("#signalOutcome")?.value || "all",
     };
+  }
+
+  function resetSignalPage() {
+    signalPage = 1;
   }
 
   function applySignalsPayload(payload) {
@@ -3011,6 +3017,7 @@
   function renderSignalDailyChart(daily) {
     const canvas = $("#signalDailyChart");
     if (!canvas) return;
+    setSignalChartState("#signalDailyChart", "#signalDailyEmpty", !!daily?.length);
     if (!daily?.length) {
       if (signalDailyChart) {
         signalDailyChart.data.labels = [];
@@ -3059,6 +3066,7 @@
     if (!canvas) return;
     const buy = byDirection.BUY || 0;
     const sell = byDirection.SELL || 0;
+    setSignalChartState("#signalDirChart", "#signalDirEmpty", !!(buy || sell));
     if (!buy && !sell) {
       if (signalDirChart) {
         signalDirChart.data.datasets[0].data = [0, 0];
@@ -3092,6 +3100,45 @@
     });
   }
 
+  function setSignalChartState(canvasSel, hintSel, hasData) {
+    const canvas = $(canvasSel);
+    const box = canvas?.closest(".chart-box");
+    const hint = $(hintSel);
+    if (box) box.classList.toggle("has-data", hasData);
+    if (canvas) canvas.setAttribute("aria-hidden", hasData ? "false" : "true");
+    if (hint) hint.textContent = hasData ? "" : "داده‌ای برای نمایش وجود ندارد";
+  }
+
+  function renderSignalPagination(totalItems, totalPages) {
+    const nav = $("#signalPagination");
+    if (!nav) return;
+    if (totalItems <= SIGNALS_PAGE_SIZE || totalPages <= 1) {
+      nav.innerHTML = "";
+      nav.hidden = true;
+      return;
+    }
+    nav.hidden = false;
+    const pages = [];
+    for (let p = 1; p <= totalPages; p += 1) {
+      if (p === 1 || p === totalPages || Math.abs(p - signalPage) <= 1) {
+        pages.push(p);
+      } else if (pages[pages.length - 1] !== "...") {
+        pages.push("...");
+      }
+    }
+    nav.innerHTML = `
+      <button type="button" class="sig-page-btn prev" data-signal-page="${signalPage - 1}" ${signalPage <= 1 ? "disabled" : ""}>قبلی</button>
+      <div class="sig-page-list">
+        ${pages.map((p) => p === "..."
+          ? '<span class="sig-page-ellipsis">...</span>'
+          : `<button type="button" class="sig-page-btn num ${p === signalPage ? "active" : ""}" data-signal-page="${p}" aria-current="${p === signalPage ? "page" : "false"}">${p}</button>`
+        ).join("")}
+      </div>
+      <button type="button" class="sig-page-btn next" data-signal-page="${signalPage + 1}" ${signalPage >= totalPages ? "disabled" : ""}>بعدی</button>
+      <span class="sig-page-summary">صفحه ${signalPage} از ${totalPages}</span>
+    `;
+  }
+
   function renderSignals(signals) {
     const feed = $("#signalFeed");
     if (!feed || !signals) return;
@@ -3099,6 +3146,11 @@
     const filtered = q
       ? signals.filter((s) => (s.symbol || "").toUpperCase().includes(q))
       : signals;
+    const total = signalsSummary?.total ?? signals.length;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / SIGNALS_PAGE_SIZE));
+    signalPage = Math.min(Math.max(1, signalPage), totalPages);
+    const start = (signalPage - 1) * SIGNALS_PAGE_SIZE;
+    const pageSignals = filtered.slice(start, start + SIGNALS_PAGE_SIZE);
 
     if ($("#sigFeedCount")) {
       const total = signalsSummary?.total ?? signals.length;
@@ -3107,12 +3159,21 @@
         : `${filtered.length} از ${total} سیگنال`;
     }
 
+    if ($("#sigFeedCount")) {
+      const pageStart = filtered.length ? start + 1 : 0;
+      const pageEnd = Math.min(start + SIGNALS_PAGE_SIZE, filtered.length);
+      $("#sigFeedCount").textContent = filtered.length === total
+        ? `${pageStart}-${pageEnd} از ${total} سیگنال`
+        : `${pageStart}-${pageEnd} از ${filtered.length} / کل ${total}`;
+    }
+
     if (!filtered.length) {
+      renderSignalPagination(0, 1);
       feed.innerHTML = '<p class="signals-empty">سیگنالی با این فیلتر یافت نشد</p>';
       return;
     }
 
-    feed.innerHTML = filtered
+    feed.innerHTML = pageSignals
       .map((s, i) => {
         const dir = (s.direction || "").toUpperCase();
         const isBuy = dir === "BUY";
@@ -3158,6 +3219,7 @@
         </article>`;
       })
       .join("");
+    renderSignalPagination(filtered.length, totalPages);
   }
 
   function colorizeLog(line) {
@@ -3407,11 +3469,33 @@
   $("#telegramStatus")?.addEventListener("change", () => refreshTelegram({ force: true }));
   $("#telegramDays")?.addEventListener("change", () => refreshTelegram({ force: true }));
 
-  $("#signalSearch")?.addEventListener("input", () => renderSignals(allSignals));
-  $("#signalDays")?.addEventListener("change", () => refreshSignals({ force: true }));
-  $("#signalDelivery")?.addEventListener("change", () => refreshSignals({ force: true }));
-  $("#signalDirection")?.addEventListener("change", () => refreshSignals({ force: true }));
-  $("#signalOutcome")?.addEventListener("change", () => refreshSignals({ force: true }));
+  $("#signalSearch")?.addEventListener("input", () => {
+    resetSignalPage();
+    renderSignals(allSignals);
+  });
+  $("#signalDays")?.addEventListener("change", () => {
+    resetSignalPage();
+    refreshSignals({ force: true });
+  });
+  $("#signalDelivery")?.addEventListener("change", () => {
+    resetSignalPage();
+    refreshSignals({ force: true });
+  });
+  $("#signalDirection")?.addEventListener("change", () => {
+    resetSignalPage();
+    refreshSignals({ force: true });
+  });
+  $("#signalOutcome")?.addEventListener("change", () => {
+    resetSignalPage();
+    refreshSignals({ force: true });
+  });
+  $("#signalPagination")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-signal-page]");
+    if (!btn || btn.disabled) return;
+    signalPage = Number(btn.dataset.signalPage || 1);
+    renderSignals(allSignals);
+    $("#signalFeed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   $("#btnTelegramTest")?.addEventListener("click", (e) => sendTelegramTest(e.currentTarget));
   $("#homeBtnSymbols")?.addEventListener("click", openSymbolsModal);

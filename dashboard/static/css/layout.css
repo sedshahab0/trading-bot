@@ -2784,6 +2784,22 @@
 
 .signals-charts { margin-bottom: 1rem; }
 
+.chart-box.signal-chart-box {
+  min-height: 220px;
+  overflow: hidden;
+}
+
+.signal-chart-box canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0.15;
+  transition: opacity 0.2s ease;
+}
+
+.signal-chart-box.has-data canvas { opacity: 1; }
+.signal-chart-box.has-data .chart-empty-hint { opacity: 0; }
+
 .signals-feed-header {
   padding: 0.85rem 1.1rem 0;
   margin-bottom: 0;
@@ -2795,6 +2811,72 @@
   gap: 0.65rem;
   padding: 0.85rem 1rem 1rem;
   max-height: none;
+}
+
+.signals-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0 1rem 1rem;
+  flex-wrap: wrap;
+}
+
+.signals-pagination[hidden] { display: none; }
+
+.sig-page-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.sig-page-btn {
+  min-width: 42px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.15s;
+}
+
+.sig-page-btn:hover:not(:disabled),
+.sig-page-btn.active {
+  color: var(--accent);
+  border-color: rgba(99,255,208,0.42);
+  background: rgba(99,255,208,0.1);
+}
+
+.sig-page-btn:active:not(:disabled) { transform: translateY(1px); }
+
+.sig-page-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.sig-page-btn.prev,
+.sig-page-btn.next {
+  min-width: 76px;
+  padding-inline: 0.9rem;
+}
+
+.sig-page-ellipsis,
+.sig-page-summary {
+  color: var(--text-dim);
+  font-size: 0.76rem;
+}
+
+.sig-page-summary {
+  width: 100%;
+  text-align: center;
 }
 
 .signal-card {
@@ -2966,15 +3048,52 @@
 }
 
 @media (max-width: 900px) {
-  .signals-hero-body { grid-template-columns: 1fr; }
-  .signals-hero-stats { justify-content: flex-start; }
+  .signals-hero-body {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1.1rem;
+  }
+  .signals-hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-content: stretch;
+    width: 100%;
+  }
+  .sig-stat {
+    min-width: 0;
+    padding: 0.65rem 0.45rem;
+  }
   .signals-kpi { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 768px) {
+  .signals-hero {
+    border-radius: 18px;
+  }
+  .signals-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+  .signals-toolbar .search-input {
+    grid-column: 1 / -1;
+  }
+  .signals-toolbar .select-input,
+  .signals-toolbar .search-input {
+    width: 100%;
+    min-height: 46px;
+  }
   .signals-charts.grid-2 { grid-template-columns: 1fr; }
+  .chart-box.signal-chart-box {
+    height: 210px;
+    min-height: 210px;
+  }
   .signal-card {
     grid-template-columns: 1fr;
+    padding: 0.9rem;
+  }
+  .signal-card-head {
+    gap: 0.4rem;
   }
   .signal-card-side {
     flex-direction: row;
@@ -2983,16 +3102,35 @@
     justify-content: space-between;
   }
   .signal-levels { grid-template-columns: repeat(2, 1fr); }
-  .signals-toolbar .select-input,
-  .signals-toolbar .search-input { flex: 1 1 calc(50% - 0.5rem); min-width: 120px; }
-  .signals-toolbar-stats { width: 100%; justify-content: flex-start; }
+  .signals-toolbar-stats {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .signals-pagination {
+    justify-content: center;
+    padding-inline: 0.85rem;
+  }
+  .sig-page-list {
+    order: 1;
+    flex: 0 0 100%;
+  }
+  .sig-page-btn.prev { order: 2; }
+  .sig-page-btn.next { order: 3; }
+  .sig-page-summary { order: 4; }
 }
 
 @media (max-width: 400px) {
   .signals-kpi { grid-template-columns: 1fr 1fr; }
   .signal-levels { grid-template-columns: 1fr 1fr; }
-  .sig-stat { min-width: calc(50% - 0.35rem); flex: 1; }
-  .signals-hero-stats { width: 100%; }
+  .signals-hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chart-box.signal-chart-box {
+    height: 180px;
+    min-height: 180px;
+  }
+  .sig-page-btn.num {
+    min-width: 38px;
+  }
 }
 
 /* ── Symbols Manager (Control page) ── */
