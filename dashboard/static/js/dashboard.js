@@ -25,6 +25,7 @@
   let statusInterval = null;
   let monitorInterval = null;
   let isAuthenticated = false;
+  let mgmtBusy = false;
   let sseReconnectTimer = null;
   let allSignals = [];
   let allTelegramEntries = [];
