@@ -2032,9 +2032,7 @@ def api_bootstrap():
     enriched_30 = _get_enriched_signals(days=30)
     enriched_7d = _get_enriched_signals(days=7)
     signals_7d = _parse_all_signals(days=7)
-    all_signals = _parse_all_signals(days=30)
     telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     return jsonify(
         {
@@ -2046,21 +2044,9 @@ def api_bootstrap():
                 "summary": _signals_page_summary(enriched_30),
             },
             "report_7": _report_summary(signals_7d, 7),
-            "report_30": _report_summary(all_signals, 30),
             "telegram": {
                 "summary": _telegram_summary(telegram_30, 30),
                 "entries": telegram_30[:100],
-            },
-            "analytics_30": {
-                "symbols": {
-                    "symbols": _symbol_analytics_from(enriched_30),
-                    "days": 30,
-                    "generated_at": generated_at,
-                },
-                "hourly": {
-                    "hours": _hourly_distribution_from(all_signals),
-                    "days": 30,
-                },
             },
             "ops": _ops_config(),
             "cooldowns": _cooldown_status(),

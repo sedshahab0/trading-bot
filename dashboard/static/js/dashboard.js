@@ -367,12 +367,14 @@
     return bootstrapCompletedAt && Date.now() - bootstrapCompletedAt < BOOTSTRAP_COALESCE_MS;
   }
 
-  async function waitForBootstrap() {
-    if (bootstrapInflight) {
-      try {
-        await bootstrapInflight;
-      } catch {}
-    }
+  async function waitForBootstrap(timeoutMs = 1500) {
+    if (!bootstrapInflight) return;
+    try {
+      await Promise.race([
+        bootstrapInflight,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    } catch {}
   }
 
   function applyAnalyticsPayload(payload, days = 30) {
