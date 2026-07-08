@@ -10,7 +10,7 @@ import re
 import secrets
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -33,10 +33,42 @@ SECRET_KEYS = (
     "TELEGRAM_CHAT_ID",
 )
 
+def _load_dotenv() -> None:
+    if not ENV_FILE.exists():
+        return
+    for line in ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        os.environ.setdefault(key.strip(), val.strip())
+
+
+_load_dotenv()
+
+
+def _get_secret_key() -> str:
+    """Stable secret shared across all gunicorn workers."""
+    key = os.environ.get("DASHBOARD_SECRET")
+    if key:
+        return key
+    secret_file = BOT_ROOT / ".dashboard_secret"
+    if secret_file.exists():
+        return secret_file.read_text().strip()
+    key = secrets.token_hex(32)
+    secret_file.write_text(key)
+    return key
+
+
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
-app.secret_key = os.environ.get("DASHBOARD_SECRET", secrets.token_hex(32))
+app.secret_key = _get_secret_key()
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
+
+def _dashboard_username() -> str:
+    return os.environ.get("DASHBOARD_USERNAME", "admin")
 
 
 def _dashboard_password() -> str:
@@ -264,21 +296,30 @@ def index():
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
-    if data.get("password") == _dashboard_password():
+    username = data.get("username", "")
+    password = data.get("password", "")
+    valid_user = secrets.compare_digest(username, _dashboard_username())
+    valid_pass = secrets.compare_digest(password, _dashboard_password())
+    if valid_user and valid_pass:
+        session.permanent = True
         session["authenticated"] = True
-        return jsonify({"ok": True})
-    return jsonify({"error": "Invalid password"}), 401
+        session["username"] = username
+        return jsonify({"ok": True, "username": username})
+    return jsonify({"error": "Invalid username or password"}), 401
 
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
-    session.pop("authenticated", None)
+    session.clear()
     return jsonify({"ok": True})
 
 
 @app.route("/api/auth/check")
 def auth_check():
-    return jsonify({"authenticated": bool(session.get("authenticated"))})
+    return jsonify({
+        "authenticated": bool(session.get("authenticated")),
+        "username": session.get("username"),
+    })
 
 
 @app.route("/api/status")

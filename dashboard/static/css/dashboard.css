@@ -149,11 +149,15 @@ body {
   color: var(--text);
   font-family: var(--font);
   font-size: 0.95rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   outline: none;
   transition: border-color 0.2s;
   direction: ltr;
   text-align: center;
+}
+
+.login-card input:last-of-type {
+  margin-bottom: 1rem;
 }
 
 .login-card input:focus { border-color: var(--accent); }

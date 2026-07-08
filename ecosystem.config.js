@@ -29,10 +29,12 @@ module.exports = {
       name: "dashboard",
       cwd: "/opt/trading-bot/dashboard",
       script: "/opt/trading-bot/venv/bin/gunicorn",
-      args: "-w 2 -b 0.0.0.0:8080 --timeout 120 server:app",
+      args: "-w 1 --threads 4 -b 0.0.0.0:8080 --timeout 120 server:app",
       interpreter: "none",
       env: {
         BOT_ROOT: "/opt/trading-bot",
+        ENV_FILE: "/opt/trading-bot/.env",
+        DASHBOARD_USERNAME: "admin",
         DASHBOARD_PASSWORD: "tradingbot2026",
         DASHBOARD_PORT: "8080",
       },

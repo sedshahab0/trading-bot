@@ -10,6 +10,8 @@
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
+  let isAuthenticated = false;
+  let sseReconnectTimer = null;
 
   // ── Particles ──
   function initParticles() {
@@ -38,16 +40,25 @@
   // ── API ──
   async function api(path, opts = {}) {
     const res = await fetch(path, {
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", ...opts.headers },
       ...opts,
     });
     if (res.status === 401) {
-      showLogin();
+      // Only kick out if user was previously logged in (avoids false logouts)
+      if (isAuthenticated && !path.includes("/api/auth/login")) {
+        isAuthenticated = false;
+        showLogin();
+      }
       throw new Error("Unauthorized");
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Request failed");
     return data;
+  }
+
+  async function authFetch(path, opts = {}) {
+    return fetch(path, { credentials: "same-origin", ...opts });
   }
 
   // ── Auth ──
@@ -65,28 +76,43 @@
 
   async function checkAuth() {
     try {
-      const { authenticated } = await api("/api/auth/check");
-      if (authenticated) showDashboard();
-      else showLogin();
+      const res = await authFetch("/api/auth/check");
+      const { authenticated } = await res.json();
+      if (authenticated) {
+        isAuthenticated = true;
+        showDashboard();
+      } else {
+        isAuthenticated = false;
+        showLogin();
+      }
     } catch {
+      isAuthenticated = false;
       showLogin();
     }
   }
 
   $("#loginForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const pw = $("#loginPassword").value;
+    const username = $("#loginUsername").value.trim();
+    const password = $("#loginPassword").value;
     try {
-      await api("/api/auth/login", { method: "POST", body: JSON.stringify({ password: pw }) });
+      await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+      isAuthenticated = true;
       $("#loginError").textContent = "";
       showDashboard();
     } catch {
-      $("#loginError").textContent = "رمز عبور اشتباه است";
+      $("#loginError").textContent = "نام کاربری یا رمز عبور اشتباه است";
     }
   });
 
   $("#btnLogout")?.addEventListener("click", async () => {
-    await api("/api/auth/logout", { method: "POST" });
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {}
+    isAuthenticated = false;
     showLogin();
   });
 
@@ -375,17 +401,10 @@
   $("#logSelect")?.addEventListener("change", refreshLogs);
 
   // ── SSE Stream ──
-  function startStreams() {
-    stopStreams();
-    refreshStatus();
-    refreshSignals();
-    refreshSystem();
-    refreshLogs();
-
-    statusInterval = setInterval(refreshStatus, 10000);
-    logInterval = setInterval(refreshLogs, 5000);
-
-    eventSource = new EventSource("/api/stream");
+  function connectSSE() {
+    if (!isAuthenticated) return;
+    eventSource?.close();
+    eventSource = new EventSource("/api/stream", { withCredentials: true });
     eventSource.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
@@ -395,15 +414,43 @@
         if (data.server_time) $("#liveTime").textContent = data.server_time;
       } catch {}
     };
-    eventSource.onerror = () => {
+    eventSource.onerror = async () => {
       eventSource?.close();
-      setTimeout(startStreams, 5000);
+      eventSource = null;
+      if (!isAuthenticated) return;
+      try {
+        const res = await authFetch("/api/auth/check");
+        const { authenticated } = await res.json();
+        if (authenticated) {
+          clearTimeout(sseReconnectTimer);
+          sseReconnectTimer = setTimeout(connectSSE, 5000);
+        } else {
+          isAuthenticated = false;
+          showLogin();
+        }
+      } catch {
+        clearTimeout(sseReconnectTimer);
+        sseReconnectTimer = setTimeout(connectSSE, 5000);
+      }
     };
+  }
+
+  function startStreams() {
+    stopStreams();
+    refreshStatus();
+    refreshSignals();
+    refreshSystem();
+    refreshLogs();
+
+    statusInterval = setInterval(refreshStatus, 10000);
+    logInterval = setInterval(refreshLogs, 5000);
+    connectSSE();
   }
 
   function stopStreams() {
     eventSource?.close();
     eventSource = null;
+    clearTimeout(sseReconnectTimer);
     clearInterval(statusInterval);
     clearInterval(logInterval);
   }
