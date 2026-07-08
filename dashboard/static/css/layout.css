@@ -3343,3 +3343,109 @@
   .sym-section-head { flex-direction: column; align-items: flex-start; }
   .sym-bulk-actions { width: 100%; justify-content: flex-start; }
 }
+
+/* Cooldown panel (Control) */
+.cooldown-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.65rem;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.cooldown-row {
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid var(--border);
+}
+
+.cooldown-row.ready { border-color: rgba(74,222,128,0.25); }
+.cooldown-row.waiting { border-color: rgba(251,191,36,0.2); }
+
+.cooldown-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.cooldown-symbol {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.9rem;
+  direction: ltr;
+}
+
+.cooldown-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.cooldown-badge.ready { background: rgba(74,222,128,0.14); color: var(--green); }
+.cooldown-badge.wait { background: rgba(251,191,36,0.14); color: var(--amber); }
+
+.cooldown-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.cooldown-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--amber), var(--green));
+  transition: width 0.4s ease;
+}
+
+.cooldown-last {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+/* Symbol report table (Reports) */
+.symbol-report-table-wrap {
+  overflow-x: auto;
+  padding: 0 1rem 1rem;
+}
+
+.symbol-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.symbol-report-table th,
+.symbol-report-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.symbol-report-table th {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.symbol-report-table .sym-cell {
+  font-family: var(--mono);
+  font-weight: 700;
+  text-align: right;
+  direction: ltr;
+}
+
+.symbol-report-table .buy-cell { color: var(--green); }
+.symbol-report-table .sell-cell { color: var(--red); }
+.symbol-report-table .win-cell { color: var(--green); }
+.symbol-report-table .loss-cell { color: var(--red); }
+
+@media (max-width: 768px) {
+  .cooldown-list { grid-template-columns: 1fr; }
+}

@@ -14,6 +14,7 @@
   let signalDailyChart = null;
   let signalDirChart = null;
   let homeSparkline = null;
+  let hourlyHeatmapChart = null;
   let resourceHistoryChart = null;
   let cpuSparkChart = null;
   let ramSparkChart = null;
@@ -65,7 +66,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.6", full: "2.6.0", major: 2, minor: 6, patch: 0 };
+  let dashboardVersion = { label: "v2.7", full: "2.7.0", major: 2, minor: 7, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -142,9 +143,9 @@
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
     monitor: ["status", "system"],
-    control: ["status"],
+    control: ["status", "cooldowns"],
     signals: ["signals"],
-    reports: [],
+    reports: ["analytics"],
     telegram: ["telegram"],
     settings: ["status"],
     logs: ["logs"],
@@ -772,6 +773,7 @@
 
     lastEngineStateForSymbols = data.engine_state || null;
     renderSymbolsPreview(parseSymbolsString(cfg.symbols || ""), lastEngineStateForSymbols);
+    fetchCooldowns().catch(() => {});
 
     if ($("#btnPauseNotif")) $("#btnPauseNotif").classList.toggle("active-state", !!cfg.notifications_paused);
     if ($("#btnResumeNotif")) $("#btnResumeNotif").classList.toggle("active-state", !cfg.notifications_paused);
@@ -1069,6 +1071,128 @@
     }
   }
 
+  function formatDuration(secs) {
+    if (secs == null || secs <= 0) return "آماده";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    if (h) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function renderCooldownPanel(payload) {
+    const list = $("#cooldownList");
+    const meta = $("#cooldownMeta");
+    if (!list || !payload) return;
+    const rows = payload.symbols || [];
+    const cooldownH = Math.round((payload.cooldown_seconds || 14400) / 3600);
+    if (meta) meta.textContent = payload.generated_at ? `Cooldown ${cooldownH}h · ${payload.generated_at}` : `Cooldown ${cooldownH}h`;
+    if (!rows.length) {
+      list.innerHTML = '<p class="panel-empty">نمادی برای ردیابی تنظیم نشده</p>';
+      return;
+    }
+    list.innerHTML = rows
+      .map((row) => {
+        const ready = row.ready;
+        const pct = row.cooldown_seconds
+          ? Math.max(0, Math.min(100, 100 - (row.remaining_seconds / row.cooldown_seconds) * 100))
+          : 100;
+        return `<div class="cooldown-row ${ready ? "ready" : "waiting"}">
+          <div class="cooldown-row-head">
+            <span class="cooldown-symbol">${esc(row.symbol)}</span>
+            <span class="cooldown-badge ${ready ? "ready" : "wait"}">${ready ? "آماده" : formatDuration(row.remaining_seconds)}</span>
+          </div>
+          <div class="cooldown-bar"><span style="width:${ready ? 100 : pct}%"></span></div>
+          <span class="cooldown-last">${row.last_signal_at ? `آخرین: ${esc(row.last_signal_at)}` : "هنوز سیگنالی نداده"}</span>
+        </div>`;
+      })
+      .join("");
+  }
+
+  async function fetchCooldowns({ force = false } = {}) {
+    const data = await DataCache.load("cooldowns", () => api("/api/analytics/cooldowns"), CACHE_TTL.status, { force });
+    renderCooldownPanel(data);
+    return data;
+  }
+
+  function renderSymbolReportTable(rows, meta) {
+    const body = $("#symbolReportBody");
+    if ($("#symbolReportMeta") && meta) $("#symbolReportMeta").textContent = meta;
+    if (!body) return;
+    if (!rows?.length) {
+      body.innerHTML = '<tr><td colspan="8" class="panel-empty">داده‌ای یافت نشد</td></tr>';
+      return;
+    }
+    body.innerHTML = rows
+      .map(
+        (r) => `<tr>
+          <td class="sym-cell">${esc(r.symbol)}</td>
+          <td>${r.total}</td>
+          <td class="buy-cell">${r.buy}</td>
+          <td class="sell-cell">${r.sell}</td>
+          <td class="win-cell">${r.wins}</td>
+          <td class="loss-cell">${r.losses}</td>
+          <td>${r.win_rate != null ? `${r.win_rate}%` : "—"}</td>
+          <td>${r.delivery_rate != null ? `${r.delivery_rate}%` : "—"}</td>
+        </tr>`
+      )
+      .join("");
+  }
+
+  function renderHourlyHeatmap(hours) {
+    const canvas = $("#hourlyHeatmapChart");
+    if (!canvas || !hours) return;
+    const labels = hours.map((h) => h.label);
+    const totals = hours.map((h) => h.total);
+    const buys = hours.map((h) => h.buy);
+    const sells = hours.map((h) => h.sell);
+    if (hourlyHeatmapChart) {
+      hourlyHeatmapChart.data.labels = labels;
+      hourlyHeatmapChart.data.datasets[0].data = totals;
+      hourlyHeatmapChart.data.datasets[1].data = buys;
+      hourlyHeatmapChart.data.datasets[2].data = sells;
+      hourlyHeatmapChart.update("none");
+      return;
+    }
+    hourlyHeatmapChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "کل", data: totals, backgroundColor: "rgba(99,255,208,0.55)", borderRadius: 4 },
+          { label: "BUY", data: buys, backgroundColor: "rgba(74,222,128,0.65)", borderRadius: 4 },
+          { label: "SELL", data: sells, backgroundColor: "rgba(248,113,113,0.65)", borderRadius: 4 },
+        ],
+      },
+      options: {
+        ...chartDefaults(),
+        scales: {
+          x: { ticks: { color: "#5c6578", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+        },
+        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, boxWidth: 10 } } },
+      },
+    });
+  }
+
+  async function fetchReportAnalytics(days = 30, { force = false } = {}) {
+    const key = `analytics:${days}`;
+    const data = await DataCache.load(
+      key,
+      async () => {
+        const [symbols, hourly] = await Promise.all([
+          api(`/api/analytics/symbols?days=${days}`),
+          api(`/api/analytics/hourly?days=${days}`),
+        ]);
+        return { symbols, hourly };
+      },
+      CACHE_TTL.report,
+      { force }
+    );
+    renderSymbolReportTable(data.symbols?.symbols, data.symbols?.generated_at ? `بروزرسانی ${data.symbols.generated_at}` : null);
+    renderHourlyHeatmap(data.hourly?.hours || []);
+    return data;
+  }
+
   function applyReportData(data, days = 30) {
     if (!data) return;
     if (days === 7) {
@@ -1289,9 +1413,9 @@
       }
       case "control": {
         const status = DataCache.get("status");
-        if (status) {
-          applyStatusData(status);
-        }
+        const cooldowns = DataCache.get("cooldowns");
+        if (status) applyStatusData(status);
+        if (cooldowns) renderCooldownPanel(cooldowns);
         break;
       }
       case "signals": {
@@ -1303,7 +1427,12 @@
       case "reports": {
         const days = Number($("#reportDays")?.value || 30);
         const report = DataCache.get(reportCacheKey(days));
+        const analytics = DataCache.get(`analytics:${days}`);
         if (report) applyReportData(report, days);
+        if (analytics) {
+          renderSymbolReportTable(analytics.symbols?.symbols, analytics.symbols?.generated_at ? `بروزرسانی ${analytics.symbols.generated_at}` : null);
+          renderHourlyHeatmap(analytics.hourly?.hours || []);
+        }
         break;
       }
       case "telegram": {
@@ -1425,10 +1554,12 @@
     if (needs.includes("status")) tasks.push(fetchStatus({ force }));
     if (needs.includes("system")) tasks.push(fetchSystem({ force }));
     if (needs.includes("signals")) tasks.push(fetchSignals({ force }));
+    if (needs.includes("cooldowns")) tasks.push(fetchCooldowns({ force }));
     if (needs.includes("report:7")) tasks.push(fetchReport(7, { force }));
     if (page === "reports") {
       const days = Number($("#reportDays")?.value || 30);
       tasks.push(fetchReport(days, { force }));
+      tasks.push(fetchReportAnalytics(days, { force }));
     }
     if (page === "telegram") tasks.push(fetchTelegram({ force }));
     if (needs.includes("logs")) tasks.push(fetchLogs({ force }));
@@ -2459,7 +2590,7 @@
   async function refreshReports({ force = false } = {}) {
     const days = Number($("#reportDays")?.value || 30);
     try {
-      await fetchReport(days, { force });
+      await Promise.all([fetchReport(days, { force }), fetchReportAnalytics(days, { force })]);
     } catch {}
   }
 
@@ -2560,7 +2691,7 @@
       const msg = data.message || "انجام شد";
       toast(msg);
       logControlActivity(msg, "ok");
-      invalidateCache("status", "system", "bootstrap", "report:7", "report:30", "telegram:30");
+      invalidateCache("status", "system", "bootstrap", "report:7", "report:30", "telegram:30", "cooldowns");
       await fetchStatus({ force: true });
       if (action === "toggle_debug") refreshReports({ force: true });
       if (action === "restart_dashboard") {

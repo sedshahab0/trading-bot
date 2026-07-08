@@ -1522,6 +1522,160 @@ def api_telegram_retry():
     return jsonify({"ok": True, "message": "سیگنال مجدداً ارسال شد", **result})
 
 
+def _symbol_analytics(days: int = 30) -> list[dict]:
+    raw = _parse_all_signals(days=days)
+    telegram = _parse_telegram_deliveries(days=days, limit=5000)
+    enriched = _enrich_signals(raw, telegram)
+    buckets: dict[str, dict] = {}
+    for s in enriched:
+        sym = _normalize_symbol(str(s.get("symbol", "?")))
+        row = buckets.setdefault(
+            sym,
+            {
+                "symbol": sym,
+                "total": 0,
+                "buy": 0,
+                "sell": 0,
+                "wins": 0,
+                "losses": 0,
+                "open": 0,
+                "sent": 0,
+                "failed": 0,
+                "unsent": 0,
+            },
+        )
+        row["total"] += 1
+        direction = str(s.get("direction", "")).upper()
+        if direction == "BUY":
+            row["buy"] += 1
+        elif direction == "SELL":
+            row["sell"] += 1
+        outcome = s.get("outcome", "open")
+        if outcome in ("tp1", "tp2"):
+            row["wins"] += 1
+        elif outcome == "sl":
+            row["losses"] += 1
+        else:
+            row["open"] += 1
+        status = s.get("delivery_status", "unsent")
+        if status in row:
+            row[status] += 1
+    result: list[dict] = []
+    for row in buckets.values():
+        closed = row["wins"] + row["losses"]
+        row["win_rate"] = round(row["wins"] / closed * 100, 1) if closed else None
+        row["delivery_rate"] = round(row["sent"] / row["total"] * 100, 1) if row["total"] else None
+        result.append(row)
+    result.sort(key=lambda r: r["total"], reverse=True)
+    return result
+
+
+def _cooldown_status() -> dict:
+    state = _read_json(STATE_FILE) or {}
+    env = _parse_env()
+    try:
+        cooldown_secs = int(env.get("SIGNAL_COOLDOWN_SECONDS", "14400"))
+    except ValueError:
+        cooldown_secs = 14400
+    symbols_raw = env.get("SYMBOLS", "EUR/USD,GBP/USD,XAU/USD")
+    symbols = [
+        _normalize_symbol(part.strip())
+        for part in symbols_raw.replace(";", ",").split(",")
+        if part.strip()
+    ]
+    last_at_raw = state.get("last_signal_at") or {}
+    now = datetime.now(timezone.utc)
+    rows: list[dict] = []
+    for sym in symbols:
+        ts_val = None
+        for key, val in last_at_raw.items():
+            if _normalize_symbol(str(key)) == sym:
+                ts_val = val
+                break
+        last_human = None
+        age_secs = None
+        ready = True
+        remaining_secs = 0
+        if ts_val is not None:
+            try:
+                ts = datetime.fromtimestamp(float(ts_val), tz=timezone.utc)
+                last_human = ts.strftime("%Y-%m-%d %H:%M UTC")
+                age_secs = int((now - ts).total_seconds())
+                remaining_secs = max(0, cooldown_secs - age_secs)
+                ready = remaining_secs <= 0
+            except (TypeError, ValueError, OSError):
+                pass
+        rows.append(
+            {
+                "symbol": sym,
+                "ready": ready,
+                "last_signal_at": last_human,
+                "age_seconds": age_secs,
+                "remaining_seconds": remaining_secs,
+                "cooldown_seconds": cooldown_secs,
+            }
+        )
+    return {
+        "cooldown_seconds": cooldown_secs,
+        "symbols": rows,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+
+def _hourly_distribution(days: int = 30) -> list[dict]:
+    raw = _parse_all_signals(days=days)
+    totals = [0] * 24
+    buys = [0] * 24
+    sells = [0] * 24
+    for sig in raw:
+        ts = _parse_ts(sig.get("timestamp", ""))
+        if not ts:
+            continue
+        hour = ts.hour
+        totals[hour] += 1
+        direction = str(sig.get("direction", "")).upper()
+        if direction == "BUY":
+            buys[hour] += 1
+        elif direction == "SELL":
+            sells[hour] += 1
+    return [
+        {"hour": h, "label": f"{h:02d}:00", "total": totals[h], "buy": buys[h], "sell": sells[h]}
+        for h in range(24)
+    ]
+
+
+@app.route("/api/analytics/symbols")
+@auth_required
+def api_analytics_symbols():
+    days = min(max(request.args.get("days", 30, type=int), 1), 365)
+    return jsonify(
+        {
+            "symbols": _symbol_analytics(days),
+            "days": days,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+    )
+
+
+@app.route("/api/analytics/cooldowns")
+@auth_required
+def api_analytics_cooldowns():
+    return jsonify(_cooldown_status())
+
+
+@app.route("/api/analytics/hourly")
+@auth_required
+def api_analytics_hourly():
+    days = min(max(request.args.get("days", 30, type=int), 1), 365)
+    return jsonify(
+        {
+            "hours": _hourly_distribution(days),
+            "days": days,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+    )
+
+
 @app.route("/api/export/telegram.csv")
 @auth_required
 def export_telegram_csv():

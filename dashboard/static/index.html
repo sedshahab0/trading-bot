@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=15" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=15" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=16" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=16" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.6</span>
+            <span class="version-badge" id="loginVersion">v2.7</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.6</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.7</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.6.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.7.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -412,6 +412,17 @@
             <div class="symbols-preview" id="symbolsPreview"></div>
           </article>
 
+          <article class="panel cooldown-panel">
+            <div class="panel-top">
+              <div>
+                <h3 class="panel-heading">وضعیت Cooldown</h3>
+                <p class="panel-desc">زمان باقی‌مانده تا سیگنال بعدی هر نماد</p>
+              </div>
+              <span class="hint" id="cooldownMeta">—</span>
+            </div>
+            <div class="cooldown-list" id="cooldownList"></div>
+          </article>
+
           <div class="control-grid">
             <!-- Management sections -->
             <div class="control-col">
@@ -613,6 +624,35 @@
           <div class="grid-2">
             <div class="panel"><h3 class="panel-heading">عملکرد نمادها</h3><div class="chart-box wide"><canvas id="symbolBarChart"></canvas></div></div>
             <div class="panel"><h3 class="panel-heading">ارسال‌های تلگرام (روزانه)</h3><div class="chart-box wide"><canvas id="telegramReportChart"></canvas></div></div>
+          </div>
+          <div class="grid-2">
+            <article class="panel">
+              <h3 class="panel-heading">Heatmap ساعتی سیگنال‌ها</h3>
+              <div class="chart-box wide"><canvas id="hourlyHeatmapChart"></canvas></div>
+            </article>
+            <article class="panel panel-flush">
+              <div class="panel-top">
+                <h3 class="panel-heading">گزارش تفصیلی نمادها</h3>
+                <span class="hint" id="symbolReportMeta">—</span>
+              </div>
+              <div class="symbol-report-table-wrap">
+                <table class="symbol-report-table" id="symbolReportTable">
+                  <thead>
+                    <tr>
+                      <th>نماد</th>
+                      <th>کل</th>
+                      <th>BUY</th>
+                      <th>SELL</th>
+                      <th>برد</th>
+                      <th>باخت</th>
+                      <th>نرخ برد</th>
+                      <th>تلگرام</th>
+                    </tr>
+                  </thead>
+                  <tbody id="symbolReportBody"></tbody>
+                </table>
+              </div>
+            </article>
           </div>
           <p class="hint" id="reportGenerated">—</p>
         </div>
@@ -871,6 +911,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=10"></script>
+  <script src="/static/js/dashboard.js?v=11"></script>
 </body>
 </html>
