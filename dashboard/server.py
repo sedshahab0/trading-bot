@@ -799,6 +799,22 @@ def _signal_stats(signals: list[dict]) -> dict:
     }
 
 
+_signal_stats_cache: dict = {"mtime": 0.0, "stats": None}
+
+
+def _live_signal_stats() -> dict:
+    """Full signal-log stats — cached until the log file changes."""
+    if not SIGNAL_LOG.exists():
+        return _signal_stats([])
+    mtime = SIGNAL_LOG.stat().st_mtime
+    if _signal_stats_cache["stats"] is not None and _signal_stats_cache["mtime"] == mtime:
+        return _signal_stats_cache["stats"]
+    stats = _signal_stats(_parse_all_signals())
+    _signal_stats_cache["mtime"] = mtime
+    _signal_stats_cache["stats"] = stats
+    return stats
+
+
 _net_prev: dict[str, float] = {"ts": 0, "sent": 0, "recv": 0}
 
 
@@ -905,8 +921,7 @@ def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
 
     state = _read_json(STATE_FILE) or {}
     env = _parse_env()
-    if stats_signals is None:
-        stats_signals = _parse_signals(100)
+    signal_stats = _live_signal_stats()
 
     last_signal_human = {}
     for sym, ts in (state.get("last_signal_at") or {}).items():
@@ -938,7 +953,7 @@ def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
             "engine_debug": env.get("ENGINE_DEBUG", "0") == "1",
         },
         "latest_signal": _read_json(SIGNAL_QUEUE),
-        "signal_stats": _signal_stats(stats_signals),
+        "signal_stats": signal_stats,
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -968,14 +983,13 @@ def api_bootstrap():
     all_signals = _parse_all_signals(days=30)
     cutoff_7 = datetime.now() - timedelta(days=7)
     signals_7d = [s for s in all_signals if _signal_after(s, cutoff_7)]
-    stats_signals = all_signals[:100]
     telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
     enriched_30 = _enrich_signals(all_signals, telegram_30)
 
     return jsonify(
         {
             "version": _dashboard_version(),
-            "status": _build_status_payload(stats_signals=stats_signals),
+            "status": _build_status_payload(stats_signals=_parse_signals(50)),
             "system": _system_stats(),
             "signals": {
                 "signals": enriched_30[:50],
@@ -1380,6 +1394,8 @@ def api_stream():
                 "processes": procs,
                 "all_processes": all_procs,
                 "system": _system_stats(),
+                "signal_stats": _live_signal_stats(),
+                "latest_signal": _read_json(SIGNAL_QUEUE),
                 "server_time": datetime.now().strftime("%H:%M:%S"),
             }
             yield f"data: {json.dumps(payload)}\n\n"

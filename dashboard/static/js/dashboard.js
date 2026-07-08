@@ -31,7 +31,7 @@
   let lastProcesses = [];
   const controlActivity = [];
   const MAX_ACTIVITY = 20;
-  let mgmtBusy = false;
+  let lastSignalStatsKey = null;
   const resourceHistory = {
     labels: [],
     cpu: [],
@@ -425,6 +425,14 @@
     el.style.transform = "scale(1.1)";
     el.textContent = newVal;
     setTimeout(() => (el.style.transform = "scale(1)"), 200);
+  }
+
+  /** Stable counter display — no scale animation, tabular nums, skip if unchanged. */
+  function setStableCounter(el, newVal) {
+    if (!el) return;
+    const text = String(newVal ?? 0);
+    if (el.textContent === text) return;
+    el.textContent = text;
   }
 
   function updateStatusBanner(overall) {
@@ -1562,19 +1570,30 @@
 
   function renderStats(stats) {
     if (!stats) return;
-    const set = (id, v) => { const el = $(id); if (el) animateValue(el, v); };
-    set("#statToday", stats.today);
-    set("#statTotal", stats.total);
-    set("#statBuy", stats.by_direction?.BUY || 0);
-    set("#statSell", stats.by_direction?.SELL || 0);
-    set("#kpiToday", stats.today);
-    set("#kpiTotal", stats.total);
-    set("#kpiBuy", stats.by_direction?.BUY || 0);
-    set("#kpiSell", stats.by_direction?.SELL || 0);
-    set("#sigToday", stats.today);
-    set("#sigTotal", stats.total);
+    const setCounter = (id, v) => setStableCounter($(id), v);
+    setCounter("#kpiToday", stats.today);
+    setCounter("#kpiTotal", stats.total);
+    setCounter("#kpiBuy", stats.by_direction?.BUY || 0);
+    setCounter("#kpiSell", stats.by_direction?.SELL || 0);
+    setCounter("#statToday", stats.today);
+    setCounter("#statTotal", stats.total);
+    setCounter("#statBuy", stats.by_direction?.BUY || 0);
+    setCounter("#statSell", stats.by_direction?.SELL || 0);
+    if (activePage === "signals") {
+      setStableCounter($("#sigToday"), stats.today);
+      setStableCounter($("#sigTotal"), stats.total);
+    }
     updateChart(stats.by_symbol || {});
     renderSymbolLegend(stats.by_symbol || {});
+
+    const statsKey = `${stats.today}:${stats.total}:${stats.by_direction?.BUY || 0}:${stats.by_direction?.SELL || 0}`;
+    if (statsKey !== lastSignalStatsKey) {
+      lastSignalStatsKey = statsKey;
+      if (activePage === "home") {
+        invalidateCache("report:7");
+        fetchReport(7, { force: true }).catch(() => {});
+      }
+    }
   }
 
   function updateChart(bySymbol) {
@@ -2136,6 +2155,13 @@
         updateSystem(data.system);
         if (data.server_time) $("#liveTime").textContent = data.server_time;
 
+        if (data.signal_stats) {
+          renderStats(data.signal_stats);
+        }
+        if (data.latest_signal !== undefined) {
+          renderLatestSignal(data.latest_signal);
+        }
+
         DataCache.set("system", data.system);
         const statusCached = DataCache.get("status");
         if (statusCached) {
@@ -2143,6 +2169,8 @@
             ...statusCached,
             overall: data.overall,
             processes: data.processes,
+            signal_stats: data.signal_stats || statusCached.signal_stats,
+            latest_signal: data.latest_signal !== undefined ? data.latest_signal : statusCached.latest_signal,
           });
         }
       } catch {}
