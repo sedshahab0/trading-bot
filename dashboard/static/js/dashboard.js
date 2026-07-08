@@ -1912,7 +1912,11 @@
           renderSymbolReportTable(analytics.symbols?.symbols, analytics.symbols?.generated_at ? `بروزرسانی ${analytics.symbols.generated_at}` : null);
           renderHourlyHeatmap(analytics.hourly?.hours || []);
         }
-        requestAnimationFrame(() => resizeReportCharts());
+        requestAnimationFrame(() => {
+          resizeReportCharts();
+          setTimeout(() => resizeReportCharts(), 120);
+          setTimeout(() => resizeReportCharts(), 300);
+        });
         break;
       }
       case "telegram": {
@@ -2097,9 +2101,6 @@
   async function ensurePageData(page, { force = false } = {}) {
     const needs = PAGE_NEEDS[page] || [];
     applyPageFromCache(page);
-    if (!force && isBootstrapFresh()) {
-      return;
-    }
 
     const tasks = [];
     if (needs.includes("status")) tasks.push(fetchStatus({ force }));
@@ -3102,7 +3103,11 @@
   }
 
   function resizeReportCharts() {
-    [dailyChart, directionChart, symbolBarChart, telegramReportChart, hourlyHeatmapChart].forEach((chart) => chart?.resize());
+    [dailyChart, directionChart, symbolBarChart, telegramReportChart, hourlyHeatmapChart].forEach((chart) => {
+      if (!chart) return;
+      chart.resize();
+      chart.update("none");
+    });
   }
 
   function setSignalChartState(canvasSel, hintSel, hasData) {
