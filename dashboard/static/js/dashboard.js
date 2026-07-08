@@ -981,18 +981,23 @@
     });
   }
 
-  function initSidebarCollapse() {
+  function setSidebarCollapsed(collapsed) {
     const sidebar = $("#sidebar");
-    const btn = $("#sidebarCollapseBtn");
-    if (!sidebar || !btn) return;
+    const shell = $("#dashboard");
+    sidebar?.classList.toggle("collapsed", collapsed);
+    shell?.classList.toggle("sidebar-collapsed", collapsed);
+    localStorage.setItem("tc:sidebar-collapsed", collapsed ? "1" : "0");
+  }
 
-    const stored = localStorage.getItem("tc:sidebar-collapsed") === "1";
-    sidebar.classList.toggle("collapsed", stored);
+  function initSidebarCollapse() {
+    const btn = $("#sidebarCollapseBtn");
+    if (!btn) return;
+
+    setSidebarCollapsed(localStorage.getItem("tc:sidebar-collapsed") === "1");
 
     btn.addEventListener("click", () => {
-      const next = !sidebar.classList.contains("collapsed");
-      sidebar.classList.toggle("collapsed", next);
-      localStorage.setItem("tc:sidebar-collapsed", next ? "1" : "0");
+      const collapsed = !$("#sidebar")?.classList.contains("collapsed");
+      setSidebarCollapsed(collapsed);
     });
   }
 
