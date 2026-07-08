@@ -10,6 +10,7 @@
   let dailyChart = null;
   let directionChart = null;
   let symbolBarChart = null;
+  let telegramReportChart = null;
   let homeSparkline = null;
   let resourceHistoryChart = null;
   let cpuSparkChart = null;
@@ -22,6 +23,7 @@
   let isAuthenticated = false;
   let sseReconnectTimer = null;
   let allSignals = [];
+  let allTelegramEntries = [];
   let activePage = "home";
   let lastEngineState = null;
   let lastProcesses = [];
@@ -39,7 +41,8 @@
     monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم" },
     control: { title: "کنترل ربات", sub: "مدیریت PM2 و عملیات" },
     signals: { title: "سیگنال‌ها", sub: "تاریخچه سیگنال‌های ارسالی" },
-    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد و خروجی Excel" },
+    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel" },
+    telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام" },
     settings: { title: "تنظیمات", sub: "پیکربندی ربات" },
     logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها" },
   };
@@ -55,9 +58,10 @@
     logs: 3000,
     report: 90000,
     bootstrap: 10000,
+    telegram: 30000,
   };
 
-  const PERSIST_KEYS = new Set(["status", "system", "signals", "report:7", "report:30"]);
+  const PERSIST_KEYS = new Set(["status", "system", "signals", "report:7", "report:30", "telegram:30"]);
 
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
@@ -65,6 +69,7 @@
     control: ["status"],
     signals: ["signals"],
     reports: [],
+    telegram: ["telegram"],
     settings: ["status"],
     logs: ["logs"],
   };
@@ -184,6 +189,10 @@
 
   function reportCacheKey(days = 30) {
     return `report:${days}`;
+  }
+
+  function telegramCacheKey(days = 30, status = "all") {
+    return `telegram:${days}:${status}`;
   }
 
   function logsCacheKey(process) {
@@ -497,12 +506,114 @@
     if ($("#rptTop")) $("#rptTop").textContent = data.top_symbol;
     if ($("#rptRatio")) $("#rptRatio").textContent = data.buy_sell_ratio;
     if ($("#rptRestarts")) $("#rptRestarts").textContent = data.total_restarts;
+    const tg = data.telegram || {};
+    if ($("#rptTgSent")) $("#rptTgSent").textContent = tg.signals_sent ?? "—";
+    if ($("#rptTgRate")) $("#rptTgRate").textContent = tg.success_rate != null ? `${tg.success_rate}%` : "—";
     if ($("#reportGenerated")) {
-      $("#reportGenerated").textContent = `بروزرسانی: ${data.generated_at} · ${data.total} سیگنال در ${days} روز`;
+      $("#reportGenerated").textContent = `بروزرسانی: ${data.generated_at} · ${data.total} سیگنال · ${tg.signals_sent ?? 0} تلگرام در ${days} روز`;
     }
     renderDailyChart(data.daily);
     renderDirectionChart(data.by_direction?.BUY || 0, data.by_direction?.SELL || 0);
     renderSymbolBarChart(data.by_symbol || {});
+    renderTelegramReportChart(tg.daily || []);
+  }
+
+  function applyTelegramData(payload) {
+    if (!payload) return;
+    const summary = payload.summary || payload;
+    const entries = payload.entries || [];
+    allTelegramEntries = entries;
+    renderTelegramPage(summary, entries);
+  }
+
+  function renderTelegramPage(summary, entries) {
+    const configured = summary.telegram_configured !== false;
+    const paused = summary.notifications_paused;
+    const label = !configured ? "تلگرام تنظیم نشده" : paused ? "نوتیفیکیشن متوقف" : "تلگرام فعال";
+    const cls = !configured ? "stopped" : paused ? "partial" : "running";
+    if ($("#tgStatusLabel")) $("#tgStatusLabel").textContent = label;
+    if ($("#tgStatusDot")) $("#tgStatusDot").className = `status-indicator ${cls}`;
+    if ($("#tgUpdated")) $("#tgUpdated").textContent = summary.generated_at ? `بروزرسانی ${summary.generated_at}` : "—";
+    if ($("#tgSub")) {
+      $("#tgSub").textContent = configured
+        ? "تاریخچه کامل سیگنال‌های ارسال‌شده و خطاهای تلگرام"
+        : "توکن تلگرام در .env تنظیم نشده";
+    }
+    if ($("#tgOkTotal")) $("#tgOkTotal").textContent = summary.signals_sent ?? 0;
+    if ($("#tgFailTotal")) $("#tgFailTotal").textContent = summary.failed ?? 0;
+    if ($("#tgRateTotal")) $("#tgRateTotal").textContent = `${summary.success_rate ?? 0}%`;
+    if ($("#tgTodayOk")) $("#tgTodayOk").textContent = summary.today_ok ?? 0;
+    if ($("#tgTodayFail")) $("#tgTodayFail").textContent = summary.today_failed ?? 0;
+    const topSym = summary.by_symbol && Object.keys(summary.by_symbol).length
+      ? Object.entries(summary.by_symbol).sort((a, b) => b[1] - a[1])[0][0]
+      : "—";
+    if ($("#tgTopSymbol")) $("#tgTopSymbol").textContent = topSym;
+    renderTelegramFeed(entries);
+  }
+
+  function renderTelegramFeed(entries) {
+    const feed = $("#telegramFeed");
+    if (!feed) return;
+    const q = ($("#telegramSearch")?.value || "").trim().toUpperCase();
+    const filtered = q
+      ? entries.filter((e) => (e.symbol || "").toUpperCase().includes(q) || (e.detail || "").toUpperCase().includes(q))
+      : entries;
+    feed.innerHTML = filtered.length
+      ? filtered.map((e, i) => {
+          const ok = e.ok;
+          const dir = (e.direction || "").toUpperCase();
+          return `
+        <article class="telegram-item ${ok ? "ok" : "failed"}" style="animation-delay:${i * 0.03}s">
+          <div class="tg-item-head">
+            <span class="tg-badge ${ok ? "ok" : "failed"}">${ok ? "✓ ارسال موفق" : "✗ خطا"}</span>
+            <span class="tg-time">${e.timestamp || "—"}</span>
+          </div>
+          <div class="tg-item-body">
+            <div class="tg-item-main">
+              <span class="tg-symbol">${e.symbol || "—"}</span>
+              ${dir ? `<span class="sig-badge ${dir === "BUY" ? "buy" : "sell"}">${dir}</span>` : ""}
+              ${e.score != null ? `<span class="tg-score">score ${e.score}</span>` : ""}
+            </div>
+            <p class="tg-detail">${esc(e.detail || (ok ? "ارسال موفق" : "ارسال ناموفق"))}</p>
+            ${e.entry ? `<span class="tg-meta">Entry: ${e.entry}</span>` : ""}
+            ${e.error ? `<span class="tg-error">${esc(e.error)}</span>` : ""}
+          </div>
+        </article>`;
+        }).join("")
+      : '<p class="telegram-empty">موردی یافت نشد</p>';
+  }
+
+  function renderTelegramReportChart(daily) {
+    const canvas = $("#telegramReportChart");
+    if (!canvas || !daily) return;
+    const labels = daily.map((d) => d.date.slice(5));
+    const ok = daily.map((d) => d.ok || 0);
+    const failed = daily.map((d) => d.failed || 0);
+    if (telegramReportChart) {
+      telegramReportChart.data.labels = labels;
+      telegramReportChart.data.datasets[0].data = ok;
+      telegramReportChart.data.datasets[1].data = failed;
+      telegramReportChart.update("none");
+      return;
+    }
+    telegramReportChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "موفق", data: ok, backgroundColor: "rgba(74,222,128,0.75)", borderRadius: 4 },
+          { label: "ناموفق", data: failed, backgroundColor: "rgba(248,113,113,0.75)", borderRadius: 4 },
+        ],
+      },
+      options: {
+        ...chartDefaults(),
+        scales: {
+          x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+        },
+        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT } } },
+      },
+    });
   }
 
   function applyBootstrap(payload) {
@@ -526,6 +637,10 @@
     if (payload.report_30) {
       DataCache.set("report:30", payload.report_30);
       applyReportData(payload.report_30, 30);
+    }
+    if (payload.telegram) {
+      DataCache.set("telegram:30", payload.telegram);
+      applyTelegramData({ summary: payload.telegram, entries: [] });
     }
   }
 
@@ -568,6 +683,12 @@
         const days = Number($("#reportDays")?.value || 30);
         const report = DataCache.get(reportCacheKey(days));
         if (report) applyReportData(report, days);
+        break;
+      }
+      case "telegram": {
+        const days = Number($("#telegramDays")?.value || 30);
+        const cached = DataCache.get(telegramCacheKey(days));
+        if (cached) applyTelegramData(cached);
         break;
       }
       case "settings": {
@@ -628,12 +749,26 @@
     return data;
   }
 
+  async function fetchTelegram({ force = false } = {}) {
+    const days = Number($("#telegramDays")?.value || 30);
+    const status = $("#telegramStatus")?.value || "all";
+    const key = telegramCacheKey(days);
+    const data = await DataCache.load(
+      key,
+      () => api(`/api/telegram/log?days=${days}&limit=200&status=${status}`),
+      CACHE_TTL.telegram,
+      { force }
+    );
+    applyTelegramData(data);
+    return data;
+  }
+
   const _emitRevalidateOrig = DataCache._emitRevalidate.bind(DataCache);
   DataCache._emitRevalidate = function (key, data) {
     if (key.startsWith("report:")) {
       applyReportData(data, Number(key.split(":")[1] || 30));
-    } else if (key.startsWith("logs:")) {
-      if (activePage === "logs") applyLogs(data);
+    } else if (key.startsWith("telegram:")) {
+      applyTelegramData(data);
     }
     _emitRevalidateOrig(key, data);
   };
@@ -669,6 +804,7 @@
       const days = Number($("#reportDays")?.value || 30);
       tasks.push(fetchReport(days, { force }));
     }
+    if (page === "telegram") tasks.push(fetchTelegram({ force }));
     if (needs.includes("logs")) tasks.push(fetchLogs({ force }));
 
     await Promise.allSettled(tasks);
@@ -1288,6 +1424,12 @@
     } catch {}
   }
 
+  async function refreshTelegram({ force = false } = {}) {
+    try {
+      await fetchTelegram({ force });
+    } catch {}
+  }
+
   async function refreshSystem({ force = false } = {}) {
     try {
       await fetchSystem({ force });
@@ -1373,7 +1515,7 @@
         body: JSON.stringify({ action }),
       });
       toast(data.message || "انجام شد");
-      invalidateCache("status", "system", "bootstrap", "report:7", "report:30");
+      invalidateCache("status", "system", "bootstrap", "report:7", "report:30", "telegram:30");
       fetchStatus({ force: true });
       fetchSystem({ force: true });
       if (action === "toggle_debug") refreshReports({ force: true });
@@ -1418,6 +1560,15 @@
     const days = $("#reportDays")?.value || 30;
     downloadExport(`/api/export/signals.csv?days=${days}`);
   });
+
+  $("#btnExportTelegram")?.addEventListener("click", () => {
+    const days = $("#telegramDays")?.value || 30;
+    downloadExport(`/api/export/telegram.csv?days=${days}`);
+  });
+
+  $("#telegramSearch")?.addEventListener("input", () => renderTelegramFeed(allTelegramEntries));
+  $("#telegramStatus")?.addEventListener("change", () => refreshTelegram({ force: true }));
+  $("#telegramDays")?.addEventListener("change", () => refreshTelegram({ force: true }));
 
   $("#signalSearch")?.addEventListener("input", () => renderSignals(allSignals));
 
@@ -1530,6 +1681,7 @@
   DataCache.onRevalidate("status", applyStatusData);
   DataCache.onRevalidate("system", updateSystem);
   DataCache.onRevalidate("signals", applySignalsList);
+  DataCache.onRevalidate("telegram:30", applyTelegramData);
 
   // ── Init ──
   checkAuth();
