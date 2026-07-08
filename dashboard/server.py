@@ -151,7 +151,7 @@ def _dashboard_password() -> str:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 1, "patch": 0, "label": "v2.1", "released": "", "history": []}
+    default = {"major": 2, "minor": 11, "patch": 0, "label": "v2.11", "released": "", "history": []}
     if not VERSION_FILE.exists():
         return default
     try:
