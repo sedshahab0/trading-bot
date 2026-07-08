@@ -786,13 +786,19 @@
 
   function statusFingerprint(data) {
     if (!data) return "";
+    const cfg = data.config || {};
     const procs = (data.processes || [])
       .map((p) => `${p.name}:${p.status}`)
       .join(",");
     return [
       data.overall,
       data.server_time,
-      data.config?.notifications_paused,
+      cfg.notifications_paused,
+      cfg.min_score,
+      cfg.poll_seconds,
+      cfg.symbols,
+      cfg.facebook_enable,
+      cfg.engine_debug,
       procs,
       data.signal_stats?.today,
       data.signal_stats?.total,
@@ -801,6 +807,45 @@
       (data.recent_signals || []).length,
       data.latest_signal?.timestamp,
     ].join("|");
+  }
+
+  function mergeStatusConfig(configPatch) {
+    const status = DataCache.get("status") || {};
+    const merged = {
+      ...status,
+      config: { ...(status.config || {}), ...configPatch },
+    };
+    DataCache.set("status", merged);
+    return merged;
+  }
+
+  function readConfigFromForm() {
+    return {
+      symbols: $("#cfgSymbols")?.value || formatSymbolsString(getEnabledSymbols()),
+      min_score: String($("#cfgMinScore")?.value || $("#cfgMinScoreRange")?.value || "5"),
+      poll_seconds: String($("#cfgPoll")?.value || $("#cfgPollRange")?.value || "30"),
+      facebook_enable: !!$("#cfgFacebook")?.checked,
+      engine_debug: !!$("#cfgDebug")?.checked,
+    };
+  }
+
+  function applyConfigToDashboard(configPatch, statusBase = null) {
+    const base = statusBase || DataCache.get("status") || {};
+    const merged = {
+      ...base,
+      config: { ...(base.config || {}), ...configPatch },
+    };
+    DataCache.set("status", merged);
+    applySettingsPage(merged);
+    applyControlPage(merged);
+    if ($("#cfgSymbols")) $("#cfgSymbols").value = merged.config.symbols || "";
+    if ($("#cfgMinScore")) $("#cfgMinScore").value = merged.config.min_score || "5";
+    if ($("#cfgPoll")) $("#cfgPoll").value = merged.config.poll_seconds || "30";
+    if ($("#cfgFacebook")) $("#cfgFacebook").checked = !!merged.config.facebook_enable;
+    if ($("#cfgDebug")) $("#cfgDebug").checked = !!merged.config.engine_debug;
+    if ($("#debugStatus")) {
+      $("#debugStatus").textContent = merged.config.engine_debug ? "روشن" : "خاموش";
+    }
   }
 
   function applyStatusData(data) {
@@ -1190,10 +1235,12 @@
         body: JSON.stringify({ SYMBOLS: value }),
       });
       if ($("#cfgSymbols")) $("#cfgSymbols").value = value;
+      lastStatusFingerprint = null;
+      invalidateCache("status", "bootstrap");
+      applyConfigToDashboard({ symbols: value });
+      await fetchStatus({ force: true });
       toast("نمادها ذخیره شد — برای اعمال کامل ربات را ری‌استارت کنید");
       logControlActivity(`نمادها بروز شد: ${enabled.join(", ")}`, "ok");
-      invalidateCache("status", "bootstrap");
-      await fetchStatus({ force: true });
       closeSymbolsModal();
     } catch (err) {
       toast(err.message, "error");
@@ -3428,23 +3475,39 @@
 
   // ── Config Save ──
   $("#btnSaveConfig")?.addEventListener("click", async () => {
+    const btn = $("#btnSaveConfig");
     try {
-      const symbolsVal = $("#cfgSymbols")?.value || formatSymbolsString(getEnabledSymbols());
-      await api("/api/config", {
+      if (btn) btn.classList.add("loading");
+      const formCfg = readConfigFromForm();
+      const result = await api("/api/config", {
         method: "PATCH",
         body: JSON.stringify({
-          SYMBOLS: symbolsVal,
-          MIN_SCORE: $("#cfgMinScore")?.value || $("#cfgMinScoreRange")?.value || "5",
-          POLL_SECONDS: $("#cfgPoll")?.value || $("#cfgPollRange")?.value || "30",
-          FACEBOOK_ENABLE: $("#cfgFacebook").checked ? "1" : "0",
-          ENGINE_DEBUG: $("#cfgDebug").checked ? "1" : "0",
+          SYMBOLS: formCfg.symbols,
+          MIN_SCORE: formCfg.min_score,
+          POLL_SECONDS: formCfg.poll_seconds,
+          FACEBOOK_ENABLE: formCfg.facebook_enable ? "1" : "0",
+          ENGINE_DEBUG: formCfg.engine_debug ? "1" : "0",
         }),
       });
-      toast("تنظیمات ذخیره شد");
+      const savedCfg = result.config
+        ? {
+            symbols: result.config.SYMBOLS ?? formCfg.symbols,
+            min_score: result.config.MIN_SCORE ?? formCfg.min_score,
+            poll_seconds: result.config.POLL_SECONDS ?? formCfg.poll_seconds,
+            facebook_enable: (result.config.FACEBOOK_ENABLE ?? (formCfg.facebook_enable ? "1" : "0")) === "1",
+            engine_debug: (result.config.ENGINE_DEBUG ?? (formCfg.engine_debug ? "1" : "0")) === "1",
+          }
+        : formCfg;
+      lastStatusFingerprint = null;
       invalidateCache("status", "bootstrap");
-      fetchStatus({ force: true });
+      applyConfigToDashboard(savedCfg);
+      await fetchStatus({ force: true });
+      toast("تنظیمات ذخیره شد — برای اعمال در موتور signal-engine را ری‌استارت کنید");
+      logControlActivity(`تنظیمات ذخیره: min_score=${savedCfg.min_score}, poll=${savedCfg.poll_seconds}s`, "ok");
     } catch (err) {
       toast(err.message, "error");
+    } finally {
+      if (btn) btn.classList.remove("loading");
     }
   });
 

@@ -1747,7 +1747,12 @@ def api_config_patch():
         return jsonify({"error": "No valid fields"}), 400
     _write_env(updates)
     _audit("config_update", ", ".join(f"{k}={updates[k]}" for k in updates.keys()))
-    return jsonify({"ok": True, "updated": list(updates.keys())})
+    env = _parse_env()
+    return jsonify({
+        "ok": True,
+        "updated": list(updates.keys()),
+        "config": {k: env.get(k, "") for k in updates.keys()},
+    })
 
 
 @app.route("/api/control", methods=["POST"])
