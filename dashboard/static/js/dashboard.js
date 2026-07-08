@@ -2694,9 +2694,9 @@
 
   function updateSystem(sys) {
     if (!sys?.cpu || !sys?.ram || !sys?.disk) return;
-    animateValue($("#cpuValue"), `${sys.cpu.total ?? 0}%`);
-    animateValue($("#ramValue"), `${sys.ram.used_pct ?? 0}%`);
-    animateValue($("#diskValue"), `${sys.disk.used_pct ?? 0}%`);
+    setStableCounter($("#cpuValue"), `${sys.cpu.total ?? 0}%`);
+    setStableCounter($("#ramValue"), `${sys.ram.used_pct ?? 0}%`);
+    setStableCounter($("#diskValue"), `${sys.disk.used_pct ?? 0}%`);
 
     setGaugeArc($("#cpuGaugeArc"), sys.cpu.total ?? 0);
     setGaugeArc($("#ramGaugeArc"), sys.ram.used_pct ?? 0);
@@ -2709,7 +2709,7 @@
 
     const down = Number(sys.network?.down_kbps ?? 0);
     const up = Number(sys.network?.up_kbps ?? 0);
-    setText("#netValue", `${Math.max(down, up).toFixed(1)} KB/s`);
+    setStableCounter($("#netValue"), `${Math.max(down, up).toFixed(1)} KB/s`);
     setText("#netDown", `${down} KB/s`);
     setText("#netUp", `${up} KB/s`);
     setBarWidth("#netDownBar", Math.min(down / 5, 100));
