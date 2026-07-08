@@ -1,10 +1,17 @@
 {
   "major": 2,
-  "minor": 2,
+  "minor": 3,
   "patch": 0,
-  "label": "v2.2",
+  "label": "v2.3",
   "released": "2026-07-08",
   "history": [
+    {
+      "version": "2.3.0",
+      "label": "v2.3",
+      "date": "2026-07-08",
+      "title": "Professional signals page with delivery tracking",
+      "level": "minor"
+    },
     {
       "version": "2.2.0",
       "label": "v2.2",

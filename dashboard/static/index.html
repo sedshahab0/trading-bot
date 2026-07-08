@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=7" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=7" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=9" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=9" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.2</span>
+            <span class="version-badge" id="loginVersion">v2.3</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.2</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.3</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.2.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.3.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -441,11 +441,78 @@
 
         <!-- PAGE: Signals -->
         <div class="page" id="page-signals">
-          <div class="page-toolbar">
+
+          <section class="signals-hero">
+            <div class="hero-bg"></div>
+            <div class="signals-hero-body">
+              <div>
+                <div class="hero-status-row">
+                  <span class="status-pill" id="sigHeroPill"><span class="status-indicator running" id="sigHeroDot"></span><span id="sigHeroLabel">سیگنال‌ها</span></span>
+                  <span class="hero-time" id="sigHeroUpdated">—</span>
+                </div>
+                <h2 class="hero-title">تاریخچه سیگنال‌ها</h2>
+                <p class="hero-sub">ردیابی ارسال، خطا و کیفیت هر سیگنال</p>
+              </div>
+              <div class="signals-hero-stats">
+                <div class="sig-stat ok"><span class="sig-stat-num" id="sigSentTotal">0</span><span class="sig-stat-lbl">ارسال موفق</span></div>
+                <div class="sig-stat fail"><span class="sig-stat-num" id="sigFailedTotal">0</span><span class="sig-stat-lbl">خطا / اشتباه</span></div>
+                <div class="sig-stat warn"><span class="sig-stat-num" id="sigUnsentTotal">0</span><span class="sig-stat-lbl">بدون تأیید</span></div>
+                <div class="sig-stat"><span class="sig-stat-num" id="sigRateTotal">0%</span><span class="sig-stat-lbl">نرخ ارسال</span></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="page-toolbar signals-toolbar">
             <input type="search" id="signalSearch" class="search-input" placeholder="جستجو نماد..." />
-            <div class="toolbar-stats"><span>امروز: <strong id="sigToday">0</strong></span><span>کل: <strong id="sigTotal">0</strong></span></div>
+            <select id="signalDays" class="select-input">
+              <option value="7">۷ روز</option>
+              <option value="30" selected>۳۰ روز</option>
+              <option value="90">۹۰ روز</option>
+              <option value="365">۱ سال</option>
+            </select>
+            <select id="signalDelivery" class="select-input">
+              <option value="all">همه وضعیت‌ها</option>
+              <option value="sent">✓ ارسال موفق</option>
+              <option value="failed">✗ خطای ارسال</option>
+              <option value="unsent">؟ بدون تأیید</option>
+              <option value="mistaken">⚠ مشکوک / تکراری</option>
+            </select>
+            <select id="signalDirection" class="select-input">
+              <option value="all">BUY + SELL</option>
+              <option value="BUY">BUY</option>
+              <option value="SELL">SELL</option>
+            </select>
+            <div class="toolbar-stats signals-toolbar-stats">
+              <span>امروز: <strong id="sigToday">0</strong></span>
+              <span>کل: <strong id="sigTotal">0</strong></span>
+            </div>
           </div>
-          <div class="panel panel-flush"><div class="signal-feed" id="signalFeed"></div></div>
+
+          <section class="signals-kpi">
+            <div class="sig-kpi buy"><span class="sig-kpi-num" id="sigBuyCount">0</span><span class="sig-kpi-lbl">BUY</span></div>
+            <div class="sig-kpi sell"><span class="sig-kpi-num" id="sigSellCount">0</span><span class="sig-kpi-lbl">SELL</span></div>
+            <div class="sig-kpi"><span class="sig-kpi-num" id="sigDupCount">0</span><span class="sig-kpi-lbl">تکراری</span></div>
+            <div class="sig-kpi"><span class="sig-kpi-num" id="sigTopSymbol">—</span><span class="sig-kpi-lbl">پرسیگنال‌ترین</span></div>
+          </section>
+
+          <section class="grid-2 signals-charts">
+            <article class="panel">
+              <h3 class="panel-heading">روند روزانه + ارسال</h3>
+              <div class="chart-box tall"><canvas id="signalDailyChart"></canvas></div>
+            </article>
+            <article class="panel">
+              <h3 class="panel-heading">BUY vs SELL</h3>
+              <div class="chart-box tall"><canvas id="signalDirChart"></canvas></div>
+            </article>
+          </section>
+
+          <article class="panel panel-flush">
+            <div class="panel-top signals-feed-header">
+              <h3 class="panel-heading">لیست سیگنال‌ها</h3>
+              <span class="hint" id="sigFeedCount">—</span>
+            </div>
+            <div class="signals-feed" id="signalFeed"></div>
+          </article>
         </div>
 
         <!-- PAGE: Reports -->
@@ -560,6 +627,6 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
-  <script src="/static/js/dashboard.js?v=4"></script>
+  <script src="/static/js/dashboard.js?v=5"></script>
 </body>
 </html>
