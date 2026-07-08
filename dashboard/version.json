@@ -1,0 +1,23 @@
+{
+  "major": 2,
+  "minor": 1,
+  "patch": 0,
+  "label": "v2.1",
+  "released": "2026-07-08",
+  "history": [
+    {
+      "version": "2.1.0",
+      "label": "v2.1",
+      "date": "2026-07-08",
+      "title": "Telegram log, smart cache, auto-deploy",
+      "level": "minor"
+    },
+    {
+      "version": "2.0.0",
+      "label": "v2.0",
+      "date": "2026-07-07",
+      "title": "Multi-page dashboard redesign",
+      "level": "major"
+    }
+  ]
+}

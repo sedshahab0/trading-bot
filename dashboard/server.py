@@ -39,6 +39,7 @@ TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
+VERSION_FILE = Path(__file__).parent / "version.json"
 
 PROCESSES = ("signal-engine", "signal-server")
 SECRET_KEYS = (
@@ -91,6 +92,29 @@ def _dashboard_username() -> str:
 
 def _dashboard_password() -> str:
     return os.environ.get("DASHBOARD_PASSWORD", "tradingbot2026")
+
+
+def _dashboard_version() -> dict:
+    default = {"major": 2, "minor": 1, "patch": 0, "label": "v2.1", "released": "", "history": []}
+    if not VERSION_FILE.exists():
+        return default
+    try:
+        data = json.loads(VERSION_FILE.read_text())
+        major = int(data.get("major", default["major"]))
+        minor = int(data.get("minor", default["minor"]))
+        patch = int(data.get("patch", default["patch"]))
+        label = data.get("label") or f"v{major}.{minor}"
+        return {
+            "major": major,
+            "minor": minor,
+            "patch": patch,
+            "label": label,
+            "full": f"{major}.{minor}.{patch}",
+            "released": data.get("released", ""),
+            "history": data.get("history", []),
+        }
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return default
 
 
 def auth_required(f):
@@ -803,6 +827,11 @@ def api_status():
     return jsonify(_build_status_payload())
 
 
+@app.route("/api/version")
+def api_version():
+    return jsonify(_dashboard_version())
+
+
 @app.route("/api/bootstrap")
 @auth_required
 def api_bootstrap():
@@ -814,6 +843,7 @@ def api_bootstrap():
 
     return jsonify(
         {
+            "version": _dashboard_version(),
             "status": _build_status_payload(stats_signals=stats_signals),
             "system": _system_stats(),
             "signals": all_signals[:50],
@@ -834,7 +864,7 @@ def _cache_headers(response):
     elif path == "/" or path.endswith(".html"):
         response.cache_control.no_cache = True
         response.cache_control.must_revalidate = True
-    elif path.startswith("/api/") and path not in ("/api/stream", "/api/auth/login", "/api/auth/logout"):
+    elif path.startswith("/api/") and path not in ("/api/stream", "/api/auth/login", "/api/auth/logout", "/api/version"):
         response.cache_control.private = True
         response.cache_control.max_age = 0
         response.cache_control.must_revalidate = True
