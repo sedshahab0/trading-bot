@@ -8,29 +8,28 @@
 
   let symbolChart = null;
   let dailyChart = null;
+  let directionChart = null;
+  let symbolBarChart = null;
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
   let isAuthenticated = false;
   let sseReconnectTimer = null;
   let allSignals = [];
-  let activeTab = "overview";
-  let isMobile = () => window.innerWidth <= 768;
+  let activePage = "home";
 
-  // ── Particles ──
-  function initParticles() {
-    const container = $("#particles");
-    if (!container) return;
-    for (let i = 0; i < 30; i++) {
-      const p = document.createElement("div");
-      p.className = "particle";
-      p.style.left = `${Math.random() * 100}%`;
-      p.style.top = `${Math.random() * 100}%`;
-      p.style.setProperty("--dur", `${6 + Math.random() * 10}s`);
-      p.style.setProperty("--delay", `${Math.random() * 8}s`);
-      container.appendChild(p);
-    }
-  }
+  const PAGE_META = {
+    home: { title: "داشبورد", sub: "نمای کلی ربات" },
+    monitor: { title: "مانیتورینگ", sub: "منابع سرور و موتور" },
+    control: { title: "کنترل ربات", sub: "مدیریت PM2 و عملیات" },
+    signals: { title: "سیگنال‌ها", sub: "تاریخچه سیگنال‌های ارسالی" },
+    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد و خروجی Excel" },
+    settings: { title: "تنظیمات", sub: "پیکربندی ربات" },
+    logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها" },
+  };
+
+  const CHART_FONT = { family: "Vazirmatn", size: 11 };
+  const CHART_COLORS = ["#63ffd0", "#5b9cf6", "#a78bfa", "#fbbf24", "#f87171"];
 
   // ── Toast ──
   function toast(msg, type = "success") {
@@ -176,10 +175,46 @@
   function updateStatusBanner(overall) {
     const info = STATUS_FA[overall] || STATUS_FA.unknown;
     const ind = $("#statusIndicator");
-    ind.className = `status-indicator ${info.cls}`;
-    $("#statusLabel").textContent = info.label;
-    $("#statusSub").textContent = info.sub;
+    if (ind) ind.className = `status-indicator ${info.cls}`;
+    if ($("#statusLabel")) $("#statusLabel").textContent = info.label;
+    if ($("#statusSub")) $("#statusSub").textContent = info.sub;
+    const dot = document.querySelector(".sidebar-status-dot");
+    if (dot) dot.className = `sidebar-status-dot ${info.cls}`;
+    if ($("#sidebarStatusText")) $("#sidebarStatusText").textContent = info.label;
+    $$(".nav-item").forEach((n) => n.classList.remove("status-running", "status-stopped"));
   }
+
+  // ── Page Navigation ──
+  function switchPage(page) {
+    activePage = page;
+    const meta = PAGE_META[page] || PAGE_META.home;
+    if ($("#pageTitle")) $("#pageTitle").textContent = meta.title;
+    if ($("#pageSub")) $("#pageSub").textContent = meta.sub;
+    $$(".nav-item[data-page]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.page === page);
+    });
+    $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${page}`));
+    closeSidebar();
+    if (page === "reports") setTimeout(refreshReports, 100);
+    if (page === "logs") refreshLogs();
+  }
+
+  function openSidebar() {
+    $("#sidebar")?.classList.add("open");
+    $("#sidebarOverlay")?.classList.add("open");
+  }
+
+  function closeSidebar() {
+    $("#sidebar")?.classList.remove("open");
+    $("#sidebarOverlay")?.classList.remove("open");
+  }
+
+  $$(".nav-item[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => switchPage(btn.dataset.page));
+  });
+
+  $("#menuToggle")?.addEventListener("click", openSidebar);
+  $("#sidebarOverlay")?.addEventListener("click", closeSidebar);
 
   function renderProcesses(procs) {
     const container = $("#processCards");
@@ -240,8 +275,8 @@
     return d ? `${d}d ${h}h` : `${h}h`;
   }
 
-  function renderEngineState(state, latest) {
-    const info = $("#engineInfo");
+  function renderEngineState(state, latest, targetId = "engineInfo") {
+    const info = $(`#${targetId}`);
     if (!info) return;
 
     const bars = state?.last_bars || {};
@@ -259,6 +294,8 @@
           )
           .join("")
       : '<div class="engine-row"><span class="val">اطلاعاتی موجود نیست</span></div>';
+
+    if (targetId !== "engineInfo") return;
 
     const ls = $("#latestSignal");
     if (latest && ls) {
@@ -279,10 +316,17 @@
 
   function renderStats(stats) {
     if (!stats) return;
-    animateValue($("#statToday"), stats.today);
-    animateValue($("#statTotal"), stats.total);
-    animateValue($("#statBuy"), stats.by_direction?.BUY || 0);
-    animateValue($("#statSell"), stats.by_direction?.SELL || 0);
+    const set = (id, v) => { const el = $(id); if (el) animateValue(el, v); };
+    set("#statToday", stats.today);
+    set("#statTotal", stats.total);
+    set("#statBuy", stats.by_direction?.BUY || 0);
+    set("#statSell", stats.by_direction?.SELL || 0);
+    set("#kpiToday", stats.today);
+    set("#kpiTotal", stats.total);
+    set("#kpiBuy", stats.by_direction?.BUY || 0);
+    set("#kpiSell", stats.by_direction?.SELL || 0);
+    set("#sigToday", stats.today);
+    set("#sigTotal", stats.total);
     updateChart(stats.by_symbol || {});
   }
 
@@ -320,10 +364,83 @@
         plugins: {
           legend: {
             position: "bottom",
-            labels: { color: "#7a8499", font: { size: 11, family: "JetBrains Mono" }, padding: 12 },
+            labels: { color: "#8b95a8", font: CHART_FONT, padding: 14, usePointStyle: true },
           },
         },
         animation: { animateRotate: true, duration: 800 },
+      },
+    });
+  }
+
+  function chartDefaults() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#8b95a8", font: CHART_FONT } } },
+    };
+  }
+
+  function renderDirectionChart(buy, sell) {
+    const canvas = $("#directionChart");
+    if (!canvas) return;
+    const data = [buy, sell];
+    if (directionChart) {
+      directionChart.data.datasets[0].data = data;
+      directionChart.update("none");
+      return;
+    }
+    directionChart = new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["BUY", "SELL"],
+        datasets: [{
+          data,
+          backgroundColor: ["rgba(74,222,128,0.85)", "rgba(248,113,113,0.85)"],
+          borderWidth: 0,
+          hoverOffset: 8,
+        }],
+      },
+      options: {
+        ...chartDefaults(),
+        cutout: "62%",
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, padding: 16 } },
+        },
+      },
+    });
+  }
+
+  function renderSymbolBarChart(bySymbol) {
+    const canvas = $("#symbolBarChart");
+    if (!canvas) return;
+    const labels = Object.keys(bySymbol);
+    const values = Object.values(bySymbol);
+    if (symbolBarChart) {
+      symbolBarChart.data.labels = labels;
+      symbolBarChart.data.datasets[0].data = values;
+      symbolBarChart.update("none");
+      return;
+    }
+    symbolBarChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Signals",
+          data: values,
+          backgroundColor: CHART_COLORS.slice(0, labels.length).map((c) => c + "cc"),
+          borderRadius: 6,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        ...chartDefaults(),
+        indexAxis: "y",
+        scales: {
+          x: { ticks: { color: "#5c6578", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
+          y: { ticks: { color: "#8b95a8", font: { family: "JetBrains Mono", size: 11 } }, grid: { display: false } },
+        },
+        plugins: { legend: { display: false } },
       },
     });
   }
@@ -384,6 +501,7 @@
       updateStatusBanner(data.overall);
       renderProcesses(data.processes);
       renderEngineState(data.engine_state, data.latest_signal);
+      renderEngineState(data.engine_state, null, "engineInfoHome");
       renderStats(data.signal_stats);
       $("#liveTime").textContent = data.server_time?.split(" ")[1] || "--:--:--";
 
@@ -407,32 +525,85 @@
     } catch {}
   }
 
-  // ── Mobile Tabs ──
-  function switchTab(tab) {
-    activeTab = tab;
-    $$(".mobile-nav-btn").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === tab);
+  // ── Reports ──
+  function renderDailyChart(daily) {
+    const canvas = $("#dailyChart");
+    if (!canvas || !daily) return;
+    const labels = daily.map((d) => d.date.slice(5));
+    const buys = daily.map((d) => d.buy);
+    const sells = daily.map((d) => d.sell);
+    const totals = daily.map((d) => d.total);
+
+    if (dailyChart) {
+      dailyChart.data.labels = labels;
+      dailyChart.data.datasets[0].data = totals;
+      dailyChart.data.datasets[1].data = buys;
+      dailyChart.data.datasets[2].data = sells;
+      dailyChart.update("none");
+      return;
+    }
+
+    dailyChart = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "کل",
+            data: totals,
+            borderColor: "#63ffd0",
+            backgroundColor: "rgba(99,255,208,0.08)",
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: "BUY",
+            data: buys,
+            borderColor: "#4ade80",
+            backgroundColor: "transparent",
+            tension: 0.4,
+            pointRadius: 3,
+          },
+          {
+            label: "SELL",
+            data: sells,
+            borderColor: "#f87171",
+            backgroundColor: "transparent",
+            tension: 0.4,
+            pointRadius: 3,
+          },
+        ],
+      },
+      options: {
+        ...chartDefaults(),
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: { ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: "#5c6578", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+        },
+        animation: { duration: 700 },
+      },
     });
-    if (!isMobile()) return;
-    $$(".tab-section").forEach((el) => {
-      el.classList.toggle("active-tab", el.dataset.tab === tab);
-    });
-    if (tab === "reports") refreshReports();
   }
 
-  $$(".mobile-nav-btn").forEach((btn) => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-  });
-
-  window.addEventListener("resize", () => {
-    if (!isMobile()) {
-      $$(".tab-section").forEach((el) => el.classList.remove("active-tab", "hidden-tab"));
-    } else {
-      switchTab(activeTab);
-    }
-  });
-
-  // ── Management ──
+  async function refreshReports() {
+    const days = $("#reportDays")?.value || 30;
+    try {
+      const data = await api(`/api/reports/summary?days=${days}`);
+      if ($("#rptAvg")) $("#rptAvg").textContent = data.avg_per_day;
+      if ($("#rptTop")) $("#rptTop").textContent = data.top_symbol;
+      if ($("#rptRatio")) $("#rptRatio").textContent = data.buy_sell_ratio;
+      if ($("#rptRestarts")) $("#rptRestarts").textContent = data.total_restarts;
+      if ($("#reportGenerated")) {
+        $("#reportGenerated").textContent = `بروزرسانی: ${data.generated_at} · ${data.total} سیگنال در ${days} روز`;
+      }
+      renderDailyChart(data.daily);
+      renderDirectionChart(data.by_direction?.BUY || 0, data.by_direction?.SELL || 0);
+      renderSymbolBarChart(data.by_symbol || {});
+    } catch {}
+  }
   async function mgmt(action) {
     try {
       const data = await api("/api/management", {
@@ -455,62 +626,6 @@
     if (confirm("لاگ‌های PM2 پاک شوند؟")) mgmt("flush_logs");
   });
   $("#btnToggleDebug")?.addEventListener("click", () => mgmt("toggle_debug"));
-
-  // ── Reports ──
-  function renderDailyChart(daily) {
-    const canvas = $("#dailyChart");
-    if (!canvas || !daily) return;
-    const labels = daily.map((d) => d.date.slice(5));
-    const totals = daily.map((d) => d.total);
-    const buys = daily.map((d) => d.buy);
-    const sells = daily.map((d) => d.sell);
-
-    if (dailyChart) {
-      dailyChart.data.labels = labels;
-      dailyChart.data.datasets[0].data = buys;
-      dailyChart.data.datasets[1].data = sells;
-      dailyChart.update("none");
-      return;
-    }
-
-    dailyChart = new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "BUY", data: buys, backgroundColor: "rgba(74,222,128,0.7)", borderRadius: 4 },
-          { label: "SELL", data: sells, backgroundColor: "rgba(248,113,113,0.7)", borderRadius: 4 },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: "#8b95a8", font: { family: "Vazirmatn", size: 11 } } },
-        },
-        scales: {
-          x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
-          y: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
-        },
-        animation: { duration: 600 },
-      },
-    });
-  }
-
-  async function refreshReports() {
-    const days = $("#reportDays")?.value || 30;
-    try {
-      const data = await api(`/api/reports/summary?days=${days}`);
-      if ($("#rptAvg")) $("#rptAvg").textContent = data.avg_per_day;
-      if ($("#rptTop")) $("#rptTop").textContent = data.top_symbol;
-      if ($("#rptRatio")) $("#rptRatio").textContent = data.buy_sell_ratio;
-      if ($("#rptRestarts")) $("#rptRestarts").textContent = data.total_restarts;
-      if ($("#reportGenerated")) {
-        $("#reportGenerated").textContent = `آخرین بروزرسانی: ${data.generated_at} · ${data.total} سیگنال`;
-      }
-      renderDailyChart(data.daily);
-    } catch {}
-  }
 
   $("#reportDays")?.addEventListener("change", refreshReports);
 
@@ -607,13 +722,12 @@
 
   function startStreams() {
     stopStreams();
-    switchTab(activeTab);
+    switchPage(activePage);
     refreshStatus();
     refreshSignals();
     refreshSystem();
     refreshLogs();
     refreshReports();
-
     statusInterval = setInterval(refreshStatus, 10000);
     logInterval = setInterval(refreshLogs, 5000);
     connectSSE();
@@ -628,6 +742,5 @@
   }
 
   // ── Init ──
-  initParticles();
   checkAuth();
 })();
