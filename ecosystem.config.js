@@ -36,6 +36,7 @@ module.exports = {
         ENV_FILE: "/opt/trading-bot/.env",
         DASHBOARD_USERNAME: "admin",
         DASHBOARD_PASSWORD: "tradingbot2026",
+        DEPLOY_BRANCH: "main",
         DASHBOARD_PORT: "8080",
         BEHIND_PROXY: "1",
       },

@@ -687,7 +687,8 @@
       }
       case "telegram": {
         const days = Number($("#telegramDays")?.value || 30);
-        const cached = DataCache.get(telegramCacheKey(days));
+        const status = $("#telegramStatus")?.value || "all";
+        const cached = DataCache.get(telegramCacheKey(days, status));
         if (cached) applyTelegramData(cached);
         break;
       }
@@ -752,7 +753,7 @@
   async function fetchTelegram({ force = false } = {}) {
     const days = Number($("#telegramDays")?.value || 30);
     const status = $("#telegramStatus")?.value || "all";
-    const key = telegramCacheKey(days);
+    const key = telegramCacheKey(days, status);
     const data = await DataCache.load(
       key,
       () => api(`/api/telegram/log?days=${days}&limit=200&status=${status}`),

@@ -36,8 +36,8 @@ STATE_FILE = BOT_ROOT / "engine_state.json"
 SIGNAL_LOG = BOT_ROOT / "Facebook" / "signal_log.txt"
 SIGNAL_QUEUE = BOT_ROOT / "Facebook" / "signal_queue.json"
 TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
-ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
+ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
 
 PROCESSES = ("signal-engine", "signal-server")
@@ -1091,26 +1091,73 @@ def api_management():
         return jsonify({"ok": True, "debug": not current, "message": f"Debug mode {'enabled' if not current else 'disabled'}"})
 
     if action == "pull_and_restart":
-        branch = os.environ.get("DEPLOY_BRANCH", "cursor/trading-bot-dashboard-ba88")
-        git_dir = BOT_ROOT
-        if not (git_dir / ".git").exists():
-            return jsonify({"error": "Not a git repository"}), 400
-        steps = [
-            ["git", "-C", str(git_dir), "fetch", "origin", branch],
-            ["git", "-C", str(git_dir), "checkout", branch],
-            ["git", "-C", str(git_dir), "reset", "--hard", f"origin/{branch}"],
-        ]
-        outputs = []
-        for cmd in steps:
-            code, out, err = _run(cmd, timeout=60)
-            outputs.append({"cmd": " ".join(cmd), "ok": code == 0, "output": out or err})
-            if code != 0:
-                return jsonify({"ok": False, "message": "Git pull failed", "steps": outputs}), 500
-        _run(["pm2", "restart", "dashboard"])
-        _run(["pm2", "save"])
-        return jsonify({"ok": True, "message": f"Pulled {branch} and restarted dashboard", "steps": outputs})
+        branch = data.get("branch") or os.environ.get("DEPLOY_BRANCH", "main")
+        return jsonify(_git_deploy(branch))
+
+    if action == "install_ssh_key":
+        pubkey = data.get("public_key", "").strip()
+        if not pubkey or not pubkey.startswith(("ssh-ed25519 ", "ssh-rsa ")):
+            return jsonify({"error": "Invalid public_key"}), 400
+        auth_file = Path("/root/.ssh/authorized_keys")
+        auth_file.parent.mkdir(mode=0o700, exist_ok=True)
+        existing = auth_file.read_text() if auth_file.exists() else ""
+        if pubkey not in existing:
+            auth_file.write_text(existing.rstrip() + "\n" + pubkey + "\n")
+            auth_file.chmod(0o600)
+        return jsonify({"ok": True, "message": "Deploy SSH key installed"})
 
     return jsonify({"error": f"Unknown action: {action}"}), 400
+
+
+def _git_deploy(branch: str) -> dict:
+    git_dir = BOT_ROOT
+    if not (git_dir / ".git").exists():
+        return {"ok": False, "error": "Not a git repository"}
+    token = os.environ.get("GH_PAT") or os.environ.get("GITHUB_TOKEN", "")
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    git_prefix = ["git"]
+    if token:
+        git_prefix = [
+            "git",
+            "-c",
+            "credential.helper=!f() { echo username=sedshahab0; echo password=${GITHUB_TOKEN}; }; f",
+        ]
+        env["GITHUB_TOKEN"] = token
+    steps = [
+        git_prefix + ["-C", str(git_dir), "fetch", "origin", branch],
+        git_prefix + ["-C", str(git_dir), "checkout", branch],
+        git_prefix + ["-C", str(git_dir), "reset", "--hard", f"origin/{branch}"],
+    ]
+    outputs = []
+    for cmd in steps:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=env)
+            code, out, err = r.returncode, r.stdout.strip(), r.stderr.strip()
+        except subprocess.TimeoutExpired:
+            code, out, err = 1, "", "timeout"
+        except FileNotFoundError:
+            code, out, err = 1, "", "command not found"
+        outputs.append({"cmd": " ".join(cmd), "ok": code == 0, "output": out or err})
+        if code != 0:
+            return {"ok": False, "message": "Git pull failed", "steps": outputs}
+    _run(["pm2", "restart", "dashboard"])
+    _run(["pm2", "save"])
+    return {"ok": True, "message": f"Pulled {branch} and restarted dashboard", "steps": outputs}
+
+
+@app.route("/api/deploy/hook", methods=["POST"])
+def api_deploy_hook():
+    token = request.headers.get("X-Deploy-Token") or request.args.get("token", "")
+    expected = os.environ.get("DEPLOY_HOOK_TOKEN", "")
+    if not expected or not secrets.compare_digest(token, expected):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    branch = data.get("branch") or os.environ.get("DEPLOY_BRANCH", "main")
+    result = _git_deploy(branch)
+    if not result.get("ok"):
+        return jsonify(result), 500
+    return jsonify(result)
 
 
 @app.route("/api/stream")
