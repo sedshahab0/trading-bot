@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=3" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=3" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=4" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=4" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -89,6 +89,10 @@
           <button class="nav-item" data-page="reports">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
             <span>گزارش‌ها</span>
+          </button>
+          <button class="nav-item" data-page="telegram">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            <span>تلگرام</span>
           </button>
         </div>
         <div class="nav-group">
@@ -381,13 +385,65 @@
             <div class="report-stat"><span class="report-num" id="rptTop">—</span><span class="report-lbl">پرسیگنال‌ترین</span></div>
             <div class="report-stat"><span class="report-num" id="rptRatio">—</span><span class="report-lbl">BUY/SELL</span></div>
             <div class="report-stat"><span class="report-num" id="rptRestarts">—</span><span class="report-lbl">Restarts</span></div>
+            <div class="report-stat tg"><span class="report-num" id="rptTgSent">—</span><span class="report-lbl">تلگرام موفق</span></div>
+            <div class="report-stat tg fail"><span class="report-num" id="rptTgRate">—</span><span class="report-lbl">نرخ موفقیت</span></div>
           </div>
           <div class="grid-2">
-            <div class="panel"><h3 class="panel-heading">روند روزانه</h3><div class="chart-box tall"><canvas id="dailyChart"></canvas></div></div>
+            <div class="panel"><h3 class="panel-heading">روند روزانه سیگنال‌ها</h3><div class="chart-box tall"><canvas id="dailyChart"></canvas></div></div>
             <div class="panel"><h3 class="panel-heading">BUY vs SELL</h3><div class="chart-box tall"><canvas id="directionChart"></canvas></div></div>
           </div>
-          <div class="panel"><h3 class="panel-heading">عملکرد نمادها</h3><div class="chart-box wide"><canvas id="symbolBarChart"></canvas></div></div>
+          <div class="grid-2">
+            <div class="panel"><h3 class="panel-heading">عملکرد نمادها</h3><div class="chart-box wide"><canvas id="symbolBarChart"></canvas></div></div>
+            <div class="panel"><h3 class="panel-heading">ارسال‌های تلگرام (روزانه)</h3><div class="chart-box wide"><canvas id="telegramReportChart"></canvas></div></div>
+          </div>
           <p class="hint" id="reportGenerated">—</p>
+        </div>
+
+        <!-- PAGE: Telegram -->
+        <div class="page" id="page-telegram">
+          <section class="telegram-hero">
+            <div class="hero-bg"></div>
+            <div class="telegram-hero-body">
+              <div>
+                <div class="hero-status-row">
+                  <span class="status-pill" id="tgStatusPill"><span class="status-indicator running" id="tgStatusDot"></span><span id="tgStatusLabel">—</span></span>
+                  <span class="hero-time" id="tgUpdated">—</span>
+                </div>
+                <h2 class="hero-title">لاگ ارسال تلگرام</h2>
+                <p class="hero-sub" id="tgSub">تاریخچه کامل سیگنال‌های ارسال‌شده و خطاهای تلگرام</p>
+              </div>
+              <div class="telegram-hero-stats">
+                <div class="tg-stat ok"><span class="tg-stat-num" id="tgOkTotal">0</span><span class="tg-stat-lbl">موفق</span></div>
+                <div class="tg-stat fail"><span class="tg-stat-num" id="tgFailTotal">0</span><span class="tg-stat-lbl">ناموفق</span></div>
+                <div class="tg-stat"><span class="tg-stat-num" id="tgRateTotal">0%</span><span class="tg-stat-lbl">نرخ موفقیت</span></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="page-toolbar">
+            <input type="search" id="telegramSearch" class="search-input" placeholder="جستجو نماد..." />
+            <select id="telegramStatus" class="select-input">
+              <option value="all">همه</option>
+              <option value="ok">موفق</option>
+              <option value="failed">ناموفق</option>
+            </select>
+            <select id="telegramDays" class="select-input">
+              <option value="7">۷ روز</option>
+              <option value="30" selected>۳۰ روز</option>
+              <option value="90">۹۰ روز</option>
+            </select>
+            <button class="btn btn-export csv" id="btnExportTelegram">CSV</button>
+          </div>
+
+          <div class="telegram-kpi">
+            <div class="report-stat"><span class="report-num" id="tgTodayOk">0</span><span class="report-lbl">موفق امروز</span></div>
+            <div class="report-stat"><span class="report-num" id="tgTodayFail">0</span><span class="report-lbl">خطا امروز</span></div>
+            <div class="report-stat"><span class="report-num" id="tgTopSymbol">—</span><span class="report-lbl">پرنمادترین</span></div>
+          </div>
+
+          <div class="panel panel-flush">
+            <div class="telegram-feed" id="telegramFeed"></div>
+          </div>
         </div>
 
         <!-- PAGE: Settings -->
@@ -426,6 +482,6 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
-  <script src="/static/js/dashboard.js?v=3"></script>
+  <script src="/static/js/dashboard.js?v=4"></script>
 </body>
 </html>

@@ -3,13 +3,19 @@ name: Deploy Dashboard
 on:
   push:
     branches:
-      - cursor/trading-bot-dashboard-ba88
       - main
+      - 'cursor/**'
     paths:
       - 'dashboard/**'
       - 'deploy/**'
+      - 'telegram_logger.py'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: false
+        default: main
 
 jobs:
   deploy:
@@ -17,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -28,7 +36,9 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Deploy dashboard files
+      - name: Deploy dashboard files via SSH
+        id: rsync
+        continue-on-error: true
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -41,7 +51,45 @@ jobs:
           rsync -avz --delete \
             --exclude '__pycache__' \
             --exclude '*.pyc' \
+            --exclude '.env' \
+            --exclude 'engine_state.json' \
+            --exclude 'Facebook/' \
+            --exclude 'venv/' \
+            --exclude 'run_engine.py' \
+            --exclude 'engine/' \
             dashboard/ "${USER}@${HOST}:${PATH_ON_SERVER}/dashboard/"
+          rsync -avz deploy/ "${USER}@${HOST}:${PATH_ON_SERVER}/deploy/"
           rsync -avz deploy/nginx/agennews.store.conf "${USER}@${HOST}:/etc/nginx/sites-available/agennews.store"
           ssh "${USER}@${HOST}" "nginx -t && systemctl reload nginx && pm2 restart dashboard && pm2 save"
-          echo "Deploy complete"
+          echo "deploy_method=ssh" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via HTTP hook (fallback)
+        if: steps.rsync.outcome == 'failure'
+        env:
+          DEPLOY_HOOK_TOKEN: ${{ secrets.DEPLOY_HOOK_TOKEN }}
+          DEPLOY_BRANCH: ${{ github.event.inputs.branch || github.ref_name }}
+        run: |
+          echo "SSH deploy failed — trying HTTP deploy hook"
+          code=$(curl -sS -o /tmp/deploy-hook.json -w "%{http_code}" \
+            -X POST "https://agennews.store/api/deploy/hook" \
+            -H "X-Deploy-Token: ${DEPLOY_HOOK_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\":\"${DEPLOY_BRANCH}\"}")
+          cat /tmp/deploy-hook.json
+          if [[ "$code" != "200" ]]; then
+            echo "HTTP deploy hook failed (HTTP $code)"
+            exit 1
+          fi
+          echo "deploy_method=hook" >> "$GITHUB_OUTPUT"
+
+      - name: Verify deployment
+        run: |
+          sleep 3
+          code=$(curl -sS -o /dev/null -w "%{http_code}" https://agennews.store/api/bootstrap)
+          if [[ "$code" == "200" ]]; then
+            echo "Bootstrap endpoint live — deploy verified"
+          elif [[ "$code" == "404" ]]; then
+            echo "Warning: /api/bootstrap still 404 (older dashboard build)"
+          else
+            echo "Dashboard responded with HTTP $code"
+          fi

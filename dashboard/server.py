@@ -35,7 +35,9 @@ ENV_FILE = Path(os.environ.get("ENV_FILE", str(BOT_ROOT / ".env")))
 STATE_FILE = BOT_ROOT / "engine_state.json"
 SIGNAL_LOG = BOT_ROOT / "Facebook" / "signal_log.txt"
 SIGNAL_QUEUE = BOT_ROOT / "Facebook" / "signal_queue.json"
+TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
+ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
 
 PROCESSES = ("signal-engine", "signal-server")
@@ -271,6 +273,245 @@ def _parse_all_signals(days: int | None = None) -> list[dict]:
     return list(reversed(signals))
 
 
+def _normalize_symbol(sym: str) -> str:
+    sym = (sym or "").strip().upper()
+    if not sym:
+        return "?"
+    if "/" in sym:
+        return sym
+    if len(sym) == 6:
+        return f"{sym[:3]}/{sym[3:]}"
+    if sym.endswith("USD") and len(sym) > 3:
+        return f"{sym[:-3]}/USD"
+    return sym
+
+
+def _parse_ts(ts_str: str) -> datetime | None:
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S UTC"):
+        try:
+            return datetime.strptime(ts_str[:19], fmt[:19])
+        except ValueError:
+            continue
+    return None
+
+
+def _within_days(ts_str: str, days: int | None) -> bool:
+    if days is None:
+        return True
+    ts = _parse_ts(ts_str)
+    if not ts:
+        return True
+    return ts >= datetime.now() - timedelta(days=days)
+
+
+_TELEGRAM_SENT_RE = re.compile(
+    r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ \w+ Signal sent "
+    r"(?P<symbol>[\w/]+) (?P<direction>BUY|SELL)(?: score=(?P<score>\d+))?(?: entry=(?P<entry>[\d.]+))?"
+)
+_TELEGRAM_FAIL_RES = (
+    re.compile(
+        r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ ERROR (?P<msg>Telegram(?: send)? failed[^\\n]*?)"
+        r"(?:\s+symbol[=:]?(?P<symbol>[\w/]+))?",
+        re.I,
+    ),
+    re.compile(
+        r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ ERROR (?P<msg>.*Telegram.*)",
+        re.I,
+    ),
+    re.compile(
+        r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ WARNING (?P<msg>Telegram[^\\n]+)",
+        re.I,
+    ),
+)
+_TELEGRAM_STARTUP_RE = re.compile(
+    r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ \w+ (?P<msg>.*(?:startup|Startup).*(?:Telegram|telegram|sent).*)",
+    re.I,
+)
+
+
+def _parse_telegram_jsonl(days: int | None = None, limit: int = 500) -> list[dict]:
+    if not TELEGRAM_DELIVERY_LOG.exists():
+        return []
+    entries: list[dict] = []
+    for line in reversed(TELEGRAM_DELIVERY_LOG.read_text(encoding="utf-8", errors="replace").splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        ts = row.get("ts", "")
+        if not _within_days(ts, days):
+            continue
+        ok = bool(row.get("ok"))
+        entries.append(
+            {
+                "timestamp": ts.replace(" UTC", ""),
+                "symbol": _normalize_symbol(str(row.get("symbol", "?"))),
+                "direction": str(row.get("direction", "")).upper(),
+                "status": "ok" if ok else "failed",
+                "ok": ok,
+                "score": row.get("score"),
+                "entry": row.get("entry"),
+                "error": row.get("error"),
+                "http_status": row.get("http_status"),
+                "message_type": row.get("message_type", "signal"),
+                "source": "delivery_log",
+                "detail": row.get("error") or ("ارسال موفق به تلگرام" if ok else "ارسال ناموفق"),
+            }
+        )
+        if len(entries) >= limit:
+            break
+    return entries
+
+
+def _parse_engine_telegram_logs(days: int | None = None, limit: int = 1000) -> list[dict]:
+    if not ENGINE_LOG.exists():
+        return []
+    entries: list[dict] = []
+    for line in reversed(ENGINE_LOG.read_text(encoding="utf-8", errors="replace").splitlines()):
+        m = _TELEGRAM_SENT_RE.search(line)
+        if m:
+            ts = m.group("ts")
+            if not _within_days(ts, days):
+                continue
+            entries.append(
+                {
+                    "timestamp": ts,
+                    "symbol": _normalize_symbol(m.group("symbol")),
+                    "direction": m.group("direction"),
+                    "status": "ok",
+                    "ok": True,
+                    "score": int(m.group("score")) if m.group("score") else None,
+                    "entry": m.group("entry"),
+                    "error": None,
+                    "http_status": 200,
+                    "message_type": "signal",
+                    "source": "engine_log",
+                    "detail": "سیگنال با موفقیت به تلگرام ارسال شد",
+                }
+            )
+            if len(entries) >= limit:
+                break
+            continue
+
+        for fail_re in _TELEGRAM_FAIL_RES:
+            fm = fail_re.search(line)
+            if fm:
+                ts = fm.group("ts")
+                if not _within_days(ts, days):
+                    continue
+                sym = fm.groupdict().get("symbol")
+                entries.append(
+                    {
+                        "timestamp": ts,
+                        "symbol": _normalize_symbol(sym) if sym else "—",
+                        "direction": "",
+                        "status": "failed",
+                        "ok": False,
+                        "score": None,
+                        "entry": None,
+                        "error": fm.group("msg").strip(),
+                        "http_status": None,
+                        "message_type": "signal",
+                        "source": "engine_log",
+                        "detail": fm.group("msg").strip(),
+                    }
+                )
+                break
+
+        sm = _TELEGRAM_STARTUP_RE.search(line)
+        if sm:
+            ts = sm.group("ts")
+            if not _within_days(ts, days):
+                continue
+            ok = "fail" not in sm.group("msg").lower()
+            entries.append(
+                {
+                    "timestamp": ts,
+                    "symbol": "—",
+                    "direction": "",
+                    "status": "ok" if ok else "failed",
+                    "ok": ok,
+                    "score": None,
+                    "entry": None,
+                    "error": None if ok else sm.group("msg"),
+                    "message_type": "startup",
+                    "source": "engine_log",
+                    "detail": sm.group("msg").strip(),
+                }
+            )
+        if len(entries) >= limit:
+            break
+    return entries
+
+
+def _merge_telegram_entries(*sources: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    merged: list[dict] = []
+    for source in sources:
+        for row in source:
+            key = f"{row.get('timestamp')}|{row.get('symbol')}|{row.get('direction')}|{row.get('status')}|{row.get('message_type')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+    merged.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    return merged
+
+
+def _parse_telegram_deliveries(days: int | None = 30, limit: int = 200) -> list[dict]:
+    jsonl = _parse_telegram_jsonl(days=days, limit=limit)
+    engine = _parse_engine_telegram_logs(days=days, limit=limit * 2)
+    return _merge_telegram_entries(jsonl, engine)[:limit]
+
+
+def _telegram_summary(entries: list[dict], days: int = 30) -> dict:
+    today = datetime.now().strftime("%Y-%m-%d")
+    ok = [e for e in entries if e.get("ok")]
+    failed = [e for e in entries if not e.get("ok")]
+    signals = [e for e in entries if e.get("message_type", "signal") == "signal"]
+    today_ok = sum(1 for e in ok if str(e.get("timestamp", "")).startswith(today))
+    today_failed = sum(1 for e in failed if str(e.get("timestamp", "")).startswith(today))
+    total_attempts = len(signals) or len(entries)
+    success_rate = round(len([e for e in signals if e.get("ok")]) / max(total_attempts, 1) * 100, 1)
+
+    daily: dict[str, dict] = {}
+    for i in range(min(days, 90)):
+        d = (datetime.now() - timedelta(days=min(days, 90) - 1 - i)).strftime("%Y-%m-%d")
+        daily[d] = {"date": d, "ok": 0, "failed": 0, "total": 0}
+
+    for e in entries:
+        day = str(e.get("timestamp", ""))[:10]
+        if day not in daily:
+            continue
+        daily[day]["total"] += 1
+        if e.get("ok"):
+            daily[day]["ok"] += 1
+        else:
+            daily[day]["failed"] += 1
+
+    by_symbol: dict[str, int] = defaultdict(int)
+    for e in ok:
+        if e.get("symbol") and e.get("symbol") != "—":
+            by_symbol[e.get("symbol", "?")] += 1
+
+    last = entries[0] if entries else None
+    return {
+        "total": len(entries),
+        "signals_sent": len([e for e in signals if e.get("ok")]),
+        "failed": len([e for e in signals if not e.get("ok")]),
+        "success_rate": success_rate,
+        "today_ok": today_ok,
+        "today_failed": today_failed,
+        "last_delivery": last,
+        "by_symbol": dict(by_symbol),
+        "daily": list(daily.values()),
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
 def _daily_breakdown(signals: list[dict], days: int = 7) -> list[dict]:
     buckets: dict[str, dict] = defaultdict(lambda: {"date": "", "total": 0, "buy": 0, "sell": 0})
     for i in range(days):
@@ -289,23 +530,32 @@ def _daily_breakdown(signals: list[dict], days: int = 7) -> list[dict]:
     return list(buckets.values())
 
 
-def _report_summary(signals: list[dict]) -> dict:
+def _report_summary(signals: list[dict], days: int = 30) -> dict:
     stats = _signal_stats(signals)
-    daily = _daily_breakdown(signals, 7)
-    avg_per_day = round(stats["total"] / max(len([d for d in daily if d["total"] > 0]), 1), 1)
+    chart_days = min(max(days, 7), 90)
+    daily = _daily_breakdown(signals, chart_days)
+    active_days = max(len([d for d in daily if d["total"] > 0]), 1)
+    avg_per_day = round(stats["total"] / max(days, 1), 1)
     top_symbol = max(stats["by_symbol"], key=stats["by_symbol"].get) if stats["by_symbol"] else "—"
     buy = stats["by_direction"].get("BUY", 0)
     sell = stats["by_direction"].get("SELL", 0)
     ratio = f"{round(buy / sell, 2)}:1" if sell else "—"
     procs = [_proc_info(n) for n in PROCESSES]
     total_restarts = sum(p.get("restarts", 0) for p in procs)
+
+    telegram_entries = _parse_telegram_deliveries(days=days, limit=500)
+    telegram = _telegram_summary(telegram_entries, days=days)
+    telegram["configured"] = bool(_parse_env().get("TELEGRAM_BOT_TOKEN"))
+
     return {
         **stats,
+        "days": days,
         "daily": daily,
         "avg_per_day": avg_per_day,
         "top_symbol": top_symbol,
         "buy_sell_ratio": ratio,
         "total_restarts": total_restarts,
+        "telegram": telegram,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -334,6 +584,9 @@ def _build_xlsx(signals: list[dict], summary: dict) -> io.BytesIO:
         ("SELL Signals", summary["by_direction"].get("SELL", 0)),
         ("Buy/Sell Ratio", summary["buy_sell_ratio"]),
         ("PM2 Restarts", summary["total_restarts"]),
+        ("Telegram Sent", summary.get("telegram", {}).get("signals_sent", 0)),
+        ("Telegram Failed", summary.get("telegram", {}).get("failed", 0)),
+        ("Telegram Success %", summary.get("telegram", {}).get("success_rate", 0)),
     ]
     for label, val in rows:
         ws.append([label, val])
@@ -348,7 +601,7 @@ def _build_xlsx(signals: list[dict], summary: dict) -> io.BytesIO:
 
     # Signals sheet
     ws2 = wb.create_sheet("Signals")
-    headers = ["Timestamp", "Symbol", "Direction", "Entry", "SL", "TP1", "TP2", "RR", "Basis"]
+    headers = ["Timestamp", "Symbol", "Direction", "Entry", "SL", "TP1", "TP2", "RR", "Basis", "Telegram"]
     ws2.append(headers)
     for cell in ws2[1]:
         cell.font = header_font
@@ -365,6 +618,7 @@ def _build_xlsx(signals: list[dict], summary: dict) -> io.BytesIO:
             s.get("tp2", ""),
             s.get("rr", ""),
             s.get("basis", ""),
+            s.get("telegram_status", "—"),
         ])
 
     # By symbol sheet
@@ -563,8 +817,9 @@ def api_bootstrap():
             "status": _build_status_payload(stats_signals=stats_signals),
             "system": _system_stats(),
             "signals": all_signals[:50],
-            "report_7": _report_summary(signals_7d),
-            "report_30": _report_summary(all_signals),
+            "report_7": _report_summary(signals_7d, 7),
+            "report_30": _report_summary(all_signals, 30),
+            "telegram": _telegram_summary(_parse_telegram_deliveries(days=30, limit=100), 30),
         }
     )
 
@@ -611,6 +866,7 @@ def api_logs():
         "signal-server-err": PM2_LOG_DIR / "signal-server-error.log",
         "signal-server": PM2_LOG_DIR / "signal-server-out.log",
         "facebook": SIGNAL_LOG,
+        "telegram": TELEGRAM_DELIVERY_LOG,
     }
     path = log_map.get(process, PM2_LOG_DIR / f"{process}-error.log")
     if not path.exists():
@@ -682,12 +938,73 @@ def api_control():
 @auth_required
 def api_reports_summary():
     days = request.args.get("days", 30, type=int)
-    signals = _parse_all_signals(days=min(days, 365))
-    summary = _report_summary(signals)
+    days = min(days, 365)
+    signals = _parse_all_signals(days=days)
+    summary = _report_summary(signals, days=days)
     env = _parse_env()
     summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
     summary["engine_debug"] = env.get("ENGINE_DEBUG", "0") == "1"
     return jsonify(summary)
+
+
+@app.route("/api/telegram/log")
+@auth_required
+def api_telegram_log():
+    days = request.args.get("days", 30, type=int)
+    limit = request.args.get("limit", 100, type=int)
+    status = request.args.get("status", "all")
+    entries = _parse_telegram_deliveries(days=min(days, 365), limit=min(limit, 500))
+    if status == "ok":
+        entries = [e for e in entries if e.get("ok")]
+    elif status == "failed":
+        entries = [e for e in entries if not e.get("ok")]
+    summary = _telegram_summary(_parse_telegram_deliveries(days=min(days, 365), limit=500), days=days)
+    env = _parse_env()
+    return jsonify(
+        {
+            "entries": entries,
+            "summary": summary,
+            "telegram_configured": bool(env.get("TELEGRAM_BOT_TOKEN")),
+            "notifications_paused": env.get("NOTIFICATIONS_PAUSED", "0") == "1",
+        }
+    )
+
+
+@app.route("/api/telegram/summary")
+@auth_required
+def api_telegram_summary():
+    days = request.args.get("days", 30, type=int)
+    entries = _parse_telegram_deliveries(days=min(days, 365), limit=500)
+    summary = _telegram_summary(entries, days=days)
+    env = _parse_env()
+    summary["telegram_configured"] = bool(env.get("TELEGRAM_BOT_TOKEN"))
+    summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
+    return jsonify(summary)
+
+
+@app.route("/api/export/telegram.csv")
+@auth_required
+def export_telegram_csv():
+    days = request.args.get("days", 30, type=int)
+    entries = _parse_telegram_deliveries(days=min(days, 365), limit=2000)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Timestamp", "Symbol", "Direction", "Status", "Score", "Entry", "Error", "Detail", "Source"])
+    for e in entries:
+        writer.writerow([
+            e.get("timestamp", ""),
+            e.get("symbol", ""),
+            e.get("direction", ""),
+            e.get("status", ""),
+            e.get("score", ""),
+            e.get("entry", ""),
+            e.get("error", ""),
+            e.get("detail", ""),
+            e.get("source", ""),
+        ])
+    out = io.BytesIO(buf.getvalue().encode("utf-8-sig"))
+    fname = f"telegram-log-{datetime.now().strftime('%Y%m%d')}.csv"
+    return send_file(out, as_attachment=True, download_name=fname, mimetype="text/csv")
 
 
 @app.route("/api/export/signals.xlsx")
@@ -695,7 +1012,7 @@ def api_reports_summary():
 def export_signals_xlsx():
     days = request.args.get("days", 30, type=int)
     signals = _parse_all_signals(days=min(days, 365))
-    summary = _report_summary(signals)
+    summary = _report_summary(signals, days=min(days, 365))
     if not HAS_OPENPYXL:
         return jsonify({"error": "openpyxl not installed"}), 500
     buf = _build_xlsx(signals, summary)
@@ -774,26 +1091,73 @@ def api_management():
         return jsonify({"ok": True, "debug": not current, "message": f"Debug mode {'enabled' if not current else 'disabled'}"})
 
     if action == "pull_and_restart":
-        branch = os.environ.get("DEPLOY_BRANCH", "cursor/trading-bot-dashboard-ba88")
-        git_dir = BOT_ROOT
-        if not (git_dir / ".git").exists():
-            return jsonify({"error": "Not a git repository"}), 400
-        steps = [
-            ["git", "-C", str(git_dir), "fetch", "origin", branch],
-            ["git", "-C", str(git_dir), "checkout", branch],
-            ["git", "-C", str(git_dir), "reset", "--hard", f"origin/{branch}"],
-        ]
-        outputs = []
-        for cmd in steps:
-            code, out, err = _run(cmd, timeout=60)
-            outputs.append({"cmd": " ".join(cmd), "ok": code == 0, "output": out or err})
-            if code != 0:
-                return jsonify({"ok": False, "message": "Git pull failed", "steps": outputs}), 500
-        _run(["pm2", "restart", "dashboard"])
-        _run(["pm2", "save"])
-        return jsonify({"ok": True, "message": f"Pulled {branch} and restarted dashboard", "steps": outputs})
+        branch = data.get("branch") or os.environ.get("DEPLOY_BRANCH", "main")
+        return jsonify(_git_deploy(branch))
+
+    if action == "install_ssh_key":
+        pubkey = data.get("public_key", "").strip()
+        if not pubkey or not pubkey.startswith(("ssh-ed25519 ", "ssh-rsa ")):
+            return jsonify({"error": "Invalid public_key"}), 400
+        auth_file = Path("/root/.ssh/authorized_keys")
+        auth_file.parent.mkdir(mode=0o700, exist_ok=True)
+        existing = auth_file.read_text() if auth_file.exists() else ""
+        if pubkey not in existing:
+            auth_file.write_text(existing.rstrip() + "\n" + pubkey + "\n")
+            auth_file.chmod(0o600)
+        return jsonify({"ok": True, "message": "Deploy SSH key installed"})
 
     return jsonify({"error": f"Unknown action: {action}"}), 400
+
+
+def _git_deploy(branch: str) -> dict:
+    git_dir = BOT_ROOT
+    if not (git_dir / ".git").exists():
+        return {"ok": False, "error": "Not a git repository"}
+    token = os.environ.get("GH_PAT") or os.environ.get("GITHUB_TOKEN", "")
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    git_prefix = ["git"]
+    if token:
+        git_prefix = [
+            "git",
+            "-c",
+            "credential.helper=!f() { echo username=sedshahab0; echo password=${GITHUB_TOKEN}; }; f",
+        ]
+        env["GITHUB_TOKEN"] = token
+    steps = [
+        git_prefix + ["-C", str(git_dir), "fetch", "origin", branch],
+        git_prefix + ["-C", str(git_dir), "checkout", branch],
+        git_prefix + ["-C", str(git_dir), "reset", "--hard", f"origin/{branch}"],
+    ]
+    outputs = []
+    for cmd in steps:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=env)
+            code, out, err = r.returncode, r.stdout.strip(), r.stderr.strip()
+        except subprocess.TimeoutExpired:
+            code, out, err = 1, "", "timeout"
+        except FileNotFoundError:
+            code, out, err = 1, "", "command not found"
+        outputs.append({"cmd": " ".join(cmd), "ok": code == 0, "output": out or err})
+        if code != 0:
+            return {"ok": False, "message": "Git pull failed", "steps": outputs}
+    _run(["pm2", "restart", "dashboard"])
+    _run(["pm2", "save"])
+    return {"ok": True, "message": f"Pulled {branch} and restarted dashboard", "steps": outputs}
+
+
+@app.route("/api/deploy/hook", methods=["POST"])
+def api_deploy_hook():
+    token = request.headers.get("X-Deploy-Token") or request.args.get("token", "")
+    expected = os.environ.get("DEPLOY_HOOK_TOKEN", "")
+    if not expected or not secrets.compare_digest(token, expected):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    branch = data.get("branch") or os.environ.get("DEPLOY_BRANCH", "main")
+    result = _git_deploy(branch)
+    if not result.get("ok"):
+        return jsonify(result), 500
+    return jsonify(result)
 
 
 @app.route("/api/stream")
