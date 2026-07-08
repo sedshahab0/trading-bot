@@ -1,0 +1,47 @@
+module.exports = {
+  apps: [
+    {
+      name: "signal-server",
+      cwd: "/opt/trading-bot/Facebook",
+      script: "/opt/trading-bot/venv/bin/python3",
+      args: "signal_server.py",
+      interpreter: "none",
+      env: {
+        BEHIND_PROXY: "1",
+        VENV_PYTHON: "/opt/trading-bot/venv/bin/python3",
+      },
+      autorestart: true,
+      max_restarts: 20,
+      restart_delay: 5000,
+    },
+    {
+      name: "signal-engine",
+      cwd: "/opt/trading-bot",
+      script: "/opt/trading-bot/venv/bin/python3",
+      args: "run_engine.py",
+      interpreter: "none",
+      env_file: "/opt/trading-bot/.env",
+      autorestart: true,
+      max_restarts: 20,
+      restart_delay: 10000,
+    },
+    {
+      name: "dashboard",
+      cwd: "/opt/trading-bot/dashboard",
+      script: "/opt/trading-bot/venv/bin/gunicorn",
+      args: "-w 1 --threads 4 -b 0.0.0.0:8080 --timeout 120 server:app",
+      interpreter: "none",
+      env: {
+        BOT_ROOT: "/opt/trading-bot",
+        ENV_FILE: "/opt/trading-bot/.env",
+        DASHBOARD_USERNAME: "admin",
+        DASHBOARD_PASSWORD: "tradingbot2026",
+        DASHBOARD_PORT: "8080",
+        BEHIND_PROXY: "1",
+      },
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+    },
+  ],
+};

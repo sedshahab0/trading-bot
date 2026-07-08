@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Bot Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=3" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=3" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="bg-mesh"></div>
+  <div class="bg-grid"></div>
+
+  <!-- Login (unchanged structure) -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-orbs">
+      <div class="login-orb orb-1"></div>
+      <div class="login-orb orb-2"></div>
+      <div class="login-orb orb-3"></div>
+    </div>
+    <div class="login-wrap animate-in">
+      <div class="login-brand">
+        <div class="login-brand-inner">
+          <div class="brand-logo"><div class="brand-logo-ring"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <span class="brand-tag">Forex TradeChi</span>
+          <h1 class="brand-title">Signal Bot<br/><span>Control Panel</span></h1>
+          <p class="brand-desc">مدیریت حرفه‌ای ربات سیگنال‌دهی</p>
+        </div>
+      </div>
+      <div class="login-panel">
+        <div class="login-panel-inner">
+          <div class="login-panel-header"><h2>ورود به داشبورد</h2><p>نام کاربری و رمز عبور</p></div>
+          <form id="loginForm" class="login-form">
+            <div class="field-group"><label for="loginUsername">نام کاربری</label>
+              <div class="input-wrap"><svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="loginUsername" placeholder="admin" autocomplete="username" /></div></div>
+            <div class="field-group"><label for="loginPassword">رمز عبور</label>
+              <div class="input-wrap"><svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+                <button type="button" class="toggle-pw" id="togglePassword" aria-label="Show password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+            <button type="submit" class="login-submit" id="loginSubmit"><span class="login-submit-text">ورود به پنل</span><span class="login-submit-loader hidden"></span></button>
+          </form>
+          <p class="login-error" id="loginError"></p>
+          <div class="login-footer"><span class="domain-badge"><span class="domain-dot"></span>agennews.store</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div class="app-shell hidden" id="dashboard">
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Right Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div><strong>TradeChi Bot</strong><span>Control Panel v2</span></div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-group">
+          <span class="nav-group-label">اصلی</span>
+          <button class="nav-item active" data-page="home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            <span>داشبورد</span>
+          </button>
+          <button class="nav-item" data-page="monitor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span>مانیتورینگ</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">ربات</span>
+          <button class="nav-item" data-page="control">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83"/></svg>
+            <span>کنترل ربات</span>
+          </button>
+          <button class="nav-item" data-page="signals">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <span>سیگنال‌ها</span>
+          </button>
+          <button class="nav-item" data-page="reports">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            <span>گزارش‌ها</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">سیستم</span>
+          <button class="nav-item" data-page="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span>تنظیمات</span>
+          </button>
+          <button class="nav-item" data-page="logs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>لاگ‌ها</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-status" id="sidebarStatus">
+          <span class="sidebar-status-dot"></span>
+          <span id="sidebarStatusText">—</span>
+        </div>
+        <button class="nav-item logout" id="btnLogout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          <span>خروج</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-area">
+      <header class="topbar">
+        <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="topbar-title">
+          <h1 id="pageTitle">داشبورد</h1>
+          <span class="topbar-sub" id="pageSub">نمای کلی ربات</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="live-badge"><span class="live-dot"></span><span id="liveTime">--:--:--</span></div>
+          <button class="btn btn-success btn-compact" id="btnStartAll"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg><span>روشن</span></button>
+          <button class="btn btn-danger btn-compact" id="btnStopAll"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg><span>توقف</span></button>
+        </div>
+      </header>
+
+      <div class="page-content">
+
+        <!-- PAGE: Home -->
+        <div class="page active" id="page-home">
+
+          <!-- Hero Status -->
+          <section class="home-hero">
+            <div class="hero-bg"></div>
+            <div class="hero-body">
+              <div class="hero-main">
+                <div class="hero-status-row">
+                  <span class="status-pill" id="heroStatusPill"><span class="status-indicator" id="statusIndicator"></span><span id="heroStatusText">—</span></span>
+                  <span class="hero-time" id="heroUpdated">—</span>
+                </div>
+                <h2 class="hero-title" id="statusLabel">در حال بارگذاری...</h2>
+                <p class="hero-sub" id="statusSub"></p>
+                <div class="hero-chips">
+                  <div class="hero-chip"><span class="chip-lbl">دامنه</span><span class="chip-val">agennews.store</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">سرور</span><span class="chip-val" id="hostTag">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Uptime</span><span class="chip-val" id="heroUptime">—</span></div>
+                </div>
+              </div>
+              <div class="hero-side">
+                <p class="hero-side-label">سرویس‌ها</p>
+                <div class="hero-services" id="homeProcesses"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- KPI Cards -->
+          <section class="kpi-grid pro">
+            <article class="kpi-card pro today">
+              <div class="kpi-icon">📊</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiToday">0</span><span class="kpi-lbl">سیگنال امروز</span></div>
+            </article>
+            <article class="kpi-card pro">
+              <div class="kpi-icon">∑</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiTotal">0</span><span class="kpi-lbl">کل سیگنال‌ها</span></div>
+            </article>
+            <article class="kpi-card pro buy">
+              <div class="kpi-icon">↑</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiBuy">0</span><span class="kpi-lbl">BUY</span></div>
+            </article>
+            <article class="kpi-card pro sell">
+              <div class="kpi-icon">↓</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiSell">0</span><span class="kpi-lbl">SELL</span></div>
+            </article>
+          </section>
+
+          <!-- Main Home Grid -->
+          <section class="home-grid">
+            <article class="panel panel-highlight">
+              <div class="panel-top">
+                <h3 class="panel-heading">آخرین سیگنال</h3>
+                <button class="link-btn" data-goto="signals">مشاهده همه ←</button>
+              </div>
+              <div class="signal-ticket" id="latestSignal"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">توزیع نمادها</h3>
+              </div>
+              <div class="chart-box home-chart"><canvas id="symbolChart"></canvas></div>
+              <div class="symbol-legend" id="symbolLegend"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">فعالیت ۷ روز اخیر</h3>
+              </div>
+              <div class="chart-box home-chart-sm"><canvas id="homeSparkline"></canvas></div>
+              <div class="panel-top" style="margin-top:1rem;margin-bottom:0.5rem">
+                <h3 class="panel-heading">سلامت نمادها</h3>
+              </div>
+              <div class="symbol-health" id="symbolHealth"></div>
+            </article>
+          </section>
+
+          <!-- Quick Actions -->
+          <section class="quick-actions">
+            <button class="quick-btn" data-goto="control"><span>⚙️</span>کنترل ربات</button>
+            <button class="quick-btn" data-goto="reports"><span>📈</span>گزارش Excel</button>
+            <button class="quick-btn" data-goto="monitor"><span>🖥</span>مانیتورینگ</button>
+            <button class="quick-btn" data-goto="logs"><span>⌘</span>لاگ زنده</button>
+          </section>
+        </div>
+
+        <!-- PAGE: Monitor -->
+        <div class="page" id="page-monitor">
+
+          <!-- Monitor Hero -->
+          <section class="monitor-hero">
+            <div class="hero-bg"></div>
+            <div class="monitor-hero-body">
+              <div class="monitor-hero-main">
+                <div class="hero-status-row">
+                  <span class="status-pill" id="monitorHealthPill"><span class="status-indicator" id="monitorHealthDot"></span><span id="monitorHealthLabel">—</span></span>
+                  <span class="hero-time" id="monitorSyncTime">آخرین بروزرسانی: —</span>
+                </div>
+                <h2 class="hero-title" id="monitorHostTitle">سرور</h2>
+                <p class="hero-sub" id="monitorHostSub">منابع سیستم و موتور تحلیل</p>
+                <div class="hero-chips">
+                  <div class="hero-chip"><span class="chip-lbl">Hostname</span><span class="chip-val" id="monHost">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Uptime</span><span class="chip-val" id="monUptime">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Health Score</span><span class="chip-val" id="monHealthScore">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Bot RAM</span><span class="chip-val" id="monBotRam">—</span></div>
+                </div>
+              </div>
+              <div class="monitor-score-ring">
+                <svg viewBox="0 0 120 120" class="score-svg">
+                  <circle class="score-track" cx="60" cy="60" r="52"/>
+                  <circle class="score-fill" id="monitorScoreArc" cx="60" cy="60" r="52"/>
+                </svg>
+                <div class="score-center">
+                  <span class="score-num" id="monitorScoreNum">—</span>
+                  <span class="score-lbl">سلامت</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Resource Gauges -->
+          <section class="monitor-gauges">
+            <article class="gauge-card cpu">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">CPU</span><span class="gauge-value" id="cpuValue">0%</span></div>
+              </div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 80 80" class="mini-gauge"><circle class="gauge-track" cx="40" cy="40" r="34"/><circle class="gauge-fill cpu-gauge" id="cpuGaugeArc" cx="40" cy="40" r="34"/></svg>
+              </div>
+              <div class="gauge-footer"><span>ربات</span><strong id="cpuBot">0%</strong></div>
+              <div class="gauge-spark"><canvas id="cpuSpark"></canvas></div>
+            </article>
+
+            <article class="gauge-card ram">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M8 11V9M12 11V9M16 11V9M6 15h12a2 2 0 002-2V7H4v6a2 2 0 002 2z"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">RAM</span><span class="gauge-value" id="ramValue">0%</span></div>
+              </div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 80 80" class="mini-gauge"><circle class="gauge-track" cx="40" cy="40" r="34"/><circle class="gauge-fill ram-gauge" id="ramGaugeArc" cx="40" cy="40" r="34"/></svg>
+              </div>
+              <div class="gauge-footer"><span><strong id="ramTotal">0</strong> GB</span><span>ربات <strong id="ramBot">0</strong> MB</span></div>
+              <div class="gauge-spark"><canvas id="ramSpark"></canvas></div>
+            </article>
+
+            <article class="gauge-card disk">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">DISK</span><span class="gauge-value" id="diskValue">0%</span></div>
+              </div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 80 80" class="mini-gauge"><circle class="gauge-track" cx="40" cy="40" r="34"/><circle class="gauge-fill disk-gauge" id="diskGaugeArc" cx="40" cy="40" r="34"/></svg>
+              </div>
+              <div class="gauge-footer"><span>آزاد</span><strong id="diskFree">0</strong> GB</div>
+              <div class="gauge-spark"><canvas id="diskSpark"></canvas></div>
+            </article>
+
+            <article class="gauge-card net">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">NET</span><span class="gauge-value" id="netValue">0</span></div>
+              </div>
+              <div class="net-dual">
+                <div class="net-stat down"><span class="net-arrow">↓</span><div class="net-stat-body"><span class="net-stat-lbl">Download</span><span class="net-stat-val" id="netDown">0 KB/s</span><div class="progress-bar sm"><div class="progress-fill net-down" id="netDownBar"></div></div></div></div>
+                <div class="net-stat up"><span class="net-arrow">↑</span><div class="net-stat-body"><span class="net-stat-lbl">Upload</span><span class="net-stat-val" id="netUp">0 KB/s</span><div class="progress-bar sm"><div class="progress-fill net-up" id="netUpBar"></div></div></div></div>
+              </div>
+              <div class="gauge-spark"><canvas id="netSpark"></canvas></div>
+            </article>
+          </section>
+
+          <!-- Charts + Processes -->
+          <section class="monitor-grid">
+            <article class="panel panel-wide">
+              <div class="panel-top">
+                <h3 class="panel-heading">روند منابع (زنده)</h3>
+                <div class="chart-legend-inline">
+                  <span class="legend-dot" style="background:#5b9cf6"></span> CPU
+                  <span class="legend-dot" style="background:#63ffd0"></span> RAM
+                </div>
+              </div>
+              <div class="chart-box monitor-chart"><canvas id="resourceHistoryChart"></canvas></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">فرآیندهای PM2</h3>
+                <button class="link-btn" data-goto="control">مدیریت ←</button>
+              </div>
+              <div class="monitor-processes" id="monitorProcesses"></div>
+            </article>
+          </section>
+
+          <!-- Engine Status -->
+          <section class="panel monitor-engine-panel">
+            <div class="panel-top">
+              <div>
+                <h3 class="panel-heading">وضعیت موتور تحلیل</h3>
+                <p class="panel-desc" id="engineUpdatedAt">—</p>
+              </div>
+              <div class="engine-summary-chips" id="engineSummaryChips"></div>
+            </div>
+            <div class="engine-cards" id="engineInfo"></div>
+          </section>
+
+        </div>
+
+        <!-- PAGE: Control -->
+        <div class="page" id="page-control">
+          <div class="panel"><h3 class="panel-heading">مرکز مدیریت</h3>
+            <div class="mgmt-grid">
+              <button class="mgmt-card" id="btnRestartAll"><span class="mgmt-icon restart">↻</span><span class="mgmt-label">ری‌استارت کامل</span></button>
+              <button class="mgmt-card" id="btnPauseNotif"><span class="mgmt-icon pause">⏸</span><span class="mgmt-label">توقف نوتیفیکیشن</span></button>
+              <button class="mgmt-card" id="btnResumeNotif"><span class="mgmt-icon play">▶</span><span class="mgmt-label">ادامه نوتیفیکیشن</span></button>
+              <button class="mgmt-card" id="btnResetCooldown"><span class="mgmt-icon reset">⟲</span><span class="mgmt-label">ریست Cooldown</span></button>
+              <button class="mgmt-card" id="btnFlushLogs"><span class="mgmt-icon logs">⌫</span><span class="mgmt-label">پاکسازی لاگ</span></button>
+              <button class="mgmt-card" id="btnToggleDebug"><span class="mgmt-icon debug">⚙</span><span class="mgmt-label">Debug</span><span class="mgmt-desc" id="debugStatus">خاموش</span></button>
+            </div>
+          </div>
+          <div class="panel"><h3 class="panel-heading">فرآیندهای PM2</h3><div class="process-cards" id="processCards"></div></div>
+        </div>
+
+        <!-- PAGE: Signals -->
+        <div class="page" id="page-signals">
+          <div class="page-toolbar">
+            <input type="search" id="signalSearch" class="search-input" placeholder="جستجو نماد..." />
+            <div class="toolbar-stats"><span>امروز: <strong id="sigToday">0</strong></span><span>کل: <strong id="sigTotal">0</strong></span></div>
+          </div>
+          <div class="panel panel-flush"><div class="signal-feed" id="signalFeed"></div></div>
+        </div>
+
+        <!-- PAGE: Reports -->
+        <div class="page" id="page-reports">
+          <div class="page-toolbar">
+            <label class="toolbar-label">بازه:</label>
+            <select id="reportDays" class="select-input">
+              <option value="7">۷ روز</option><option value="30" selected>۳۰ روز</option><option value="90">۹۰ روز</option><option value="365">۱ سال</option>
+            </select>
+            <button class="btn btn-export excel" id="btnExportExcel">Excel</button>
+            <button class="btn btn-export csv" id="btnExportCsv">CSV</button>
+          </div>
+          <div class="report-kpi">
+            <div class="report-stat"><span class="report-num" id="rptAvg">—</span><span class="report-lbl">میانگین روزانه</span></div>
+            <div class="report-stat"><span class="report-num" id="rptTop">—</span><span class="report-lbl">پرسیگنال‌ترین</span></div>
+            <div class="report-stat"><span class="report-num" id="rptRatio">—</span><span class="report-lbl">BUY/SELL</span></div>
+            <div class="report-stat"><span class="report-num" id="rptRestarts">—</span><span class="report-lbl">Restarts</span></div>
+          </div>
+          <div class="grid-2">
+            <div class="panel"><h3 class="panel-heading">روند روزانه</h3><div class="chart-box tall"><canvas id="dailyChart"></canvas></div></div>
+            <div class="panel"><h3 class="panel-heading">BUY vs SELL</h3><div class="chart-box tall"><canvas id="directionChart"></canvas></div></div>
+          </div>
+          <div class="panel"><h3 class="panel-heading">عملکرد نمادها</h3><div class="chart-box wide"><canvas id="symbolBarChart"></canvas></div></div>
+          <p class="hint" id="reportGenerated">—</p>
+        </div>
+
+        <!-- PAGE: Settings -->
+        <div class="page" id="page-settings">
+          <div class="panel"><h3 class="panel-heading">تنظیمات ربات</h3>
+            <div class="settings-form">
+              <div class="setting-row"><label>نمادها</label><input type="text" id="cfgSymbols" /></div>
+              <div class="setting-row"><label>حداقل امتیاز</label><input type="number" id="cfgMinScore" min="1" max="20" /></div>
+              <div class="setting-row"><label>فاصله بررسی (ثانیه)</label><input type="number" id="cfgPoll" min="10" max="300" /></div>
+              <div class="setting-row toggle-row"><label>Facebook</label><label class="toggle"><input type="checkbox" id="cfgFacebook" /><span class="toggle-slider"></span></label></div>
+              <div class="setting-row toggle-row"><label>Debug Engine</label><label class="toggle"><input type="checkbox" id="cfgDebug" /><span class="toggle-slider"></span></label></div>
+              <button class="btn btn-primary" id="btnSaveConfig">ذخیره تنظیمات</button>
+              <p class="hint">برای اعمال کامل، ربات را ری‌استارت کنید.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: Logs -->
+        <div class="page" id="page-logs">
+          <div class="page-toolbar">
+            <select id="logSelect" class="select-input">
+              <option value="signal-engine">Signal Engine</option>
+              <option value="signal-server-out">Signal Server (out)</option>
+              <option value="signal-server-err">Signal Server (err)</option>
+              <option value="facebook">Facebook Log</option>
+            </select>
+          </div>
+          <div class="terminal">
+            <div class="terminal-header"><span class="term-dot red"></span><span class="term-dot yellow"></span><span class="term-dot green"></span><span class="term-title">live logs</span></div>
+            <pre class="terminal-body" id="terminalBody"></pre>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <script src="/static/js/dashboard.js?v=3"></script>
+</body>
+</html>
