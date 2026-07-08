@@ -37,6 +37,7 @@ module.exports = {
         DASHBOARD_USERNAME: "admin",
         DASHBOARD_PASSWORD: "tradingbot2026",
         DASHBOARD_PORT: "8080",
+        BEHIND_PROXY: "1",
       },
       autorestart: true,
       max_restarts: 10,

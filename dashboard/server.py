@@ -16,6 +16,7 @@ from pathlib import Path
 
 import psutil
 from flask import Flask, Response, jsonify, request, send_from_directory, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Paths ─────────────────────────────────────────────────────────────
 BOT_ROOT = Path(os.environ.get("BOT_ROOT", "/opt/trading-bot"))
@@ -65,6 +66,10 @@ app.secret_key = _get_secret_key()
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
+if os.environ.get("BEHIND_PROXY", "0") == "1":
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 def _dashboard_username() -> str:
