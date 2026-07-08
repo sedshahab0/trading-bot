@@ -113,19 +113,19 @@ def main() -> int:
     index_text = replace_once(
         index_text,
         r'(<span class="version-badge" id="loginVersion">)v[\d.]+(</span>)',
-        rf"\1{label}\2",
+        rf"\g<1>{label}\g<2>",
         path=index_html,
     )
     index_text = replace_once(
         index_text,
         r'(<span class="version-badge" id="sidebarVersion">)v[\d.]+(</span>)',
-        rf"\1{label}\2",
+        rf"\g<1>{label}\g<2>",
         path=index_html,
     )
     index_text = replace_once(
         index_text,
         r'(<span class="version-pill" id="sidebarVersionFull" title="[^"]*">)v[\d.]+(</span>)',
-        rf"\1{full}\2",
+        rf"\g<1>{full}\g<2>",
         path=index_html,
     )
     index_html.write_text(index_text, encoding="utf-8")
