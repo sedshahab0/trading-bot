@@ -7,11 +7,15 @@
   const $$ = (sel) => document.querySelectorAll(sel);
 
   let symbolChart = null;
+  let dailyChart = null;
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
   let isAuthenticated = false;
   let sseReconnectTimer = null;
+  let allSignals = [];
+  let activeTab = "overview";
+  let isMobile = () => window.innerWidth <= 768;
 
   // ── Particles ──
   function initParticles() {
@@ -327,11 +331,16 @@
   function renderSignals(signals) {
     const feed = $("#signalFeed");
     if (!feed || !signals) return;
-    feed.innerHTML = signals
-      .map(
-        (s, i) => {
-          const dir = (s.direction || "").toUpperCase();
-          return `
+    const q = ($("#signalSearch")?.value || "").trim().toUpperCase();
+    const filtered = q
+      ? signals.filter((s) => (s.symbol || "").toUpperCase().includes(q))
+      : signals;
+    feed.innerHTML = filtered.length
+      ? filtered
+          .map(
+            (s, i) => {
+              const dir = (s.direction || "").toUpperCase();
+              return `
         <div class="signal-item" style="animation-delay:${i * 0.05}s">
           <span class="time">${s.timestamp || ""}</span>
           <div>
@@ -340,9 +349,10 @@
           </div>
           <span class="entry-info">E:${s.entry} SL:${s.sl}</span>
         </div>`;
-        }
-      )
-      .join("");
+            }
+          )
+          .join("")
+      : '<p style="color:var(--text-muted);text-align:center;padding:1rem">سیگنالی یافت نشد</p>';
   }
 
   function colorizeLog(line) {
@@ -382,15 +392,155 @@
       $("#cfgMinScore").value = cfg.min_score || "5";
       $("#cfgPoll").value = cfg.poll_seconds || "30";
       $("#cfgFacebook").checked = cfg.facebook_enable;
+      $("#cfgDebug").checked = cfg.engine_debug;
+      if ($("#debugStatus")) {
+        $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
+      }
     } catch {}
   }
 
   async function refreshSignals() {
     try {
-      const { signals } = await api("/api/signals?limit=20");
+      const { signals } = await api("/api/signals?limit=50");
+      allSignals = signals;
       renderSignals(signals);
     } catch {}
   }
+
+  // ── Mobile Tabs ──
+  function switchTab(tab) {
+    activeTab = tab;
+    $$(".mobile-nav-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    if (!isMobile()) return;
+    $$(".tab-section").forEach((el) => {
+      el.classList.toggle("active-tab", el.dataset.tab === tab);
+    });
+    if (tab === "reports") refreshReports();
+  }
+
+  $$(".mobile-nav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  window.addEventListener("resize", () => {
+    if (!isMobile()) {
+      $$(".tab-section").forEach((el) => el.classList.remove("active-tab", "hidden-tab"));
+    } else {
+      switchTab(activeTab);
+    }
+  });
+
+  // ── Management ──
+  async function mgmt(action) {
+    try {
+      const data = await api("/api/management", {
+        method: "POST",
+        body: JSON.stringify({ action }),
+      });
+      toast(data.message || "انجام شد");
+      refreshStatus();
+      if (action === "toggle_debug") refreshReports();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
+
+  $("#btnRestartAll")?.addEventListener("click", () => mgmt("restart_all"));
+  $("#btnPauseNotif")?.addEventListener("click", () => mgmt("pause_notifications"));
+  $("#btnResumeNotif")?.addEventListener("click", () => mgmt("resume_notifications"));
+  $("#btnResetCooldown")?.addEventListener("click", () => mgmt("reset_cooldowns"));
+  $("#btnFlushLogs")?.addEventListener("click", () => {
+    if (confirm("لاگ‌های PM2 پاک شوند؟")) mgmt("flush_logs");
+  });
+  $("#btnToggleDebug")?.addEventListener("click", () => mgmt("toggle_debug"));
+
+  // ── Reports ──
+  function renderDailyChart(daily) {
+    const canvas = $("#dailyChart");
+    if (!canvas || !daily) return;
+    const labels = daily.map((d) => d.date.slice(5));
+    const totals = daily.map((d) => d.total);
+    const buys = daily.map((d) => d.buy);
+    const sells = daily.map((d) => d.sell);
+
+    if (dailyChart) {
+      dailyChart.data.labels = labels;
+      dailyChart.data.datasets[0].data = buys;
+      dailyChart.data.datasets[1].data = sells;
+      dailyChart.update("none");
+      return;
+    }
+
+    dailyChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "BUY", data: buys, backgroundColor: "rgba(74,222,128,0.7)", borderRadius: 4 },
+          { label: "SELL", data: sells, backgroundColor: "rgba(248,113,113,0.7)", borderRadius: 4 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: "#8b95a8", font: { family: "Vazirmatn", size: 11 } } },
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
+          y: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
+        },
+        animation: { duration: 600 },
+      },
+    });
+  }
+
+  async function refreshReports() {
+    const days = $("#reportDays")?.value || 30;
+    try {
+      const data = await api(`/api/reports/summary?days=${days}`);
+      if ($("#rptAvg")) $("#rptAvg").textContent = data.avg_per_day;
+      if ($("#rptTop")) $("#rptTop").textContent = data.top_symbol;
+      if ($("#rptRatio")) $("#rptRatio").textContent = data.buy_sell_ratio;
+      if ($("#rptRestarts")) $("#rptRestarts").textContent = data.total_restarts;
+      if ($("#reportGenerated")) {
+        $("#reportGenerated").textContent = `آخرین بروزرسانی: ${data.generated_at} · ${data.total} سیگنال`;
+      }
+      renderDailyChart(data.daily);
+    } catch {}
+  }
+
+  $("#reportDays")?.addEventListener("change", refreshReports);
+
+  async function downloadExport(url) {
+    try {
+      const res = await authFetch(url);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = res.headers.get("Content-Disposition")?.match(/filename=(.+)/)?.[1] || "export";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("فایل دانلود شد");
+    } catch {
+      toast("خطا در دانلود", "error");
+    }
+  }
+
+  $("#btnExportExcel")?.addEventListener("click", () => {
+    const days = $("#reportDays")?.value || 30;
+    downloadExport(`/api/export/signals.xlsx?days=${days}`);
+  });
+
+  $("#btnExportCsv")?.addEventListener("click", () => {
+    const days = $("#reportDays")?.value || 30;
+    downloadExport(`/api/export/signals.csv?days=${days}`);
+  });
+
+  $("#signalSearch")?.addEventListener("input", () => renderSignals(allSignals));
 
   async function refreshSystem() {
     try {
@@ -409,6 +559,7 @@
           MIN_SCORE: $("#cfgMinScore").value,
           POLL_SECONDS: $("#cfgPoll").value,
           FACEBOOK_ENABLE: $("#cfgFacebook").checked ? "1" : "0",
+          ENGINE_DEBUG: $("#cfgDebug").checked ? "1" : "0",
         }),
       });
       toast("تنظیمات ذخیره شد");
@@ -456,10 +607,12 @@
 
   function startStreams() {
     stopStreams();
+    switchTab(activeTab);
     refreshStatus();
     refreshSignals();
     refreshSystem();
     refreshLogs();
+    refreshReports();
 
     statusInterval = setInterval(refreshStatus, 10000);
     logInterval = setInterval(refreshLogs, 5000);

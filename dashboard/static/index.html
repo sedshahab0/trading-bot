@@ -146,8 +146,28 @@
       </div>
     </header>
 
+    <!-- Mobile Tab Navigation -->
+    <nav class="mobile-nav" id="mobileNav">
+      <button class="mobile-nav-btn active" data-tab="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        <span>نمای کلی</span>
+      </button>
+      <button class="mobile-nav-btn" data-tab="control">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        <span>کنترل</span>
+      </button>
+      <button class="mobile-nav-btn" data-tab="reports">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>گزارش</span>
+      </button>
+      <button class="mobile-nav-btn" data-tab="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span>لاگ</span>
+      </button>
+    </nav>
+
     <!-- Status Banner -->
-    <section class="status-banner animate-in delay-1" id="statusBanner">
+    <section class="status-banner animate-in delay-1 tab-section" data-tab="overview" id="statusBanner">
       <div class="status-indicator" id="statusIndicator"></div>
       <div class="status-text">
         <span class="status-label" id="statusLabel">در حال بارگذاری...</span>
@@ -160,7 +180,7 @@
     </section>
 
     <!-- System Resources -->
-    <section class="section animate-in delay-2">
+    <section class="section animate-in delay-2 tab-section" data-tab="overview">
       <h2 class="section-title">منابع سیستم</h2>
       <div class="resource-grid">
         <div class="resource-card" data-metric="cpu">
@@ -202,14 +222,51 @@
 
     <!-- Main Grid -->
     <div class="main-grid animate-in delay-3">
+      <!-- Management Center -->
+      <section class="panel management-panel tab-section" data-tab="control">
+        <h2 class="panel-title">مرکز مدیریت</h2>
+        <div class="mgmt-grid">
+          <button class="mgmt-card" id="btnRestartAll">
+            <span class="mgmt-icon restart">↻</span>
+            <span class="mgmt-label">ری‌استارت کامل</span>
+            <span class="mgmt-desc">هر دو سرویس PM2</span>
+          </button>
+          <button class="mgmt-card" id="btnPauseNotif">
+            <span class="mgmt-icon pause">⏸</span>
+            <span class="mgmt-label">توقف نوتیفیکیشن</span>
+            <span class="mgmt-desc">بدون ارسال سیگنال</span>
+          </button>
+          <button class="mgmt-card" id="btnResumeNotif">
+            <span class="mgmt-icon play">▶</span>
+            <span class="mgmt-label">ادامه نوتیفیکیشن</span>
+            <span class="mgmt-desc">فعال‌سازی مجدد</span>
+          </button>
+          <button class="mgmt-card" id="btnResetCooldown">
+            <span class="mgmt-icon reset">⟲</span>
+            <span class="mgmt-label">ریست cooldown</span>
+            <span class="mgmt-desc">حذف محدودیت زمانی</span>
+          </button>
+          <button class="mgmt-card" id="btnFlushLogs">
+            <span class="mgmt-icon logs">🗑</span>
+            <span class="mgmt-label">پاکسازی لاگ PM2</span>
+            <span class="mgmt-desc">flush logs</span>
+          </button>
+          <button class="mgmt-card" id="btnToggleDebug">
+            <span class="mgmt-icon debug">⚙</span>
+            <span class="mgmt-label">حالت Debug</span>
+            <span class="mgmt-desc" id="debugStatus">خاموش</span>
+          </button>
+        </div>
+      </section>
+
       <!-- Process Cards -->
-      <section class="panel processes-panel">
+      <section class="panel processes-panel tab-section" data-tab="control">
         <h2 class="panel-title">فرآیندها (PM2)</h2>
         <div class="process-cards" id="processCards"></div>
       </section>
 
       <!-- Signal Stats -->
-      <section class="panel stats-panel">
+      <section class="panel stats-panel tab-section" data-tab="overview">
         <h2 class="panel-title">آمار سیگنال‌ها</h2>
         <div class="stat-cards">
           <div class="stat-card">
@@ -235,14 +292,48 @@
       </section>
 
       <!-- Engine State -->
-      <section class="panel engine-panel">
+      <section class="panel engine-panel tab-section" data-tab="overview">
         <h2 class="panel-title">وضعیت موتور</h2>
         <div class="engine-info" id="engineInfo"></div>
         <div class="latest-signal" id="latestSignal"></div>
       </section>
 
+      <!-- Reports & Export -->
+      <section class="panel reports-panel tab-section" data-tab="reports">
+        <h2 class="panel-title">گزارش‌دهی و خروجی</h2>
+        <div class="report-summary" id="reportSummary">
+          <div class="report-stat"><span class="report-num" id="rptAvg">—</span><span class="report-lbl">میانگین روزانه</span></div>
+          <div class="report-stat"><span class="report-num" id="rptTop">—</span><span class="report-lbl">پرسیگنال‌ترین</span></div>
+          <div class="report-stat"><span class="report-num" id="rptRatio">—</span><span class="report-lbl">نسبت BUY/SELL</span></div>
+          <div class="report-stat"><span class="report-num" id="rptRestarts">—</span><span class="report-lbl">PM2 Restarts</span></div>
+        </div>
+        <div class="report-filter">
+          <label>بازه گزارش:</label>
+          <select id="reportDays" class="log-select">
+            <option value="7">۷ روز</option>
+            <option value="30" selected>۳۰ روز</option>
+            <option value="90">۹۰ روز</option>
+            <option value="365">۱ سال</option>
+          </select>
+        </div>
+        <div class="chart-wrap chart-wrap-bar">
+          <canvas id="dailyChart"></canvas>
+        </div>
+        <div class="export-actions">
+          <button class="btn btn-export excel" id="btnExportExcel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            دانلود Excel
+          </button>
+          <button class="btn btn-export csv" id="btnExportCsv">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            دانلود CSV
+          </button>
+        </div>
+        <p class="setting-hint" id="reportGenerated">—</p>
+      </section>
+
       <!-- Settings -->
-      <section class="panel settings-panel">
+      <section class="panel settings-panel tab-section" data-tab="control">
         <h2 class="panel-title">تنظیمات</h2>
         <div class="settings-form" id="settingsForm">
           <div class="setting-row">
@@ -264,19 +355,29 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+          <div class="setting-row toggle-row">
+            <label>Debug Engine</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgDebug" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
           <button class="btn btn-primary btn-sm" id="btnSaveConfig">ذخیره تنظیمات</button>
           <p class="setting-hint">برای اعمال کامل، ربات را ری‌استارت کنید.</p>
         </div>
       </section>
 
       <!-- Signal Feed -->
-      <section class="panel signals-panel">
-        <h2 class="panel-title">آخرین سیگنال‌ها</h2>
+      <section class="panel signals-panel tab-section" data-tab="logs">
+        <div class="panel-header-row">
+          <h2 class="panel-title">آخرین سیگنال‌ها</h2>
+          <input type="search" id="signalSearch" class="search-input" placeholder="جستجو نماد..." />
+        </div>
         <div class="signal-feed" id="signalFeed"></div>
       </section>
 
       <!-- Logs -->
-      <section class="panel logs-panel">
+      <section class="panel logs-panel tab-section" data-tab="logs">
         <div class="panel-header-row">
           <h2 class="panel-title">لاگ زنده</h2>
           <select id="logSelect" class="log-select">

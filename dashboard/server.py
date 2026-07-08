@@ -4,19 +4,30 @@
 from __future__ import annotations
 
 import ast
+import csv
+import io
 import json
 import os
 import re
 import secrets
 import subprocess
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
 import psutil
-from flask import Flask, Response, jsonify, request, send_from_directory, session
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 # ── Paths ─────────────────────────────────────────────────────────────
 BOT_ROOT = Path(os.environ.get("BOT_ROOT", "/opt/trading-bot"))
@@ -198,10 +209,13 @@ def _mask(val: str) -> str:
     return val[:4] + "•" * (len(val) - 8) + val[-4:]
 
 
-def _parse_signals(limit: int = 50) -> list[dict]:
+def _parse_signals(limit: int = 50, days: int | None = None) -> list[dict]:
     if not SIGNAL_LOG.exists():
         return []
     signals: list[dict] = []
+    cutoff = None
+    if days is not None:
+        cutoff = datetime.now() - timedelta(days=days)
     pattern = re.compile(
         r"\[(?P<ts>[^\]]+)\] Signal saved → (?P<data>.+)$"
     )
@@ -209,14 +223,163 @@ def _parse_signals(limit: int = 50) -> list[dict]:
         m = pattern.search(line)
         if not m:
             continue
+        ts_str = m.group("ts")
+        if cutoff:
+            try:
+                ts_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                if ts_dt < cutoff:
+                    continue
+            except ValueError:
+                pass
         try:
             data = ast.literal_eval(m.group("data"))
         except Exception:
             continue
-        signals.append({"timestamp": m.group("ts"), **data})
+        signals.append({"timestamp": ts_str, **data})
         if len(signals) >= limit:
             break
     return signals
+
+
+def _parse_all_signals(days: int | None = None) -> list[dict]:
+    if not SIGNAL_LOG.exists():
+        return []
+    signals: list[dict] = []
+    cutoff = None
+    if days is not None:
+        cutoff = datetime.now() - timedelta(days=days)
+    pattern = re.compile(
+        r"\[(?P<ts>[^\]]+)\] Signal saved → (?P<data>.+)$"
+    )
+    for line in SIGNAL_LOG.read_text().splitlines():
+        m = pattern.search(line)
+        if not m:
+            continue
+        ts_str = m.group("ts")
+        if cutoff:
+            try:
+                ts_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                if ts_dt < cutoff:
+                    continue
+            except ValueError:
+                pass
+        try:
+            data = ast.literal_eval(m.group("data"))
+        except Exception:
+            continue
+        signals.append({"timestamp": ts_str, **data})
+    return list(reversed(signals))
+
+
+def _daily_breakdown(signals: list[dict], days: int = 7) -> list[dict]:
+    buckets: dict[str, dict] = defaultdict(lambda: {"date": "", "total": 0, "buy": 0, "sell": 0})
+    for i in range(days):
+        d = (datetime.now() - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        buckets[d] = {"date": d, "total": 0, "buy": 0, "sell": 0}
+    for s in signals:
+        day = s.get("timestamp", "")[:10]
+        if day not in buckets:
+            continue
+        buckets[day]["total"] += 1
+        direction = s.get("direction", "").upper()
+        if direction == "BUY":
+            buckets[day]["buy"] += 1
+        elif direction == "SELL":
+            buckets[day]["sell"] += 1
+    return list(buckets.values())
+
+
+def _report_summary(signals: list[dict]) -> dict:
+    stats = _signal_stats(signals)
+    daily = _daily_breakdown(signals, 7)
+    avg_per_day = round(stats["total"] / max(len([d for d in daily if d["total"] > 0]), 1), 1)
+    top_symbol = max(stats["by_symbol"], key=stats["by_symbol"].get) if stats["by_symbol"] else "—"
+    buy = stats["by_direction"].get("BUY", 0)
+    sell = stats["by_direction"].get("SELL", 0)
+    ratio = f"{round(buy / sell, 2)}:1" if sell else "—"
+    procs = [_proc_info(n) for n in PROCESSES]
+    total_restarts = sum(p.get("restarts", 0) for p in procs)
+    return {
+        **stats,
+        "daily": daily,
+        "avg_per_day": avg_per_day,
+        "top_symbol": top_symbol,
+        "buy_sell_ratio": ratio,
+        "total_restarts": total_restarts,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def _build_xlsx(signals: list[dict], summary: dict) -> io.BytesIO:
+    buf = io.BytesIO()
+    if not HAS_OPENPYXL:
+        return buf
+    wb = Workbook()
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1a2332")
+    accent_fill = PatternFill("solid", fgColor="e8f5f0")
+
+    # Summary sheet
+    ws = wb.active
+    ws.title = "Summary"
+    ws.append(["Trading Bot Performance Report"])
+    ws.append(["Generated", summary["generated_at"]])
+    ws.append([])
+    rows = [
+        ("Total Signals", summary["total"]),
+        ("Today", summary["today"]),
+        ("Average / Day (7d)", summary["avg_per_day"]),
+        ("Top Symbol", summary["top_symbol"]),
+        ("BUY Signals", summary["by_direction"].get("BUY", 0)),
+        ("SELL Signals", summary["by_direction"].get("SELL", 0)),
+        ("Buy/Sell Ratio", summary["buy_sell_ratio"]),
+        ("PM2 Restarts", summary["total_restarts"]),
+    ]
+    for label, val in rows:
+        ws.append([label, val])
+    ws.append([])
+    ws.append(["Daily Breakdown (7 days)"])
+    ws.append(["Date", "Total", "BUY", "SELL"])
+    for row in ws[5]:
+        row.font = header_font
+        row.fill = header_fill
+    for day in summary["daily"]:
+        ws.append([day["date"], day["total"], day["buy"], day["sell"]])
+
+    # Signals sheet
+    ws2 = wb.create_sheet("Signals")
+    headers = ["Timestamp", "Symbol", "Direction", "Entry", "SL", "TP1", "TP2", "RR", "Basis"]
+    ws2.append(headers)
+    for cell in ws2[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+    for s in signals:
+        ws2.append([
+            s.get("timestamp", ""),
+            s.get("symbol", ""),
+            s.get("direction", ""),
+            s.get("entry", ""),
+            s.get("sl", ""),
+            s.get("tp1", ""),
+            s.get("tp2", ""),
+            s.get("rr", ""),
+            s.get("basis", ""),
+        ])
+
+    # By symbol sheet
+    ws3 = wb.create_sheet("By Symbol")
+    ws3.append(["Symbol", "Count", "Share %"])
+    for cell in ws3[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    total = summary["total"] or 1
+    for sym, count in sorted(summary["by_symbol"].items(), key=lambda x: -x[1]):
+        ws3.append([sym, count, f"{round(count / total * 100, 1)}%"])
+
+    wb.save(buf)
+    buf.seek(0)
+    return buf
 
 
 def _signal_stats(signals: list[dict]) -> dict:
@@ -366,6 +529,8 @@ def api_status():
                 "data_provider": env.get("DATA_PROVIDER", "twelvedata"),
                 "facebook_enable": env.get("FACEBOOK_ENABLE", "1") == "1",
                 "telegram_configured": bool(env.get("TELEGRAM_BOT_TOKEN")),
+                "notifications_paused": env.get("NOTIFICATIONS_PAUSED", "0") == "1",
+                "engine_debug": env.get("ENGINE_DEBUG", "0") == "1",
             },
             "latest_signal": _read_json(SIGNAL_QUEUE),
             "signal_stats": _signal_stats(signals),
@@ -429,6 +594,7 @@ def api_config_patch():
         "DATA_PROVIDER",
         "ENGINE_DEBUG",
         "SEND_STARTUP_MESSAGE",
+        "NOTIFICATIONS_PAUSED",
     }
     updates = {k: str(v) for k, v in data.items() if k in allowed}
     if not updates:
@@ -463,6 +629,104 @@ def api_control():
         _run(["pm2", "save"])
 
     return jsonify({"results": results, "overall": _overall_status([_proc_info(t) for t in PROCESSES])})
+
+
+@app.route("/api/reports/summary")
+@auth_required
+def api_reports_summary():
+    days = request.args.get("days", 30, type=int)
+    signals = _parse_all_signals(days=min(days, 365))
+    summary = _report_summary(signals)
+    env = _parse_env()
+    summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
+    summary["engine_debug"] = env.get("ENGINE_DEBUG", "0") == "1"
+    return jsonify(summary)
+
+
+@app.route("/api/export/signals.xlsx")
+@auth_required
+def export_signals_xlsx():
+    days = request.args.get("days", 30, type=int)
+    signals = _parse_all_signals(days=min(days, 365))
+    summary = _report_summary(signals)
+    if not HAS_OPENPYXL:
+        return jsonify({"error": "openpyxl not installed"}), 500
+    buf = _build_xlsx(signals, summary)
+    fname = f"bot-report-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/api/export/signals.csv")
+@auth_required
+def export_signals_csv():
+    days = request.args.get("days", 30, type=int)
+    signals = _parse_all_signals(days=min(days, 365))
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Timestamp", "Symbol", "Direction", "Entry", "SL", "TP1", "TP2", "RR", "Basis"])
+    for s in signals:
+        writer.writerow([
+            s.get("timestamp", ""), s.get("symbol", ""), s.get("direction", ""),
+            s.get("entry", ""), s.get("sl", ""), s.get("tp1", ""), s.get("tp2", ""),
+            s.get("rr", ""), s.get("basis", ""),
+        ])
+    out = io.BytesIO(buf.getvalue().encode("utf-8-sig"))
+    fname = f"signals-{datetime.now().strftime('%Y%m%d')}.csv"
+    return send_file(out, as_attachment=True, download_name=fname, mimetype="text/csv")
+
+
+@app.route("/api/management", methods=["POST"])
+@auth_required
+def api_management():
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "")
+
+    if action == "restart_all":
+        results = []
+        for t in PROCESSES:
+            code, out, err = _run(["pm2", "restart", t])
+            results.append({"process": t, "ok": code == 0})
+        _run(["pm2", "save"])
+        return jsonify({"ok": True, "message": "All processes restarted", "results": results})
+
+    if action == "flush_logs":
+        code, out, err = _run(["pm2", "flush"])
+        return jsonify({"ok": code == 0, "message": "PM2 logs cleared"})
+
+    if action == "reset_cooldowns":
+        state = _read_json(STATE_FILE) or {}
+        state["last_signal_at"] = {}
+        state["updated_at"] = datetime.now(timezone.utc).isoformat()
+        STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+        return jsonify({"ok": True, "message": "Signal cooldowns reset"})
+
+    if action == "reset_startup_flag":
+        state = _read_json(STATE_FILE) or {}
+        state["startup_sent"] = False
+        state["updated_at"] = datetime.now(timezone.utc).isoformat()
+        STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+        return jsonify({"ok": True, "message": "Startup message flag reset"})
+
+    if action == "pause_notifications":
+        _write_env({"NOTIFICATIONS_PAUSED": "1"})
+        _run(["pm2", "stop", "signal-engine"])
+        _run(["pm2", "save"])
+        return jsonify({"ok": True, "message": "Notifications paused — engine stopped"})
+
+    if action == "resume_notifications":
+        _write_env({"NOTIFICATIONS_PAUSED": "0"})
+        _run(["pm2", "start", "signal-engine"])
+        _run(["pm2", "save"])
+        return jsonify({"ok": True, "message": "Notifications resumed — engine started"})
+
+    if action == "toggle_debug":
+        env = _parse_env()
+        current = env.get("ENGINE_DEBUG", "0") == "1"
+        _write_env({"ENGINE_DEBUG": "0" if current else "1"})
+        return jsonify({"ok": True, "debug": not current, "message": f"Debug mode {'enabled' if not current else 'disabled'}"})
+
+    return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
 @app.route("/api/stream")
