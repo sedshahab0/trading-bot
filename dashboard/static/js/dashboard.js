@@ -42,6 +42,7 @@
   const reportPayloadCache = new Map();
   const analyticsPayloadCache = new Map();
   let lastEngineStateForSymbols = null;
+  const ACTIVE_PAGE_KEY = "tc:active-page";
 
   const SYMBOL_PRESETS = [
     "EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "USD/CHF",
@@ -72,6 +73,23 @@
   function safeLocalStorageSet(key, value) {
     try {
       localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function safeSessionStorageGet(key, fallback = null) {
+    try {
+      return sessionStorage.getItem(key);
+    } catch {
+      return fallback;
+    }
+  }
+
+  function safeSessionStorageSet(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
       return true;
     } catch {
       return false;
@@ -163,6 +181,9 @@
 
   let browserNotifEnabled = safeLocalStorageGet("tc:browser-notif", "0") === "1";
   const firedAlertKeys = new Set();
+  function normalizePage(page) {
+    return PAGE_META[page] ? page : "home";
+  }
 
   const PAGE_META = {
     home: { title: "داشبورد", sub: "نمای کلی ربات" },
@@ -176,6 +197,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
+  activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
   let dashboardVersion = { label: "v2.9", full: "2.9.0", major: 2, minor: 9, patch: 0 };
   let signalsSummary = null;
 
@@ -565,12 +587,14 @@
 
   // ── Auth ──
   function showLogin() {
+    document.body.classList.remove("auth-pending");
     $("#loginOverlay").classList.remove("hidden");
     $("#dashboard").classList.add("hidden");
     stopStreams();
   }
 
   function showDashboard() {
+    document.body.classList.remove("auth-pending");
     DataCache.hydrate();
     applyAllCachedData();
     $("#loginOverlay").classList.add("hidden");
@@ -1497,6 +1521,7 @@
   function renderHourlyHeatmap(hours) {
     const canvas = $("#hourlyHeatmapChart");
     if (!canvas || !hours) return;
+    prepareChartCanvas(canvas);
     try {
       const labels = hours.map((h) => h.label);
       const totals = hours.map((h) => h.total);
@@ -1526,7 +1551,7 @@
             x: { ticks: { color: "#5c6578", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
             y: { beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
           },
-          plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
+          plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
         },
       });
       logClientEvent("chart-created", {
@@ -1909,6 +1934,7 @@
   function renderTelegramReportChart(daily) {
     const canvas = $("#telegramReportChart");
     if (!canvas || !daily) return;
+    prepareChartCanvas(canvas);
     try {
       const labels = daily.map((d) => d.date.slice(5));
       const ok = daily.map((d) => d.ok || 0);
@@ -1935,7 +1961,7 @@
           x: { stacked: true, ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
           y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
         },
-        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9) } } },
+        plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9) } } },
       },
       });
       logClientEvent("chart-created", {
@@ -2321,6 +2347,13 @@
   }
 
   // ── Dynamic expandable sidebar ──
+  function prepareChartCanvas(canvas) {
+    if (!canvas) return;
+    canvas.setAttribute("dir", "ltr");
+    canvas.style.direction = "ltr";
+    canvas.style.unicodeBidi = "isolate";
+  }
+
   function getNavGroupState(id) {
     try {
       const raw = safeLocalStorageGet("tc:nav-groups");
@@ -2415,19 +2448,20 @@
 
   // ── Page Navigation ──
   function switchPage(page, { revalidate = true } = {}) {
-    activePage = page;
-    const meta = PAGE_META[page] || PAGE_META.home;
+    activePage = normalizePage(page);
+    safeSessionStorageSet(ACTIVE_PAGE_KEY, activePage);
+    const meta = PAGE_META[activePage] || PAGE_META.home;
     if ($("#pageTitle")) $("#pageTitle").textContent = meta.title;
     if ($("#pageSub")) $("#pageSub").textContent = meta.sub;
     $$(".nav-item[data-page]").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.page === page);
+      btn.classList.toggle("active", btn.dataset.page === activePage);
     });
-    $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${page}`));
+    $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${activePage}`));
     closeSidebar();
 
-    applyPageFromCache(page);
+    applyPageFromCache(activePage);
 
-    if (page === "signals") {
+    if (activePage === "signals") {
       requestAnimationFrame(() => {
         if (signalsSummary) {
           renderSignalDailyChart(signalsSummary.daily || []);
@@ -2439,7 +2473,7 @@
       });
     }
 
-    if (page === "monitor") {
+    if (activePage === "monitor") {
       const sys = DataCache.get("system");
       if (sys && !resourceHistory.labels.length) pushResourceHistory(sys);
       syncMonitorHero(sys);
@@ -2449,7 +2483,7 @@
       });
     }
 
-    if (revalidate) ensurePageData(page).catch(() => {});
+    if (revalidate) ensurePageData(activePage).catch(() => {});
     syncLogPolling();
     syncMonitorPolling();
   }
@@ -3014,6 +3048,7 @@
   function updateChart(bySymbol) {
     const canvas = $("#symbolChart");
     if (!canvas) return;
+    prepareChartCanvas(canvas);
     const labels = Object.keys(bySymbol);
     const values = Object.values(bySymbol);
 
@@ -3055,7 +3090,7 @@
       responsive: true,
       maintainAspectRatio: false,
       devicePixelRatio: isMobileViewport() ? Math.min(dpr, 1.5) : Math.min(dpr, 2),
-      plugins: { legend: { labels: { color: "#8b95a8", font: chartFont(10) } } },
+      plugins: { legend: { rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(10) } } },
       animation: isMobileViewport() ? false : { duration: 300 },
     };
   }
@@ -3063,6 +3098,7 @@
   function renderDirectionChart(buy, sell) {
     const canvas = $("#directionChart");
     if (!canvas) return;
+    prepareChartCanvas(canvas);
     const data = [buy, sell];
     if (directionChart) {
       directionChart.data.datasets[0].data = data;
@@ -3084,7 +3120,7 @@
         ...chartDefaults(),
         cutout: "62%",
         plugins: {
-          legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
+          legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
         },
       },
     });
@@ -3093,6 +3129,7 @@
   function renderSymbolBarChart(bySymbol) {
     const canvas = $("#symbolBarChart");
     if (!canvas) return;
+    prepareChartCanvas(canvas);
     const labels = Object.keys(bySymbol);
     const values = Object.values(bySymbol);
     if (symbolBarChart) {
@@ -3190,6 +3227,7 @@
   function renderSignalDailyChart(daily) {
     const canvas = $("#signalDailyChart");
     if (!canvas) return;
+    prepareChartCanvas(canvas);
     setSignalChartState("#signalDailyChart", "#signalDailyEmpty", !!daily?.length);
     if (!daily?.length) {
       if (signalDailyChart) {
@@ -3229,7 +3267,7 @@
           x: { stacked: true, ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
           y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
         },
-        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
+        plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
       },
     });
   }
@@ -3237,6 +3275,7 @@
   function renderSignalDirChart(byDirection) {
     const canvas = $("#signalDirChart");
     if (!canvas) return;
+    prepareChartCanvas(canvas);
     const buy = byDirection.BUY || 0;
     const sell = byDirection.SELL || 0;
     setSignalChartState("#signalDirChart", "#signalDirEmpty", !!(buy || sell));
@@ -3267,7 +3306,7 @@
         ...chartDefaults(),
         cutout: "62%",
         plugins: {
-          legend: { position: "bottom", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
+          legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
         },
       },
     });
@@ -3472,6 +3511,7 @@
   function renderDailyChart(daily) {
     const canvas = $("#dailyChart");
     if (!canvas || !daily) return;
+    prepareChartCanvas(canvas);
     try {
       const labels = daily.map((d) => d.date.slice(5));
       const buys = daily.map((d) => d.buy);

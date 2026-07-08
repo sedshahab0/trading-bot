@@ -8,6 +8,11 @@
   min-height: 100dvh;
 }
 
+body.auth-pending .login-overlay,
+body.auth-pending .app-shell {
+  display: none !important;
+}
+
 /* Sidebar (right in RTL) */
 .sidebar {
   --sidebar-width: 280px;
@@ -597,6 +602,11 @@
 .chart-box { position: relative; height: 200px; }
 .chart-box.tall { height: 260px; }
 .chart-box.wide { height: 220px; }
+.chart-box,
+.chart-box canvas {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
 
 .page-toolbar {
   display: flex;
