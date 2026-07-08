@@ -298,6 +298,125 @@ def _parse_all_signals(days: int | None = None) -> list[dict]:
     return list(reversed(signals))
 
 
+def _enrich_signals(signals: list[dict], telegram_entries: list[dict]) -> list[dict]:
+    """Attach telegram delivery status and quality flags to each saved signal."""
+    tg_signals = [e for e in telegram_entries if e.get("message_type", "signal") == "signal"]
+    enriched: list[dict] = []
+    seen_recent: list[tuple[str, str, datetime]] = []
+
+    for sig in signals:
+        row = dict(sig)
+        sym = _normalize_symbol(str(sig.get("symbol", "")))
+        direction = str(sig.get("direction", "")).upper()
+        ts = _parse_ts(sig.get("timestamp", ""))
+
+        match = None
+        best_delta = 999999.0
+        for t in tg_signals:
+            if _normalize_symbol(str(t.get("symbol", ""))) != sym:
+                continue
+            t_dir = str(t.get("direction", "")).upper()
+            if t_dir and direction and t_dir != direction:
+                continue
+            t_ts = _parse_ts(t.get("timestamp", ""))
+            if ts and t_ts:
+                delta = abs((ts - t_ts).total_seconds())
+                if delta > 300:
+                    continue
+                if t.get("entry") and sig.get("entry"):
+                    try:
+                        e1 = float(t["entry"])
+                        e2 = float(sig["entry"])
+                        if abs(e1 - e2) / max(abs(e2), 1e-9) > 0.002:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+                if delta < best_delta:
+                    best_delta = delta
+                    match = t
+            elif not ts:
+                match = t
+                break
+
+        if match:
+            row["delivery_status"] = "sent" if match.get("ok") else "failed"
+            row["telegram_ok"] = bool(match.get("ok"))
+            row["telegram_detail"] = match.get("detail") or match.get("error") or ""
+            row["score"] = match.get("score") or sig.get("score")
+            row["telegram_source"] = match.get("source")
+        else:
+            row["delivery_status"] = "unsent"
+            row["telegram_ok"] = None
+            row["telegram_detail"] = "ارسال تلگرام تأیید نشده"
+            row["score"] = sig.get("score")
+
+        duplicate = False
+        if ts:
+            for psym, pdir, pts in seen_recent:
+                if psym == sym and pdir == direction and abs((ts - pts).total_seconds()) < 1800:
+                    duplicate = True
+                    break
+            seen_recent.append((sym, direction, ts))
+        row["duplicate"] = duplicate
+        if duplicate and row["delivery_status"] == "sent":
+            row["quality"] = "duplicate"
+        elif row["delivery_status"] == "failed":
+            row["quality"] = "mistaken"
+        elif row["delivery_status"] == "unsent":
+            row["quality"] = "pending"
+        else:
+            row["quality"] = "ok"
+
+        enriched.append(row)
+
+    enriched.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
+    return enriched
+
+
+def _signals_page_summary(enriched: list[dict]) -> dict:
+    today = datetime.now().strftime("%Y-%m-%d")
+    sent = [s for s in enriched if s.get("delivery_status") == "sent"]
+    failed = [s for s in enriched if s.get("delivery_status") == "failed"]
+    unsent = [s for s in enriched if s.get("delivery_status") == "unsent"]
+    dupes = [s for s in enriched if s.get("duplicate")]
+    today_list = [s for s in enriched if str(s.get("timestamp", "")).startswith(today)]
+    by_symbol: dict[str, int] = {}
+    for s in enriched:
+        sym = _normalize_symbol(str(s.get("symbol", "?")))
+        by_symbol[sym] = by_symbol.get(sym, 0) + 1
+    daily: dict[str, dict] = {}
+    for s in enriched:
+        day = str(s.get("timestamp", ""))[:10]
+        if not day:
+            continue
+        if day not in daily:
+            daily[day] = {"date": day, "total": 0, "sent": 0, "failed": 0, "unsent": 0}
+        daily[day]["total"] += 1
+        st = s.get("delivery_status", "unsent")
+        if st in daily[day]:
+            daily[day][st] += 1
+    daily_list = sorted(daily.values(), key=lambda d: d["date"])[-30:]
+    total = len(enriched) or 1
+    return {
+        "total": len(enriched),
+        "sent": len(sent),
+        "failed": len(failed),
+        "unsent": len(unsent),
+        "duplicates": len(dupes),
+        "mistaken": len(failed) + len(dupes),
+        "today": len(today_list),
+        "today_sent": len([s for s in today_list if s.get("delivery_status") == "sent"]),
+        "delivery_rate": round(len(sent) / total * 100, 1),
+        "by_symbol": by_symbol,
+        "by_direction": {
+            "BUY": len([s for s in enriched if str(s.get("direction", "")).upper() == "BUY"]),
+            "SELL": len([s for s in enriched if str(s.get("direction", "")).upper() == "SELL"]),
+        },
+        "daily": daily_list,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+
 def _normalize_symbol(sym: str) -> str:
     sym = (sym or "").strip().upper()
     if not sym:
@@ -850,16 +969,21 @@ def api_bootstrap():
     cutoff_7 = datetime.now() - timedelta(days=7)
     signals_7d = [s for s in all_signals if _signal_after(s, cutoff_7)]
     stats_signals = all_signals[:100]
+    telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
+    enriched_30 = _enrich_signals(all_signals, telegram_30)
 
     return jsonify(
         {
             "version": _dashboard_version(),
             "status": _build_status_payload(stats_signals=stats_signals),
             "system": _system_stats(),
-            "signals": all_signals[:50],
+            "signals": {
+                "signals": enriched_30[:50],
+                "summary": _signals_page_summary(enriched_30),
+            },
             "report_7": _report_summary(signals_7d, 7),
             "report_30": _report_summary(all_signals, 30),
-            "telegram": _telegram_summary(_parse_telegram_deliveries(days=30, limit=100), 30),
+            "telegram": _telegram_summary(telegram_30, 30),
         }
     )
 
@@ -890,9 +1014,38 @@ def api_system():
 @app.route("/api/signals")
 @auth_required
 def api_signals():
-    limit = request.args.get("limit", 30, type=int)
-    signals = _parse_signals(min(limit, 200))
-    return jsonify({"signals": signals, "stats": _signal_stats(signals)})
+    days = request.args.get("days", 30, type=int)
+    limit = request.args.get("limit", 100, type=int)
+    delivery = request.args.get("delivery", "all")
+    direction = request.args.get("direction", "all")
+    symbol = request.args.get("symbol", "").strip().upper()
+
+    days = min(max(days, 1), 365)
+    limit = min(max(limit, 1), 500)
+
+    raw = _parse_all_signals(days=days)
+    telegram = _parse_telegram_deliveries(days=days, limit=3000)
+    enriched = _enrich_signals(raw, telegram)
+
+    if delivery in ("sent", "failed", "unsent"):
+        enriched = [s for s in enriched if s.get("delivery_status") == delivery]
+    elif delivery == "mistaken":
+        enriched = [s for s in enriched if s.get("quality") in ("mistaken", "duplicate")]
+    elif delivery == "duplicate":
+        enriched = [s for s in enriched if s.get("duplicate")]
+
+    if direction in ("BUY", "SELL"):
+        enriched = [s for s in enriched if str(s.get("direction", "")).upper() == direction]
+
+    if symbol:
+        enriched = [s for s in enriched if symbol in _normalize_symbol(str(s.get("symbol", ""))).replace("/", "")]
+
+    summary = _signals_page_summary(_enrich_signals(raw, telegram))
+    return jsonify({
+        "signals": enriched[:limit],
+        "summary": summary,
+        "stats": _signal_stats(raw),
+    })
 
 
 @app.route("/api/logs")

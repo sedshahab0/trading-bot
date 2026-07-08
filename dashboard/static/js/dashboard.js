@@ -11,6 +11,8 @@
   let directionChart = null;
   let symbolBarChart = null;
   let telegramReportChart = null;
+  let signalDailyChart = null;
+  let signalDirChart = null;
   let homeSparkline = null;
   let resourceHistoryChart = null;
   let cpuSparkChart = null;
@@ -43,7 +45,7 @@
     home: { title: "داشبورد", sub: "نمای کلی ربات" },
     monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم" },
     control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور" },
-    signals: { title: "سیگنال‌ها", sub: "تاریخچه سیگنال‌های ارسالی" },
+    signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال" },
     reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel" },
     telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام" },
     settings: { title: "تنظیمات", sub: "پیکربندی ربات" },
@@ -51,7 +53,8 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.2", full: "2.2.0", major: 2, minor: 2, patch: 0 };
+  let dashboardVersion = { label: "v2.3", full: "2.3.0", major: 2, minor: 3, patch: 0 };
+  let signalsSummary = null;
 
   const NAV_ICONS = {
     home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
@@ -122,7 +125,7 @@
     telegram: 30000,
   };
 
-  const PERSIST_KEYS = new Set(["status", "system", "signals", "report:7", "report:30", "telegram:30"]);
+  const PERSIST_KEYS = new Set(["status", "system", "signals:30:all:all", "report:7", "report:30", "telegram:30"]);
 
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
@@ -250,6 +253,10 @@
 
   function reportCacheKey(days = 30) {
     return `report:${days}`;
+  }
+
+  function signalsCacheKey(days = 30, delivery = "all", direction = "all") {
+    return `signals:${days}:${delivery}:${direction}`;
   }
 
   function telegramCacheKey(days = 30, status = "all") {
@@ -639,10 +646,26 @@
       .join("");
   }
 
-  function applySignalsList(signals) {
-    if (!signals) return;
-    allSignals = signals;
-    renderSignals(signals);
+  function getSignalsFilterParams() {
+    return {
+      days: Number($("#signalDays")?.value || 30),
+      delivery: $("#signalDelivery")?.value || "all",
+      direction: $("#signalDirection")?.value || "all",
+    };
+  }
+
+  function applySignalsPayload(payload) {
+    if (!payload) return;
+    const list = Array.isArray(payload) ? payload : payload.signals;
+    const summary = Array.isArray(payload) ? null : payload.summary;
+    if (list) {
+      allSignals = list;
+      renderSignals(list);
+    }
+    if (summary) {
+      signalsSummary = summary;
+      applySignalsPage(summary);
+    }
   }
 
   function applyReportData(data, days = 30) {
@@ -777,8 +800,9 @@
       updateSystem(payload.system);
     }
     if (payload.signals) {
-      DataCache.set("signals", payload.signals);
-      applySignalsList(payload.signals);
+      const sigKey = signalsCacheKey(30, "all", "all");
+      DataCache.set(sigKey, payload.signals);
+      applySignalsPayload(payload.signals);
     }
     if (payload.report_7) {
       DataCache.set("report:7", payload.report_7);
@@ -825,8 +849,9 @@
         break;
       }
       case "signals": {
-        const signals = DataCache.get("signals");
-        if (signals) applySignalsList(signals);
+        const { days, delivery, direction } = getSignalsFilterParams();
+        const cached = DataCache.get(signalsCacheKey(days, delivery, direction));
+        if (cached) applySignalsPayload(cached);
         break;
       }
       case "reports": {
@@ -878,13 +903,15 @@
   }
 
   async function fetchSignals({ force = false } = {}) {
+    const { days, delivery, direction } = getSignalsFilterParams();
+    const key = signalsCacheKey(days, delivery, direction);
     const data = await DataCache.load(
-      "signals",
-      async () => (await api("/api/signals?limit=50")).signals,
+      key,
+      () => api(`/api/signals?days=${days}&delivery=${delivery}&direction=${direction}&limit=100`),
       CACHE_TTL.signals,
       { force }
     );
-    applySignalsList(data);
+    applySignalsPayload(data);
     return data;
   }
 
@@ -920,6 +947,8 @@
       applyReportData(data, Number(key.split(":")[1] || 30));
     } else if (key.startsWith("telegram:")) {
       applyTelegramData(data);
+    } else if (key.startsWith("signals:")) {
+      applySignalsPayload(data);
     }
     _emitRevalidateOrig(key, data);
   };
@@ -1105,6 +1134,18 @@
     closeSidebar();
 
     applyPageFromCache(page);
+
+    if (page === "signals") {
+      requestAnimationFrame(() => {
+        if (signalsSummary) {
+          renderSignalDailyChart(signalsSummary.daily || []);
+          renderSignalDirChart(signalsSummary.by_direction || {});
+        } else {
+          signalDailyChart?.resize();
+          signalDirChart?.resize();
+        }
+      });
+    }
 
     if (revalidate) ensurePageData(page).catch(() => {});
     syncLogPolling();
@@ -1647,6 +1688,131 @@
     });
   }
 
+  function fmtPrice(v) {
+    if (v == null || v === "") return "—";
+    const n = Number(v);
+    if (Number.isNaN(n)) return String(v);
+    if (n >= 1000) return n.toFixed(2);
+    if (n >= 100) return n.toFixed(3);
+    if (n >= 10) return n.toFixed(4);
+    return n.toFixed(5);
+  }
+
+  const DELIVERY_META = {
+    sent: { label: "✓ ارسال شد", cls: "sent", icon: "✓" },
+    failed: { label: "✗ خطای ارسال", cls: "failed", icon: "✗" },
+    unsent: { label: "؟ بدون تأیید", cls: "unsent", icon: "?" },
+  };
+
+  function applySignalsPage(summary) {
+    if (!summary) return;
+    if ($("#sigSentTotal")) $("#sigSentTotal").textContent = summary.sent ?? 0;
+    if ($("#sigFailedTotal")) $("#sigFailedTotal").textContent = summary.failed ?? 0;
+    if ($("#sigUnsentTotal")) $("#sigUnsentTotal").textContent = summary.unsent ?? 0;
+    if ($("#sigRateTotal")) $("#sigRateTotal").textContent = `${summary.delivery_rate ?? 0}%`;
+    if ($("#sigToday")) $("#sigToday").textContent = summary.today ?? 0;
+    if ($("#sigTotal")) $("#sigTotal").textContent = summary.total ?? 0;
+    if ($("#sigHeroUpdated")) {
+      $("#sigHeroUpdated").textContent = summary.generated_at ? `بروزرسانی ${summary.generated_at}` : "—";
+    }
+    const dir = summary.by_direction || {};
+    if ($("#sigBuyCount")) $("#sigBuyCount").textContent = dir.BUY ?? 0;
+    if ($("#sigSellCount")) $("#sigSellCount").textContent = dir.SELL ?? 0;
+    if ($("#sigDupCount")) $("#sigDupCount").textContent = summary.duplicates ?? 0;
+    if ($("#sigTopSymbol")) {
+      const top = summary.by_symbol
+        ? Object.entries(summary.by_symbol).sort((a, b) => b[1] - a[1])[0]
+        : null;
+      $("#sigTopSymbol").textContent = top ? top[0] : "—";
+    }
+    renderSignalDailyChart(summary.daily || []);
+    renderSignalDirChart(dir);
+  }
+
+  function renderSignalDailyChart(daily) {
+    const canvas = $("#signalDailyChart");
+    if (!canvas) return;
+    if (!daily?.length) {
+      if (signalDailyChart) {
+        signalDailyChart.data.labels = [];
+        signalDailyChart.data.datasets.forEach((d) => (d.data = []));
+        signalDailyChart.update("none");
+      }
+      return;
+    }
+    const labels = daily.map((d) => d.date.slice(5));
+    const sent = daily.map((d) => d.sent || 0);
+    const failed = daily.map((d) => d.failed || 0);
+    const unsent = daily.map((d) => d.unsent || 0);
+
+    if (signalDailyChart) {
+      signalDailyChart.data.labels = labels;
+      signalDailyChart.data.datasets[0].data = sent;
+      signalDailyChart.data.datasets[1].data = failed;
+      signalDailyChart.data.datasets[2].data = unsent;
+      signalDailyChart.update("none");
+      return;
+    }
+
+    signalDailyChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "ارسال موفق", data: sent, backgroundColor: "rgba(74,222,128,0.75)", borderRadius: 4, stack: "s" },
+          { label: "خطا", data: failed, backgroundColor: "rgba(248,113,113,0.75)", borderRadius: 4, stack: "s" },
+          { label: "بدون تأیید", data: unsent, backgroundColor: "rgba(251,191,36,0.65)", borderRadius: 4, stack: "s" },
+        ],
+      },
+      options: {
+        ...chartDefaults(),
+        scales: {
+          x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+        },
+        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, boxWidth: 10 } } },
+      },
+    });
+  }
+
+  function renderSignalDirChart(byDirection) {
+    const canvas = $("#signalDirChart");
+    if (!canvas) return;
+    const buy = byDirection.BUY || 0;
+    const sell = byDirection.SELL || 0;
+    if (!buy && !sell) {
+      if (signalDirChart) {
+        signalDirChart.data.datasets[0].data = [0, 0];
+        signalDirChart.update("none");
+      }
+      return;
+    }
+    if (signalDirChart) {
+      signalDirChart.data.datasets[0].data = [buy, sell];
+      signalDirChart.update("none");
+      return;
+    }
+    signalDirChart = new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["BUY", "SELL"],
+        datasets: [{
+          data: [buy, sell],
+          backgroundColor: ["rgba(74,222,128,0.85)", "rgba(248,113,113,0.85)"],
+          borderWidth: 0,
+          hoverOffset: 8,
+        }],
+      },
+      options: {
+        ...chartDefaults(),
+        cutout: "62%",
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, padding: 16 } },
+        },
+      },
+    });
+  }
+
   function renderSignals(signals) {
     const feed = $("#signalFeed");
     if (!feed || !signals) return;
@@ -1654,24 +1820,63 @@
     const filtered = q
       ? signals.filter((s) => (s.symbol || "").toUpperCase().includes(q))
       : signals;
-    feed.innerHTML = filtered.length
-      ? filtered
-          .map(
-            (s, i) => {
-              const dir = (s.direction || "").toUpperCase();
-              return `
-        <div class="signal-item" style="animation-delay:${i * 0.05}s">
-          <span class="time">${s.timestamp || ""}</span>
-          <div>
-            <span class="sym">${s.symbol}</span>
-            <span class="sig-badge ${dir === "BUY" ? "buy" : "sell"}" style="margin-right:0.5rem">${dir}</span>
+
+    if ($("#sigFeedCount")) {
+      const total = signalsSummary?.total ?? signals.length;
+      $("#sigFeedCount").textContent = filtered.length === total
+        ? `${total} سیگنال`
+        : `${filtered.length} از ${total} سیگنال`;
+    }
+
+    if (!filtered.length) {
+      feed.innerHTML = '<p class="signals-empty">سیگنالی با این فیلتر یافت نشد</p>';
+      return;
+    }
+
+    feed.innerHTML = filtered
+      .map((s, i) => {
+        const dir = (s.direction || "").toUpperCase();
+        const isBuy = dir === "BUY";
+        const delivery = s.delivery_status || "unsent";
+        const meta = DELIVERY_META[delivery] || DELIVERY_META.unsent;
+        const cardCls = s.duplicate ? `${meta.cls} duplicate` : meta.cls;
+        const dupBadge = s.duplicate
+          ? '<span class="delivery-badge duplicate">⚠ تکراری</span>'
+          : "";
+        const score = s.score != null && s.score !== "" ? s.score : "—";
+        const basis = s.basis
+          ? `<div class="signal-basis">${esc(s.basis.length > 120 ? s.basis.slice(0, 120) + "…" : s.basis)}</div>`
+          : "";
+        const tgNote = s.telegram_detail
+          ? `<div class="signal-tg-note">${esc(s.telegram_detail)}</div>`
+          : "";
+
+        return `
+        <article class="signal-card ${cardCls}" style="animation-delay:${Math.min(i * 0.04, 0.8)}s">
+          <div class="signal-card-icon" aria-hidden="true">${meta.icon}</div>
+          <div class="signal-card-main">
+            <div class="signal-card-head">
+              <span class="signal-card-symbol">${esc(s.symbol || "?")}</span>
+              <span class="sig-dir-badge ${isBuy ? "buy" : "sell"}">${dir || "—"}</span>
+              <span class="delivery-badge ${meta.cls}">${meta.label}</span>
+              ${dupBadge}
+              <span class="signal-card-time">${esc(s.timestamp || "")}</span>
+            </div>
+            <div class="signal-levels">
+              <div class="signal-lvl entry"><label>Entry</label><span>${fmtPrice(s.entry)}</span></div>
+              <div class="signal-lvl sl"><label>SL</label><span>${fmtPrice(s.sl)}</span></div>
+              <div class="signal-lvl tp"><label>TP1</label><span>${fmtPrice(s.tp1)}</span></div>
+              <div class="signal-lvl"><label>RR</label><span>${s.rr != null && s.rr !== "" ? esc(String(s.rr)) : "—"}</span></div>
+            </div>
+            ${basis}
+            ${tgNote}
           </div>
-          <span class="entry-info">E:${s.entry} SL:${s.sl}</span>
-        </div>`;
-            }
-          )
-          .join("")
-      : '<p style="color:var(--text-muted);text-align:center;padding:1rem">سیگنالی یافت نشد</p>';
+          <div class="signal-card-side">
+            <div class="signal-score-ring" title="امتیاز سیگنال">${esc(String(score))}</div>
+          </div>
+        </article>`;
+      })
+      .join("");
   }
 
   function colorizeLog(line) {
@@ -1880,6 +2085,9 @@
   $("#telegramDays")?.addEventListener("change", () => refreshTelegram({ force: true }));
 
   $("#signalSearch")?.addEventListener("input", () => renderSignals(allSignals));
+  $("#signalDays")?.addEventListener("change", () => refreshSignals({ force: true }));
+  $("#signalDelivery")?.addEventListener("change", () => refreshSignals({ force: true }));
+  $("#signalDirection")?.addEventListener("change", () => refreshSignals({ force: true }));
 
   async function refreshSystem({ force = false } = {}) {
     try {
@@ -1989,7 +2197,6 @@
   // Background cache refresh hooks
   DataCache.onRevalidate("status", applyStatusData);
   DataCache.onRevalidate("system", updateSystem);
-  DataCache.onRevalidate("signals", applySignalsList);
   DataCache.onRevalidate("telegram:30", applyTelegramData);
 
   // ── Init ──
