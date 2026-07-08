@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Bot Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/dashboard.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="bg-mesh"></div>
+  <div class="bg-grid"></div>
+  <div class="particles" id="particles"></div>
+
+  <!-- Login -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-card animate-in">
+      <div class="login-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <h1>Trading Bot</h1>
+      <p>داشبورد کنترل ربات سیگنال</p>
+      <form id="loginForm">
+        <input type="password" id="loginPassword" placeholder="رمز عبور" autocomplete="current-password" />
+        <button type="submit" class="btn btn-primary">ورود</button>
+      </form>
+      <p class="login-error" id="loginError"></p>
+    </div>
+  </div>
+
+  <!-- Main Dashboard -->
+  <div class="dashboard hidden" id="dashboard">
+    <!-- Header -->
+    <header class="header animate-in">
+      <div class="header-left">
+        <div class="logo">
+          <div class="logo-icon pulse-ring">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <div>
+            <h1>Trading Signal Bot</h1>
+            <span class="version">v2.0 · Multi-Indicator Engine</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="live-badge">
+          <span class="live-dot"></span>
+          <span id="liveTime">--:--:--</span>
+        </div>
+        <button class="btn btn-danger" id="btnStopAll">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+          توقف ربات
+        </button>
+        <button class="btn btn-success" id="btnStartAll">
+          <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>
+          راه‌اندازی
+        </button>
+        <button class="btn btn-ghost" id="btnLogout" title="خروج">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Status Banner -->
+    <section class="status-banner animate-in delay-1" id="statusBanner">
+      <div class="status-indicator" id="statusIndicator"></div>
+      <div class="status-text">
+        <span class="status-label" id="statusLabel">در حال بارگذاری...</span>
+        <span class="status-sub" id="statusSub"></span>
+      </div>
+      <div class="status-meta">
+        <span class="tag" id="hostTag">—</span>
+        <span class="tag tag-ip" id="ipTag">65.109.179.227</span>
+      </div>
+    </section>
+
+    <!-- System Resources -->
+    <section class="section animate-in delay-2">
+      <h2 class="section-title">منابع سیستم</h2>
+      <div class="resource-grid">
+        <div class="resource-card" data-metric="cpu">
+          <div class="resource-header">
+            <span class="resource-label">CPU</span>
+            <span class="resource-value" id="cpuValue">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill cpu-fill" id="cpuBar" style="width:0%"></div></div>
+          <span class="resource-sub">ربات: <strong id="cpuBot">0%</strong></span>
+        </div>
+        <div class="resource-card" data-metric="ram">
+          <div class="resource-header">
+            <span class="resource-label">RAM</span>
+            <span class="resource-value" id="ramValue">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill ram-fill" id="ramBar" style="width:0%"></div></div>
+          <span class="resource-sub"><strong id="ramTotal">0</strong> GB · ربات: <strong id="ramBot">0</strong> MB</span>
+        </div>
+        <div class="resource-card" data-metric="disk">
+          <div class="resource-header">
+            <span class="resource-label">DISK</span>
+            <span class="resource-value" id="diskValue">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill disk-fill" id="diskBar" style="width:0%"></div></div>
+          <span class="resource-sub">آزاد: <strong id="diskFree">0</strong> GB</span>
+        </div>
+        <div class="resource-card" data-metric="net">
+          <div class="resource-header">
+            <span class="resource-label">NET</span>
+            <span class="resource-value" id="netValue">0 KB/s</span>
+          </div>
+          <div class="net-bars">
+            <div class="net-row"><span>↓</span><div class="progress-bar sm"><div class="progress-fill net-down" id="netDownBar"></div></div><span id="netDown">0</span></div>
+            <div class="net-row"><span>↑</span><div class="progress-bar sm"><div class="progress-fill net-up" id="netUpBar"></div></div><span id="netUp">0</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Grid -->
+    <div class="main-grid animate-in delay-3">
+      <!-- Process Cards -->
+      <section class="panel processes-panel">
+        <h2 class="panel-title">فرآیندها (PM2)</h2>
+        <div class="process-cards" id="processCards"></div>
+      </section>
+
+      <!-- Signal Stats -->
+      <section class="panel stats-panel">
+        <h2 class="panel-title">آمار سیگنال‌ها</h2>
+        <div class="stat-cards">
+          <div class="stat-card">
+            <span class="stat-num" id="statToday">0</span>
+            <span class="stat-label">امروز</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="statTotal">0</span>
+            <span class="stat-label">کل</span>
+          </div>
+          <div class="stat-card buy">
+            <span class="stat-num" id="statBuy">0</span>
+            <span class="stat-label">BUY</span>
+          </div>
+          <div class="stat-card sell">
+            <span class="stat-num" id="statSell">0</span>
+            <span class="stat-label">SELL</span>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="symbolChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Engine State -->
+      <section class="panel engine-panel">
+        <h2 class="panel-title">وضعیت موتور</h2>
+        <div class="engine-info" id="engineInfo"></div>
+        <div class="latest-signal" id="latestSignal"></div>
+      </section>
+
+      <!-- Settings -->
+      <section class="panel settings-panel">
+        <h2 class="panel-title">تنظیمات</h2>
+        <div class="settings-form" id="settingsForm">
+          <div class="setting-row">
+            <label>نمادها</label>
+            <input type="text" id="cfgSymbols" />
+          </div>
+          <div class="setting-row">
+            <label>حداقل امتیاز</label>
+            <input type="number" id="cfgMinScore" min="1" max="20" />
+          </div>
+          <div class="setting-row">
+            <label>فاصله بررسی (ثانیه)</label>
+            <input type="number" id="cfgPoll" min="10" max="300" />
+          </div>
+          <div class="setting-row toggle-row">
+            <label>ارسال به Facebook</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgFacebook" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btnSaveConfig">ذخیره تنظیمات</button>
+          <p class="setting-hint">برای اعمال کامل، ربات را ری‌استارت کنید.</p>
+        </div>
+      </section>
+
+      <!-- Signal Feed -->
+      <section class="panel signals-panel">
+        <h2 class="panel-title">آخرین سیگنال‌ها</h2>
+        <div class="signal-feed" id="signalFeed"></div>
+      </section>
+
+      <!-- Logs -->
+      <section class="panel logs-panel">
+        <div class="panel-header-row">
+          <h2 class="panel-title">لاگ زنده</h2>
+          <select id="logSelect" class="log-select">
+            <option value="signal-engine">Signal Engine</option>
+            <option value="signal-server-out">Signal Server (out)</option>
+            <option value="signal-server-err">Signal Server (err)</option>
+            <option value="facebook">Facebook Log</option>
+          </select>
+        </div>
+        <div class="terminal" id="terminal">
+          <div class="terminal-header">
+            <span class="term-dot red"></span>
+            <span class="term-dot yellow"></span>
+            <span class="term-dot green"></span>
+            <span class="term-title">pm2 logs</span>
+          </div>
+          <pre class="terminal-body" id="terminalBody"></pre>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
