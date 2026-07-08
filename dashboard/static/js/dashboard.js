@@ -39,6 +39,8 @@
   let symbolsDraft = [];
   let symbolsPool = [];
   let symbolsEnabled = new Set();
+  const reportPayloadCache = new Map();
+  const analyticsPayloadCache = new Map();
   let lastEngineStateForSymbols = null;
 
   const SYMBOL_PRESETS = [
@@ -105,6 +107,29 @@
     };
     console.error(`[${scope}]`, err);
     logClientEvent("client-error", detail);
+  }
+
+  function destroyReportCharts() {
+    [dailyChart, directionChart, symbolBarChart, telegramReportChart, hourlyHeatmapChart].forEach((chart) => {
+      try {
+        chart?.destroy();
+      } catch {}
+    });
+    dailyChart = null;
+    directionChart = null;
+    symbolBarChart = null;
+    telegramReportChart = null;
+    hourlyHeatmapChart = null;
+  }
+
+  function rebuildReportCharts(days = 30) {
+    const report = reportPayloadCache.get(days);
+    const analytics = analyticsPayloadCache.get(days);
+    if (!report && !analytics) return;
+    destroyReportCharts();
+    if (report) applyReportData(report, days);
+    if (analytics) applyAnalyticsPayload(analytics, days);
+    resizeReportCharts();
   }
 
   function clearDashboardCache() {
@@ -424,6 +449,7 @@
 
   function applyAnalyticsPayload(payload, days = 30) {
     if (!payload) return;
+    analyticsPayloadCache.set(days, payload);
     logClientEvent("analytics-apply", {
       days,
       symbols: payload.symbols?.symbols?.length || 0,
@@ -1721,6 +1747,7 @@
 
   function applyReportData(data, days = 30) {
     if (!data) return;
+    reportPayloadCache.set(days, data);
     logClientEvent("report-apply", {
       days,
       total: data.total ?? null,
@@ -1999,9 +2026,9 @@
           renderHourlyHeatmap(analytics.hourly?.hours || []);
         }
         requestAnimationFrame(() => {
-          resizeReportCharts();
-          setTimeout(() => resizeReportCharts(), 120);
-          setTimeout(() => resizeReportCharts(), 300);
+          rebuildReportCharts(days);
+          setTimeout(() => rebuildReportCharts(days), 120);
+          setTimeout(() => rebuildReportCharts(days), 300);
         });
         break;
       }
