@@ -6,7 +6,7 @@
   <title>Trading Bot Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -17,20 +17,94 @@
 
   <!-- Login -->
   <div class="login-overlay" id="loginOverlay">
-    <div class="login-card animate-in">
-      <div class="login-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-        </svg>
+    <div class="login-orbs">
+      <div class="login-orb orb-1"></div>
+      <div class="login-orb orb-2"></div>
+      <div class="login-orb orb-3"></div>
+    </div>
+
+    <div class="login-wrap animate-in">
+      <!-- Brand side -->
+      <div class="login-brand">
+        <div class="login-brand-inner">
+          <div class="brand-logo">
+            <div class="brand-logo-ring"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <span class="brand-tag">Forex TradeChi</span>
+          <h1 class="brand-title">Signal Bot<br/><span>Control Panel</span></h1>
+          <p class="brand-desc">مدیریت حرفه‌ای ربات سیگنال‌دهی با تحلیل چند اندیکاتوره</p>
+          <ul class="brand-features">
+            <li>
+              <span class="feat-icon">◈</span>
+              <span>مانیتورینگ لحظه‌ای سرور و ربات</span>
+            </li>
+            <li>
+              <span class="feat-icon">◈</span>
+              <span>کنترل PM2 — روشن / خاموش / ری‌استارت</span>
+            </li>
+            <li>
+              <span class="feat-icon">◈</span>
+              <span>Telegram · Facebook · MT5 Bridge</span>
+            </li>
+          </ul>
+        </div>
       </div>
-      <h1>Trading Bot</h1>
-      <p>داشبورد کنترل ربات سیگنال</p>
-      <form id="loginForm">
-        <input type="text" id="loginUsername" placeholder="نام کاربری" autocomplete="username" />
-        <input type="password" id="loginPassword" placeholder="رمز عبور" autocomplete="current-password" />
-        <button type="submit" class="btn btn-primary">ورود</button>
-      </form>
-      <p class="login-error" id="loginError"></p>
+
+      <!-- Form side -->
+      <div class="login-panel">
+        <div class="login-panel-inner">
+          <div class="login-panel-header">
+            <h2>ورود به داشبورد</h2>
+            <p>نام کاربری و رمز عبور خود را وارد کنید</p>
+          </div>
+
+          <form id="loginForm" class="login-form">
+            <div class="field-group">
+              <label for="loginUsername">نام کاربری</label>
+              <div class="input-wrap">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input type="text" id="loginUsername" placeholder="admin" autocomplete="username" />
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label for="loginPassword">رمز عبور</label>
+              <div class="input-wrap">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+                <button type="button" class="toggle-pw" id="togglePassword" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" class="login-submit" id="loginSubmit">
+              <span class="login-submit-text">ورود به پنل</span>
+              <span class="login-submit-loader hidden"></span>
+            </button>
+          </form>
+
+          <p class="login-error" id="loginError"></p>
+
+          <div class="login-footer">
+            <span class="domain-badge">
+              <span class="domain-dot"></span>
+              agennews.store
+            </span>
+            <span class="secure-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              اتصال امن
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -56,17 +130,19 @@
           <span class="live-dot"></span>
           <span id="liveTime">--:--:--</span>
         </div>
-        <button class="btn btn-danger" id="btnStopAll">
-          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
-          توقف ربات
-        </button>
-        <button class="btn btn-success" id="btnStartAll">
-          <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>
-          راه‌اندازی
-        </button>
-        <button class="btn btn-ghost" id="btnLogout" title="خروج">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-        </button>
+        <div class="header-actions">
+          <button class="btn btn-danger" id="btnStopAll">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+            <span class="btn-label">توقف</span>
+          </button>
+          <button class="btn btn-success" id="btnStartAll">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>
+            <span class="btn-label">روشن</span>
+          </button>
+          <button class="btn btn-ghost" id="btnLogout" title="خروج">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -79,7 +155,7 @@
       </div>
       <div class="status-meta">
         <span class="tag" id="hostTag">—</span>
-        <span class="tag tag-ip" id="ipTag">65.109.179.227</span>
+        <span class="tag tag-ip" id="ipTag">agennews.store</span>
       </div>
     </section>
 

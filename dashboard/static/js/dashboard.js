@@ -95,17 +95,36 @@
     e.preventDefault();
     const username = $("#loginUsername").value.trim();
     const password = $("#loginPassword").value;
+    const submitBtn = $("#loginSubmit");
+    const submitText = submitBtn?.querySelector(".login-submit-text");
+    const submitLoader = submitBtn?.querySelector(".login-submit-loader");
+
+    submitBtn.disabled = true;
+    submitText?.classList.add("hidden");
+    submitLoader?.classList.remove("hidden");
+    $("#loginError").textContent = "";
+
     try {
       await api("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
       isAuthenticated = true;
-      $("#loginError").textContent = "";
       showDashboard();
     } catch {
       $("#loginError").textContent = "نام کاربری یا رمز عبور اشتباه است";
+    } finally {
+      submitBtn.disabled = false;
+      submitText?.classList.remove("hidden");
+      submitLoader?.classList.add("hidden");
     }
+  });
+
+  $("#togglePassword")?.addEventListener("click", () => {
+    const input = $("#loginPassword");
+    if (!input) return;
+    const isPassword = input.type === "password";
+    input.type = isPassword ? "text" : "password";
   });
 
   $("#btnLogout")?.addEventListener("click", async () => {
