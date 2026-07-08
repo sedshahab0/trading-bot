@@ -572,6 +572,32 @@
     setTimeout(() => (el.style.transform = "scale(1)"), 200);
   }
 
+  /** Accept "YYYY-MM-DD HH:MM:SS" or "HH:MM:SS" from status/SSE. */
+  function formatServerTime(raw) {
+    if (!raw) return "--:--:--";
+    const text = String(raw).trim();
+    if (!text) return "--:--:--";
+    const space = text.indexOf(" ");
+    return space >= 0 ? text.slice(space + 1) : text;
+  }
+
+  function updateLiveClock(raw) {
+    if ($("#liveTime")) $("#liveTime").textContent = formatServerTime(raw);
+    if ($("#heroUpdated")) {
+      $("#heroUpdated").textContent = raw ? `بروزرسانی ${raw}` : "—";
+    }
+  }
+
+  function setText(sel, val) {
+    const el = $(sel);
+    if (el) el.textContent = val ?? "—";
+  }
+
+  function setBarWidth(sel, pct) {
+    const el = $(sel);
+    if (el) el.style.width = `${pct}%`;
+  }
+
   /** Stable counter display — no scale animation, tabular nums, skip if unchanged. */
   function setStableCounter(el, newVal) {
     if (!el) return;
@@ -785,9 +811,7 @@
     renderLatestSignal(data.latest_signal);
     renderStats(data.signal_stats, data);
     renderHomeSecondary(data);
-    const time = data.server_time || "";
-    if ($("#liveTime")) $("#liveTime").textContent = time.split(" ")[1] || "--:--:--";
-    if ($("#heroUpdated")) $("#heroUpdated").textContent = time ? `بروزرسانی ${time}` : "";
+    updateLiveClock(data.server_time);
 
     const cfg = data.config || {};
     if ($("#cfgSymbols")) $("#cfgSymbols").value = cfg.symbols || "";
@@ -1735,6 +1759,8 @@
     if (payload.system) {
       DataCache.set("system", payload.system);
       updateSystem(payload.system);
+    } else {
+      syncMonitorHero();
     }
     if (payload.signals) {
       const sigKey = signalsCacheKey(30, "all", "all", "all");
@@ -1790,11 +1816,12 @@
         const status = DataCache.get("status");
         const sys = DataCache.get("system");
         const uptime = DataCache.get("uptime");
-        if (sys) updateSystem(sys);
         if (status) {
           renderEngineState(status.engine_state);
           renderMonitorProcesses(status.processes);
         }
+        if (sys) updateSystem(sys);
+        else syncMonitorHero();
         if (uptime) renderUptimeHistory(uptime);
         requestAnimationFrame(() => {
           refreshMonitorLiveCharts({ recreate: true });
@@ -2191,6 +2218,7 @@
     if (page === "monitor") {
       const sys = DataCache.get("system");
       if (sys && !resourceHistory.labels.length) pushResourceHistory(sys);
+      syncMonitorHero(sys);
       requestAnimationFrame(() => {
         refreshMonitorLiveCharts({ recreate: true });
         setTimeout(() => refreshMonitorLiveCharts(), 400);
@@ -2289,10 +2317,10 @@
   }
 
   function computeHealthScore(sys, procs) {
-    if (!sys) return 0;
-    const cpuScore = Math.max(0, 100 - sys.cpu.total);
-    const ramScore = Math.max(0, 100 - sys.ram.used_pct);
-    const diskScore = Math.max(0, 100 - sys.disk.used_pct);
+    if (!sys?.cpu || !sys?.ram || !sys?.disk) return 0;
+    const cpuScore = Math.max(0, 100 - (sys.cpu.total ?? 0));
+    const ramScore = Math.max(0, 100 - (sys.ram.used_pct ?? 0));
+    const diskScore = Math.max(0, 100 - (sys.disk.used_pct ?? 0));
     const procScore = procs?.length
       ? (procs.filter((p) => p.status === "online").length / procs.length) * 100
       : 50;
@@ -2564,10 +2592,19 @@
           </div>
         </div>`;
     }).join("");
+    syncMonitorHero(null, lastProcesses);
+  }
+
+  function syncMonitorHero(sys = null, procs = null) {
+    const payload = sys || DataCache.get("system");
+    if (!payload) return;
+    try {
+      updateMonitorHero(payload, procs || lastProcesses);
+    } catch {}
   }
 
   function updateMonitorHero(sys, procs) {
-    if (!sys) return;
+    if (!sys?.cpu || !sys?.ram || !sys?.disk) return;
     const score = computeHealthScore(sys, procs || lastProcesses);
     const health = healthFromPct(score);
     setGaugeArc($("#monitorScoreArc"), score, 327);
@@ -2576,11 +2613,13 @@
     const scoreNum = $("#monitorScoreNum");
     if (scoreNum) scoreNum.textContent = score;
     if ($("#monHealthScore")) $("#monHealthScore").textContent = `${score}%`;
-    if ($("#monHost")) $("#monHost").textContent = sys.hostname;
-    if ($("#monUptime")) $("#monUptime").textContent = formatUptime(sys.uptime_secs);
-    if ($("#monBotRam")) $("#monBotRam").textContent = `${sys.ram.bot_mb} MB`;
-    if ($("#monitorHostTitle")) $("#monitorHostTitle").textContent = sys.hostname;
-    if ($("#monitorHostSub")) $("#monitorHostSub").textContent = `CPU ${sys.cpu.total}% · RAM ${sys.ram.used_pct}% · Disk ${sys.disk.used_pct}%`;
+    setText("#monHost", sys.hostname || "—");
+    setText("#monUptime", formatUptime(sys.uptime_secs ?? 0));
+    setText("#monBotRam", `${sys.ram.bot_mb ?? 0} MB`);
+    if ($("#monitorHostTitle")) $("#monitorHostTitle").textContent = sys.hostname || "سرور";
+    if ($("#monitorHostSub")) {
+      $("#monitorHostSub").textContent = `CPU ${sys.cpu.total ?? 0}% · RAM ${sys.ram.used_pct ?? 0}% · Disk ${sys.disk.used_pct ?? 0}%`;
+    }
     if ($("#monitorHealthLabel")) $("#monitorHealthLabel").textContent = health.label;
     const dot = $("#monitorHealthDot");
     if (dot) dot.className = `status-indicator ${health.cls === "good" ? "running" : health.cls === "warn" ? "partial" : "stopped"}`;
@@ -2589,35 +2628,35 @@
   }
 
   function updateSystem(sys) {
-    if (!sys) return;
-    animateValue($("#cpuValue"), `${sys.cpu.total}%`);
-    animateValue($("#ramValue"), `${sys.ram.used_pct}%`);
-    animateValue($("#diskValue"), `${sys.disk.used_pct}%`);
+    if (!sys?.cpu || !sys?.ram || !sys?.disk) return;
+    animateValue($("#cpuValue"), `${sys.cpu.total ?? 0}%`);
+    animateValue($("#ramValue"), `${sys.ram.used_pct ?? 0}%`);
+    animateValue($("#diskValue"), `${sys.disk.used_pct ?? 0}%`);
 
-    setGaugeArc($("#cpuGaugeArc"), sys.cpu.total);
-    setGaugeArc($("#ramGaugeArc"), sys.ram.used_pct);
-    setGaugeArc($("#diskGaugeArc"), sys.disk.used_pct);
+    setGaugeArc($("#cpuGaugeArc"), sys.cpu.total ?? 0);
+    setGaugeArc($("#ramGaugeArc"), sys.ram.used_pct ?? 0);
+    setGaugeArc($("#diskGaugeArc"), sys.disk.used_pct ?? 0);
 
-    $("#cpuBot").textContent = `${sys.cpu.bot}%`;
-    $("#ramTotal").textContent = sys.ram.total_gb;
-    $("#ramBot").textContent = sys.ram.bot_mb;
-    $("#diskFree").textContent = sys.disk.free_gb;
+    setText("#cpuBot", `${sys.cpu.bot ?? 0}%`);
+    setText("#ramTotal", String(sys.ram.total_gb ?? 0));
+    setText("#ramBot", String(sys.ram.bot_mb ?? 0));
+    setText("#diskFree", String(sys.disk.free_gb ?? 0));
 
-    const down = sys.network.down_kbps;
-    const up = sys.network.up_kbps;
-    $("#netValue").textContent = `${Math.max(down, up).toFixed(1)} KB/s`;
-    $("#netDown").textContent = `${down} KB/s`;
-    $("#netUp").textContent = `${up} KB/s`;
-    $("#netDownBar").style.width = `${Math.min(down / 5, 100)}%`;
-    $("#netUpBar").style.width = `${Math.min(up / 5, 100)}%`;
+    const down = Number(sys.network?.down_kbps ?? 0);
+    const up = Number(sys.network?.up_kbps ?? 0);
+    setText("#netValue", `${Math.max(down, up).toFixed(1)} KB/s`);
+    setText("#netDown", `${down} KB/s`);
+    setText("#netUp", `${up} KB/s`);
+    setBarWidth("#netDownBar", Math.min(down / 5, 100));
+    setBarWidth("#netUpBar", Math.min(up / 5, 100));
 
-    $("#hostTag").textContent = sys.hostname;
-    if ($("#heroUptime")) $("#heroUptime").textContent = formatUptime(sys.uptime_secs);
+    setText("#hostTag", sys.hostname || "—");
+    if ($("#heroUptime")) $("#heroUptime").textContent = formatUptime(sys.uptime_secs ?? 0);
 
     pushResourceHistory(sys);
     handleResourceAlerts(sys);
     if (sys.ops) applyOpsConfig(sys.ops);
-    updateMonitorHero(sys, lastProcesses);
+    syncMonitorHero(sys, lastProcesses);
     if ($("#monitorSyncTime")) {
       $("#monitorSyncTime").textContent = `آخرین بروزرسانی: ${new Date().toLocaleTimeString("fa-IR")}`;
     }
@@ -3417,10 +3456,14 @@
     eventSource.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+        if (data.processes) renderMonitorProcesses(data.processes);
         if (data.system) {
           DataCache.set("system", data.system);
           updateSystem(data.system);
+        } else {
+          syncMonitorHero();
         }
+        if (data.server_time) updateLiveClock(data.server_time);
         handleLiveNotifications(data);
         if (data.uptime_history) {
           DataCache.set("uptime", data.uptime_history);

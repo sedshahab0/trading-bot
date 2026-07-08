@@ -2399,7 +2399,7 @@ def api_stream():
                 "signal_stats": _live_signal_stats(),
                 "latest_signal": latest,
                 "uptime_history": _pm2_restarts_24h(),
-                "server_time": datetime.now().strftime("%H:%M:%S"),
+                "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
             yield f"data: {json.dumps(payload)}\n\n"
             time.sleep(3)
