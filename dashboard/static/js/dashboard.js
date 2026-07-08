@@ -34,6 +34,8 @@
   const MAX_ACTIVITY = 20;
   let lastSignalStatsKey = null;
   let symbolsDraft = [];
+  let symbolsPool = [];
+  let symbolsEnabled = new Set();
   let lastEngineStateForSymbols = null;
 
   const SYMBOL_PRESETS = [
@@ -58,12 +60,12 @@
     signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال" },
     reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel" },
     telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام" },
-    settings: { title: "تنظیمات", sub: "پیکربندی ربات" },
+    settings: { title: "تنظیمات", sub: "سازماندهی نمادها، موتور و کانال‌های ارسال" },
     logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها" },
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.4", full: "2.4.0", major: 2, minor: 4, patch: 0 };
+  let dashboardVersion = { label: "v2.5", full: "2.5.0", major: 2, minor: 5, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -589,6 +591,69 @@
     if ($("#cfgFacebook")) $("#cfgFacebook").checked = cfg.facebook_enable;
     if ($("#cfgDebug")) $("#cfgDebug").checked = cfg.engine_debug;
     if ($("#debugStatus")) $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
+    applySettingsPage(data);
+  }
+
+  function applySettingsPage(data) {
+    if (!data) return;
+    const cfg = data.config || {};
+    const symbols = parseSymbolsString(cfg.symbols || "");
+    const info = STATUS_FA[data.overall] || STATUS_FA.unknown;
+
+    if ($("#settingsStatusDot")) $("#settingsStatusDot").className = `status-indicator ${info.cls}`;
+    if ($("#settingsStatusLabel")) $("#settingsStatusLabel").textContent = info.label;
+    if ($("#settingsUpdated")) {
+      $("#settingsUpdated").textContent = data.server_time ? `بروزرسانی ${data.server_time}` : "—";
+    }
+    if ($("#settingsSymCount")) $("#settingsSymCount").textContent = symbols.length;
+    if ($("#settingsMinScore")) $("#settingsMinScore").textContent = cfg.min_score || "5";
+    if ($("#settingsPollVal")) $("#settingsPollVal").textContent = `${cfg.poll_seconds || "30"}s`;
+
+    const minScore = cfg.min_score || "5";
+    const poll = cfg.poll_seconds || "30";
+    if ($("#cfgMinScore")) $("#cfgMinScore").value = minScore;
+    if ($("#cfgMinScoreRange")) $("#cfgMinScoreRange").value = minScore;
+    if ($("#settingsScoreDisplay")) $("#settingsScoreDisplay").textContent = minScore;
+    if ($("#cfgPoll")) $("#cfgPoll").value = poll;
+    if ($("#cfgPollRange")) $("#cfgPollRange").value = poll;
+    if ($("#settingsPollDisplay")) $("#settingsPollDisplay").textContent = `${poll}s`;
+    if ($("#settingsProvider")) $("#settingsProvider").textContent = cfg.data_provider || "—";
+
+    if ($("#settingsTelegramBadge")) {
+      const tgOk = cfg.telegram_configured;
+      $("#settingsTelegramBadge").textContent = tgOk ? "متصل" : "تنظیم نشده";
+      $("#settingsTelegramBadge").className = `settings-status-badge ${tgOk ? "ok" : "bad"}`;
+    }
+    if ($("#settingsTelegramDesc")) {
+      $("#settingsTelegramDesc").textContent = cfg.telegram_configured
+        ? "توکن تلگرام در .env تنظیم شده"
+        : "TELEGRAM_BOT_TOKEN تنظیم نشده";
+    }
+    if ($("#settingsNotifBadge")) {
+      const paused = cfg.notifications_paused;
+      $("#settingsNotifBadge").textContent = paused ? "متوقف" : "فعال";
+      $("#settingsNotifBadge").className = `settings-status-badge ${paused ? "warn" : "ok"}`;
+    }
+
+    renderSettingsSymbolsCard(symbols);
+  }
+
+  function renderSettingsSymbolsCard(symbols) {
+    const el = $("#settingsSymbolsCard");
+    if (!el) return;
+    if (!symbols.length) {
+      el.innerHTML = '<p class="sym-preview-empty">هیچ نمادی انتخاب نشده — «انتخاب و مدیریت نمادها» را بزنید</p>';
+      return;
+    }
+    el.innerHTML = symbols
+      .map((sym) => {
+        const cat = symbolCategory(sym);
+        return `<button type="button" class="sym-preview-chip ${cat}" data-open-symbols title="ویرایش نمادها"><span class="sym-dot"></span>${esc(sym)}</button>`;
+      })
+      .join("");
+    el.querySelectorAll("[data-open-symbols]").forEach((btn) => {
+      btn.addEventListener("click", openSymbolsModal);
+    });
   }
 
   function applyControlPage(data) {
@@ -712,15 +777,27 @@
     });
   }
 
+  function getEnabledSymbols() {
+    return symbolsPool.filter((s) => symbolsEnabled.has(s));
+  }
+
   function renderSymbolsPresets() {
     const el = $("#symbolsPresets");
     if (!el) return;
     el.innerHTML = SYMBOL_PRESETS.map((sym) => {
-      const added = symbolsDraft.includes(sym);
-      return `<button type="button" class="sym-preset-btn${added ? " added" : ""}" data-preset="${esc(sym)}" ${added ? "disabled" : ""}>${added ? "✓ " : ""}${esc(sym)}</button>`;
+      const inPool = symbolsPool.includes(sym);
+      const enabled = symbolsEnabled.has(sym);
+      return `<button type="button" class="sym-preset-btn${inPool ? " added" : ""}" data-preset="${esc(sym)}">${inPool ? (enabled ? "✓ " : "○ ") : "+ "}${esc(sym)}</button>`;
     }).join("");
     el.querySelectorAll("[data-preset]").forEach((btn) => {
-      btn.addEventListener("click", () => addSymbolToDraft(btn.dataset.preset));
+      btn.addEventListener("click", () => {
+        const sym = btn.dataset.preset;
+        if (symbolsPool.includes(sym)) {
+          toggleSymbolEnabled(sym, !symbolsEnabled.has(sym));
+        } else {
+          addSymbolToDraft(sym, { enabled: true });
+        }
+      });
     });
   }
 
@@ -728,23 +805,32 @@
     const listEl = $("#symbolsActiveList");
     const emptyEl = $("#symbolsEmptyHint");
     const countEl = $("#symbolsActiveCount");
-    if (countEl) countEl.textContent = String(symbolsDraft.length);
+    const enabledCount = getEnabledSymbols().length;
+    if (countEl) countEl.textContent = `${enabledCount}/${symbolsPool.length}`;
+
     if (!listEl) return;
 
-    if (!symbolsDraft.length) {
+    if (!symbolsPool.length) {
       listEl.innerHTML = "";
       if (emptyEl) emptyEl.hidden = false;
     } else {
       if (emptyEl) emptyEl.hidden = true;
-      listEl.innerHTML = symbolsDraft
-        .map(
-          (sym) => `
-        <div class="sym-tag ${symbolCategory(sym)}">
-          <span>${esc(sym)}</span>
+      listEl.innerHTML = symbolsPool
+        .map((sym) => {
+          const enabled = symbolsEnabled.has(sym);
+          const cat = symbolCategory(sym);
+          return `
+        <div class="sym-track-row ${enabled ? "enabled" : "disabled"}">
+          <input type="checkbox" class="sym-track-check" data-toggle="${esc(sym)}" ${enabled ? "checked" : ""} aria-label="ردیابی ${esc(sym)}" />
+          <span class="sym-track-name">${esc(sym)}</span>
+          <span class="sym-track-cat ${cat}">${cat === "metal" ? "Metal" : cat === "crypto" ? "Crypto" : "Forex"}</span>
           <button type="button" class="sym-tag-remove" data-remove="${esc(sym)}" aria-label="حذف ${esc(sym)}">×</button>
-        </div>`
-        )
+        </div>`;
+        })
         .join("");
+      listEl.querySelectorAll("[data-toggle]").forEach((cb) => {
+        cb.addEventListener("change", () => toggleSymbolEnabled(cb.dataset.toggle, cb.checked));
+      });
       listEl.querySelectorAll("[data-remove]").forEach((btn) => {
         btn.addEventListener("click", () => removeSymbolFromDraft(btn.dataset.remove));
       });
@@ -754,10 +840,11 @@
     if (engineEl) {
       const bars = lastEngineStateForSymbols?.last_bars || {};
       const signals = lastEngineStateForSymbols?.last_signal_at || {};
-      if (!symbolsDraft.length) {
-        engineEl.innerHTML = '<p class="sym-hint">پس از افزودن نماد، وضعیت موتور اینجا نمایش داده می‌شود.</p>';
+      const tracked = getEnabledSymbols();
+      if (!tracked.length) {
+        engineEl.innerHTML = '<p class="sym-hint">حداقل یک نماد را تیک بزنید تا ردیابی شود.</p>';
       } else {
-        engineEl.innerHTML = symbolsDraft
+        engineEl.innerHTML = tracked
           .map((sym) => {
             const key = Object.keys(signals).find((k) => k.replace("/", "") === sym.replace("/", "")) || sym;
             const sigTime = signals[key] || signals[sym] || null;
@@ -780,11 +867,25 @@
     }
 
     renderSymbolsPresets();
+    renderSettingsSymbolsCard(getEnabledSymbols());
+    if ($("#settingsSymCount")) $("#settingsSymCount").textContent = enabledCount;
+  }
+
+  function toggleSymbolEnabled(sym, enabled) {
+    if (enabled) symbolsEnabled.add(sym);
+    else symbolsEnabled.delete(sym);
+    renderSymbolsModalLists();
   }
 
   function openSymbolsModal() {
     const cfg = DataCache.get("status")?.config || {};
-    symbolsDraft = parseSymbolsString(cfg.symbols || $("#cfgSymbols")?.value || "");
+    const active = parseSymbolsString(cfg.symbols || $("#cfgSymbols")?.value || "");
+    symbolsPool = [...active];
+    symbolsEnabled = new Set(active);
+    SYMBOL_PRESETS.forEach((sym) => {
+      if (!symbolsPool.includes(sym)) symbolsPool.push(sym);
+    });
+    symbolsDraft = getEnabledSymbols();
     renderSymbolsModalLists();
     const overlay = $("#symbolsModalOverlay");
     if (overlay) {
@@ -806,46 +907,51 @@
     if (input) input.value = "";
   }
 
-  function addSymbolToDraft(raw) {
+  function addSymbolToDraft(raw, { enabled = true } = {}) {
     const sym = normalizeSymbolInput(raw);
     if (!sym) {
       toast("فرمت نماد نامعتبر است", "error");
       return false;
     }
-    if (symbolsDraft.includes(sym)) {
-      toast("این نماد قبلاً اضافه شده", "error");
+    if (symbolsPool.includes(sym)) {
+      if (enabled) symbolsEnabled.add(sym);
+      renderSymbolsModalLists();
+      return true;
+    }
+    if (symbolsPool.length >= MAX_SYMBOLS) {
+      toast(`حداکثر ${MAX_SYMBOLS} نماد در لیست مجاز است`, "error");
       return false;
     }
-    if (symbolsDraft.length >= MAX_SYMBOLS) {
-      toast(`حداکثر ${MAX_SYMBOLS} نماد مجاز است`, "error");
-      return false;
-    }
-    symbolsDraft.push(sym);
+    symbolsPool.push(sym);
+    if (enabled) symbolsEnabled.add(sym);
     renderSymbolsModalLists();
     return true;
   }
 
   function removeSymbolFromDraft(sym) {
-    symbolsDraft = symbolsDraft.filter((s) => s !== sym);
+    symbolsPool = symbolsPool.filter((s) => s !== sym);
+    symbolsEnabled.delete(sym);
     renderSymbolsModalLists();
   }
 
   async function saveSymbolsDraft() {
-    if (!symbolsDraft.length) {
-      toast("حداقل یک نماد لازم است", "error");
+    const enabled = getEnabledSymbols();
+    if (!enabled.length) {
+      toast("حداقل یک نماد باید تیک خورده باشد", "error");
       return;
     }
+    symbolsDraft = enabled;
     const btn = $("#symbolsModalSave");
     try {
       if (btn) btn.classList.add("loading");
-      const value = formatSymbolsString(symbolsDraft);
+      const value = formatSymbolsString(enabled);
       await api("/api/config", {
         method: "PATCH",
         body: JSON.stringify({ SYMBOLS: value }),
       });
       if ($("#cfgSymbols")) $("#cfgSymbols").value = value;
       toast("نمادها ذخیره شد — برای اعمال کامل ربات را ری‌استارت کنید");
-      logControlActivity(`نمادها بروز شد: ${symbolsDraft.join(", ")}`, "ok");
+      logControlActivity(`نمادها بروز شد: ${enabled.join(", ")}`, "ok");
       invalidateCache("status", "bootstrap");
       await fetchStatus({ force: true });
       closeSymbolsModal();
@@ -1104,7 +1210,7 @@
       }
       case "settings": {
         const status = DataCache.get("status");
-        if (status) applyStatusData(status);
+        if (status) applySettingsPage(status);
         break;
       }
       case "logs": {
@@ -2365,6 +2471,15 @@
   });
 
   $("#btnManageSymbols")?.addEventListener("click", openSymbolsModal);
+  $("#btnSettingsSymbols")?.addEventListener("click", openSymbolsModal);
+  $("#symbolsSelectAll")?.addEventListener("click", () => {
+    symbolsPool.forEach((s) => symbolsEnabled.add(s));
+    renderSymbolsModalLists();
+  });
+  $("#symbolsSelectNone")?.addEventListener("click", () => {
+    symbolsEnabled.clear();
+    renderSymbolsModalLists();
+  });
   $("#symbolsModalClose")?.addEventListener("click", closeSymbolsModal);
   $("#symbolsModalCancel")?.addEventListener("click", closeSymbolsModal);
   $("#symbolsModalOverlay")?.addEventListener("click", (e) => {
@@ -2436,15 +2551,30 @@
     } catch {}
   }
 
+  $("#cfgMinScoreRange")?.addEventListener("input", (e) => {
+    const v = e.target.value;
+    if ($("#cfgMinScore")) $("#cfgMinScore").value = v;
+    if ($("#settingsScoreDisplay")) $("#settingsScoreDisplay").textContent = v;
+    if ($("#settingsMinScore")) $("#settingsMinScore").textContent = v;
+  });
+
+  $("#cfgPollRange")?.addEventListener("input", (e) => {
+    const v = e.target.value;
+    if ($("#cfgPoll")) $("#cfgPoll").value = v;
+    if ($("#settingsPollDisplay")) $("#settingsPollDisplay").textContent = `${v}s`;
+    if ($("#settingsPollVal")) $("#settingsPollVal").textContent = `${v}s`;
+  });
+
   // ── Config Save ──
   $("#btnSaveConfig")?.addEventListener("click", async () => {
     try {
+      const symbolsVal = $("#cfgSymbols")?.value || formatSymbolsString(getEnabledSymbols());
       await api("/api/config", {
         method: "PATCH",
         body: JSON.stringify({
-          SYMBOLS: $("#cfgSymbols").value,
-          MIN_SCORE: $("#cfgMinScore").value,
-          POLL_SECONDS: $("#cfgPoll").value,
+          SYMBOLS: symbolsVal,
+          MIN_SCORE: $("#cfgMinScore")?.value || $("#cfgMinScoreRange")?.value || "5",
+          POLL_SECONDS: $("#cfgPoll")?.value || $("#cfgPollRange")?.value || "30",
           FACEBOOK_ENABLE: $("#cfgFacebook").checked ? "1" : "0",
           ENGINE_DEBUG: $("#cfgDebug").checked ? "1" : "0",
         }),

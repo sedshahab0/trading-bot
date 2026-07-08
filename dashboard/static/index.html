@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=12" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=12" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=13" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=13" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.4</span>
+            <span class="version-badge" id="loginVersion">v2.5</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.4</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.5</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.4.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.5.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -611,17 +611,128 @@
 
         <!-- PAGE: Settings -->
         <div class="page" id="page-settings">
-          <div class="panel"><h3 class="panel-heading">تنظیمات ربات</h3>
-            <div class="settings-form">
-              <div class="setting-row"><label>نمادها</label><input type="text" id="cfgSymbols" /></div>
-              <div class="setting-row"><label>حداقل امتیاز</label><input type="number" id="cfgMinScore" min="1" max="20" /></div>
-              <div class="setting-row"><label>فاصله بررسی (ثانیه)</label><input type="number" id="cfgPoll" min="10" max="300" /></div>
-              <div class="setting-row toggle-row"><label>Facebook</label><label class="toggle"><input type="checkbox" id="cfgFacebook" /><span class="toggle-slider"></span></label></div>
-              <div class="setting-row toggle-row"><label>Debug Engine</label><label class="toggle"><input type="checkbox" id="cfgDebug" /><span class="toggle-slider"></span></label></div>
-              <button class="btn btn-primary" id="btnSaveConfig">ذخیره تنظیمات</button>
-              <p class="hint">برای اعمال کامل، ربات را ری‌استارت کنید.</p>
+
+          <section class="settings-hero">
+            <div class="hero-bg"></div>
+            <div class="settings-hero-body">
+              <div>
+                <div class="hero-status-row">
+                  <span class="status-pill"><span class="status-indicator running" id="settingsStatusDot"></span><span id="settingsStatusLabel">پیکربندی ربات</span></span>
+                  <span class="hero-time" id="settingsUpdated">—</span>
+                </div>
+                <h2 class="hero-title">تنظیمات و سازماندهی</h2>
+                <p class="hero-sub">مدیریت نمادها، موتور تحلیل و کانال‌های ارسال</p>
+              </div>
+              <div class="settings-hero-stats">
+                <div class="set-stat"><span class="set-stat-num" id="settingsSymCount">0</span><span class="set-stat-lbl">نماد فعال</span></div>
+                <div class="set-stat"><span class="set-stat-num" id="settingsMinScore">5</span><span class="set-stat-lbl">حداقل امتیاز</span></div>
+                <div class="set-stat"><span class="set-stat-num" id="settingsPollVal">30s</span><span class="set-stat-lbl">فاصله بررسی</span></div>
+              </div>
             </div>
+          </section>
+
+          <article class="panel settings-symbols-panel">
+            <div class="panel-top settings-symbols-top">
+              <div>
+                <h3 class="panel-heading">نمادهای تحلیل</h3>
+                <p class="panel-desc">انتخاب نمادهایی که ربات روی آن‌ها سیگنال تولید می‌کند</p>
+              </div>
+              <button type="button" class="btn btn-primary btn-compact" id="btnSettingsSymbols">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                انتخاب و مدیریت نمادها
+              </button>
+            </div>
+            <div class="settings-symbols-preview" id="settingsSymbolsCard"></div>
+            <p class="sym-hint settings-symbols-hint">برای افزودن، حذف یا فعال/غیرفعال کردن نمادها، دکمه بالا را بزنید</p>
+          </article>
+
+          <div class="settings-grid">
+            <article class="panel settings-section">
+              <h3 class="panel-heading">موتور تحلیل</h3>
+              <p class="panel-desc">تنظیمات امتیازدهی و سرعت بررسی بازار</p>
+              <div class="settings-fields">
+                <div class="settings-field">
+                  <div class="settings-field-head">
+                    <label for="cfgMinScoreRange">حداقل امتیاز سیگنال</label>
+                    <span class="settings-field-val" id="settingsScoreDisplay">5</span>
+                  </div>
+                  <input type="range" id="cfgMinScoreRange" min="1" max="20" value="5" class="settings-range" />
+                  <input type="number" id="cfgMinScore" min="1" max="20" hidden />
+                </div>
+                <div class="settings-field">
+                  <div class="settings-field-head">
+                    <label for="cfgPollRange">فاصله بررسی (ثانیه)</label>
+                    <span class="settings-field-val" id="settingsPollDisplay">30s</span>
+                  </div>
+                  <input type="range" id="cfgPollRange" min="10" max="300" step="10" value="30" class="settings-range" />
+                  <input type="number" id="cfgPoll" min="10" max="300" hidden />
+                </div>
+                <div class="settings-field">
+                  <label>Provider داده</label>
+                  <span class="settings-readonly" id="settingsProvider">—</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel settings-section">
+              <h3 class="panel-heading">کانال‌های ارسال</h3>
+              <p class="panel-desc">فعال‌سازی پلتفرم‌های خروجی سیگنال</p>
+              <div class="settings-toggles">
+                <div class="settings-toggle-row">
+                  <div class="settings-toggle-info">
+                    <span class="settings-toggle-label">Facebook</span>
+                    <span class="settings-toggle-desc">ارسال سیگنال به Facebook</span>
+                  </div>
+                  <label class="toggle"><input type="checkbox" id="cfgFacebook" /><span class="toggle-slider"></span></label>
+                </div>
+                <div class="settings-toggle-row readonly">
+                  <div class="settings-toggle-info">
+                    <span class="settings-toggle-label">Telegram</span>
+                    <span class="settings-toggle-desc" id="settingsTelegramDesc">—</span>
+                  </div>
+                  <span class="settings-status-badge" id="settingsTelegramBadge">—</span>
+                </div>
+                <div class="settings-toggle-row readonly">
+                  <div class="settings-toggle-info">
+                    <span class="settings-toggle-label">نوتیفیکیشن</span>
+                    <span class="settings-toggle-desc">وضعیت ارسال خودکار</span>
+                  </div>
+                  <span class="settings-status-badge" id="settingsNotifBadge">—</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel settings-section">
+              <h3 class="panel-heading">توسعه و دیباگ</h3>
+              <p class="panel-desc">ابزارهای عیب‌یابی موتور</p>
+              <div class="settings-toggles">
+                <div class="settings-toggle-row">
+                  <div class="settings-toggle-info">
+                    <span class="settings-toggle-label">Debug Engine</span>
+                    <span class="settings-toggle-desc">لاگ‌های verbose موتور</span>
+                  </div>
+                  <label class="toggle"><input type="checkbox" id="cfgDebug" /><span class="toggle-slider"></span></label>
+                </div>
+              </div>
+              <p class="hint settings-debug-hint">وضعیت: <strong id="debugStatus">خاموش</strong></p>
+            </article>
+
+            <article class="panel settings-section settings-info-panel">
+              <h3 class="panel-heading">راهنمای اعمال</h3>
+              <ul class="settings-tips">
+                <li>تغییر <strong>نمادها</strong> از ماژول — تیک = ردیابی فعال</li>
+                <li>پس از ذخیره، <strong>ری‌استارت ربات</strong> برای اعمال کامل</li>
+                <li>حداقل امتیاز بالاتر = سیگنال‌های کمتر ولی دقیق‌تر</li>
+              </ul>
+            </article>
           </div>
+
+          <div class="settings-save-bar">
+            <p class="hint">تغییرات تا زمان ذخیره اعمال نمی‌شوند</p>
+            <button type="button" class="btn btn-primary btn-save-settings" id="btnSaveConfig">ذخیره تنظیمات</button>
+          </div>
+
+          <input type="hidden" id="cfgSymbols" />
         </div>
 
         <!-- PAGE: Logs -->
@@ -652,18 +763,25 @@
       <div class="modal-header">
         <div>
           <h2 class="modal-title" id="symbolsModalTitle">مدیریت نمادها</h2>
-          <p class="modal-sub">افزودن، حذف و ویرایش نمادهای تحلیل ربات</p>
+          <p class="modal-sub">تیک بزنید تا ربات نماد را ردیابی کند — افزودن، حذف و ویرایش</p>
         </div>
         <button type="button" class="modal-close" id="symbolsModalClose" aria-label="بستن">✕</button>
       </div>
 
       <div class="modal-body symbols-modal-body">
-        <section class="sym-section">
+        <section class="sym-section sym-section-track">
           <div class="sym-section-head">
-            <h3>نمادهای فعال</h3>
-            <span class="sym-count" id="symbolsActiveCount">0</span>
+            <div>
+              <h3>انتخاب نمادها برای ردیابی</h3>
+              <p class="sym-hint-inline">تیک = ربات این نماد را تحلیل می‌کند</p>
+            </div>
+            <div class="sym-bulk-actions">
+              <button type="button" class="sym-bulk-btn" id="symbolsSelectAll">همه ✓</button>
+              <button type="button" class="sym-bulk-btn" id="symbolsSelectNone">هیچ</button>
+              <span class="sym-count" id="symbolsActiveCount">0</span>
+            </div>
           </div>
-          <div class="symbols-active-list" id="symbolsActiveList"></div>
+          <div class="symbols-track-list" id="symbolsActiveList"></div>
           <p class="sym-empty" id="symbolsEmptyHint" hidden>هنوز نمادی اضافه نشده — از پیشنهادها یا فیلد زیر استفاده کنید.</p>
         </section>
 
@@ -697,6 +815,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=8"></script>
+  <script src="/static/js/dashboard.js?v=9"></script>
 </body>
 </html>
