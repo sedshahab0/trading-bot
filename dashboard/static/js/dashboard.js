@@ -76,6 +76,37 @@
     }
   }
 
+  function isMobileViewport() {
+    return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  async function logClientEvent(event, detail = {}) {
+    try {
+      await fetch("/api/client-log", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event, detail }),
+        keepalive: true,
+      });
+    } catch {}
+  }
+
+  function reportClientError(scope, err, extra = {}) {
+    const message = err?.message || String(err);
+    const detail = {
+      scope,
+      message,
+      stack: err?.stack || "",
+      ua: navigator.userAgent,
+      dpr: window.devicePixelRatio || 1,
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+      ...extra,
+    };
+    console.error(`[${scope}]`, err);
+    logClientEvent("client-error", detail);
+  }
+
   function clearDashboardCache() {
     DataCache.clear();
     try {
@@ -393,6 +424,12 @@
 
   function applyAnalyticsPayload(payload, days = 30) {
     if (!payload) return;
+    logClientEvent("analytics-apply", {
+      days,
+      symbols: payload.symbols?.symbols?.length || 0,
+      hourly: payload.hourly?.hours?.length || 0,
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+    });
     renderSymbolReportTable(
       payload.symbols?.symbols,
       payload.symbols?.generated_at ? `بروزرسانی ${payload.symbols.generated_at}` : null
@@ -1419,37 +1456,41 @@
   function renderHourlyHeatmap(hours) {
     const canvas = $("#hourlyHeatmapChart");
     if (!canvas || !hours) return;
-    const labels = hours.map((h) => h.label);
-    const totals = hours.map((h) => h.total);
-    const buys = hours.map((h) => h.buy);
-    const sells = hours.map((h) => h.sell);
-    if (hourlyHeatmapChart) {
-      hourlyHeatmapChart.data.labels = labels;
-      hourlyHeatmapChart.data.datasets[0].data = totals;
-      hourlyHeatmapChart.data.datasets[1].data = buys;
-      hourlyHeatmapChart.data.datasets[2].data = sells;
-      hourlyHeatmapChart.update("none");
-      return;
-    }
-    hourlyHeatmapChart = new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "کل", data: totals, backgroundColor: "rgba(99,255,208,0.55)", borderRadius: 4 },
-          { label: "BUY", data: buys, backgroundColor: "rgba(74,222,128,0.65)", borderRadius: 4 },
-          { label: "SELL", data: sells, backgroundColor: "rgba(248,113,113,0.65)", borderRadius: 4 },
-        ],
-      },
-      options: {
-        ...chartDefaults(),
-        scales: {
-          x: { ticks: { color: "#5c6578", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+    try {
+      const labels = hours.map((h) => h.label);
+      const totals = hours.map((h) => h.total);
+      const buys = hours.map((h) => h.buy);
+      const sells = hours.map((h) => h.sell);
+      if (hourlyHeatmapChart) {
+        hourlyHeatmapChart.data.labels = labels;
+        hourlyHeatmapChart.data.datasets[0].data = totals;
+        hourlyHeatmapChart.data.datasets[1].data = buys;
+        hourlyHeatmapChart.data.datasets[2].data = sells;
+        hourlyHeatmapChart.update("none");
+        return;
+      }
+      hourlyHeatmapChart = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "کل", data: totals, backgroundColor: "rgba(99,255,208,0.55)", borderRadius: 4 },
+            { label: "BUY", data: buys, backgroundColor: "rgba(74,222,128,0.65)", borderRadius: 4 },
+            { label: "SELL", data: sells, backgroundColor: "rgba(248,113,113,0.65)", borderRadius: 4 },
+          ],
         },
-        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, boxWidth: 10 } } },
-      },
-    });
+        options: {
+          ...chartDefaults(),
+          scales: {
+            x: { ticks: { color: "#5c6578", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+          },
+          plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT, boxWidth: 10 } } },
+        },
+      });
+    } catch (err) {
+      reportClientError("renderHourlyHeatmap", err, { hasChart: !!window.Chart, canvas: { w: canvas.clientWidth, h: canvas.clientHeight } });
+    }
   }
 
   async function fetchReportAnalytics(days = 30, { force = false } = {}) {
@@ -1680,6 +1721,14 @@
 
   function applyReportData(data, days = 30) {
     if (!data) return;
+    logClientEvent("report-apply", {
+      days,
+      total: data.total ?? null,
+      daily: data.daily?.length || 0,
+      bySymbol: data.by_symbol ? Object.keys(data.by_symbol).length : 0,
+      byDirection: data.by_direction ? Object.keys(data.by_direction).length : 0,
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+    });
     if (days === 7) {
       renderHomeSparkline(data.daily);
       return;
@@ -1813,34 +1862,38 @@
   function renderTelegramReportChart(daily) {
     const canvas = $("#telegramReportChart");
     if (!canvas || !daily) return;
-    const labels = daily.map((d) => d.date.slice(5));
-    const ok = daily.map((d) => d.ok || 0);
-    const failed = daily.map((d) => d.failed || 0);
-    if (telegramReportChart) {
-      telegramReportChart.data.labels = labels;
-      telegramReportChart.data.datasets[0].data = ok;
-      telegramReportChart.data.datasets[1].data = failed;
-      telegramReportChart.update("none");
-      return;
-    }
-    telegramReportChart = new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "موفق", data: ok, backgroundColor: "rgba(74,222,128,0.75)", borderRadius: 4 },
-          { label: "ناموفق", data: failed, backgroundColor: "rgba(248,113,113,0.75)", borderRadius: 4 },
-        ],
-      },
-      options: {
-        ...chartDefaults(),
-        scales: {
-          x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+    try {
+      const labels = daily.map((d) => d.date.slice(5));
+      const ok = daily.map((d) => d.ok || 0);
+      const failed = daily.map((d) => d.failed || 0);
+      if (telegramReportChart) {
+        telegramReportChart.data.labels = labels;
+        telegramReportChart.data.datasets[0].data = ok;
+        telegramReportChart.data.datasets[1].data = failed;
+        telegramReportChart.update("none");
+        return;
+      }
+      telegramReportChart = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "موفق", data: ok, backgroundColor: "rgba(74,222,128,0.75)", borderRadius: 4 },
+            { label: "ناموفق", data: failed, backgroundColor: "rgba(248,113,113,0.75)", borderRadius: 4 },
+          ],
         },
-        plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT } } },
-      },
-    });
+        options: {
+          ...chartDefaults(),
+          scales: {
+            x: { stacked: true, ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+          },
+          plugins: { legend: { position: "bottom", labels: { color: "#8b95a8", font: CHART_FONT } } },
+        },
+      });
+    } catch (err) {
+      reportClientError("renderTelegramReportChart", err, { hasChart: !!window.Chart, canvas: { w: canvas.clientWidth, h: canvas.clientHeight } });
+    }
   }
 
   function applyBootstrap(payload) {
@@ -2194,6 +2247,19 @@
     document.title = `TradeChi ${label} — Dashboard`;
     safeLocalStorageSet("tc:build-version", nextFull);
   }
+
+  window.addEventListener("error", (event) => {
+    reportClientError("window.error", event.error || new Error(event.message || "window error"), {
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason instanceof Error ? event.reason : new Error(String(event.reason || "unhandled rejection"));
+    reportClientError("unhandledrejection", reason);
+  });
 
   async function loadVersion() {
     try {
@@ -2932,10 +2998,13 @@
   }
 
   function chartDefaults() {
+    const dpr = window.devicePixelRatio || 1;
     return {
       responsive: true,
       maintainAspectRatio: false,
+      devicePixelRatio: isMobileViewport() ? Math.min(dpr, 1.5) : Math.min(dpr, 2),
       plugins: { legend: { labels: { color: "#8b95a8", font: CHART_FONT } } },
+      animation: isMobileViewport() ? false : { duration: 300 },
     };
   }
 
@@ -3335,63 +3404,67 @@
   function renderDailyChart(daily) {
     const canvas = $("#dailyChart");
     if (!canvas || !daily) return;
-    const labels = daily.map((d) => d.date.slice(5));
-    const buys = daily.map((d) => d.buy);
-    const sells = daily.map((d) => d.sell);
-    const totals = daily.map((d) => d.total);
+    try {
+      const labels = daily.map((d) => d.date.slice(5));
+      const buys = daily.map((d) => d.buy);
+      const sells = daily.map((d) => d.sell);
+      const totals = daily.map((d) => d.total);
 
-    if (dailyChart) {
-      dailyChart.data.labels = labels;
-      dailyChart.data.datasets[0].data = totals;
-      dailyChart.data.datasets[1].data = buys;
-      dailyChart.data.datasets[2].data = sells;
-      dailyChart.update("none");
-      return;
-    }
+      if (dailyChart) {
+        dailyChart.data.labels = labels;
+        dailyChart.data.datasets[0].data = totals;
+        dailyChart.data.datasets[1].data = buys;
+        dailyChart.data.datasets[2].data = sells;
+        dailyChart.update("none");
+        return;
+      }
 
-    dailyChart = new Chart(canvas, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "کل",
-            data: totals,
-            borderColor: "#63ffd0",
-            backgroundColor: "rgba(99,255,208,0.08)",
-            fill: true,
-            tension: 0.4,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-          },
-          {
-            label: "BUY",
-            data: buys,
-            borderColor: "#4ade80",
-            backgroundColor: "transparent",
-            tension: 0.4,
-            pointRadius: 3,
-          },
-          {
-            label: "SELL",
-            data: sells,
-            borderColor: "#f87171",
-            backgroundColor: "transparent",
-            tension: 0.4,
-            pointRadius: 3,
-          },
-        ],
-      },
-      options: {
-        ...chartDefaults(),
-        interaction: { mode: "index", intersect: false },
-        scales: {
-          x: { ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { color: "#5c6578", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+      dailyChart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "کل",
+              data: totals,
+              borderColor: "#63ffd0",
+              backgroundColor: "rgba(99,255,208,0.08)",
+              fill: true,
+              tension: 0.4,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+            },
+            {
+              label: "BUY",
+              data: buys,
+              borderColor: "#4ade80",
+              backgroundColor: "transparent",
+              tension: 0.4,
+              pointRadius: 3,
+            },
+            {
+              label: "SELL",
+              data: sells,
+              borderColor: "#f87171",
+              backgroundColor: "transparent",
+              tension: 0.4,
+              pointRadius: 3,
+            },
+          ],
         },
-        animation: { duration: 700 },
-      },
-    });
+        options: {
+          ...chartDefaults(),
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: { ticks: { color: "#5c6578", font: { size: 10 } }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: "#5c6578", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+          },
+          animation: { duration: 700 },
+        },
+      });
+    } catch (err) {
+      reportClientError("renderDailyChart", err, { hasChart: !!window.Chart, canvas: { w: canvas.clientWidth, h: canvas.clientHeight } });
+    }
   }
 
   async function mgmt(action, { confirmMsg = null, btn = null } = {}) {

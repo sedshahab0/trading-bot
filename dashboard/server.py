@@ -64,6 +64,7 @@ PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
 VERSION_FILE = Path(__file__).parent / "version.json"
+CLIENT_DIAGNOSTIC_LOG = Path(__file__).parent / "client-diagnostics.log"
 
 PROCESSES = ("signal-engine", "signal-server")
 DISPLAY_PROCESSES = ("signal-engine", "signal-server", "dashboard")
@@ -2023,6 +2024,27 @@ def api_status():
 @app.route("/api/version")
 def api_version():
     return jsonify(_dashboard_version())
+
+
+@app.route("/api/client-log", methods=["POST"])
+@auth_required
+def api_client_log():
+    payload = request.get_json(silent=True) or {}
+    line = {
+        "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        "ua": request.headers.get("User-Agent", ""),
+        "path": request.referrer or request.path,
+        "event": payload.get("event"),
+        "detail": payload.get("detail"),
+    }
+    try:
+        CLIENT_DIAGNOSTIC_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with CLIENT_DIAGNOSTIC_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True})
 
 
 @app.route("/api/bootstrap")
