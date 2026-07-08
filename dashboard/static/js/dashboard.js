@@ -71,7 +71,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.8", full: "2.8.0", major: 2, minor: 8, patch: 0 };
+  let dashboardVersion = { label: "v2.8", full: "2.8.1", major: 2, minor: 8, patch: 1 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -134,23 +134,35 @@
 
   // ── Smart Cache (stale-while-revalidate + session persist) ──
   const CACHE_TTL = {
-    status: 8000,
-    system: 5000,
-    signals: 20000,
-    logs: 3000,
-    report: 90000,
-    bootstrap: 10000,
-    telegram: 30000,
+    status: 15000,
+    system: 8000,
+    signals: 45000,
+    logs: 8000,
+    report: 120000,
+    bootstrap: 30000,
+    telegram: 60000,
+    ops: 120000,
+    uptime: 30000,
+    cooldowns: 30000,
+    audit: 60000,
+    analytics: 120000,
   };
 
-  const PERSIST_KEYS = new Set(["status", "system", "signals:30:all:all", "report:7", "report:30", "telegram:30"]);
+  const PERSIST_PREFIXES = ["status", "system", "signals:", "report:", "telegram:", "ops", "cooldowns", "uptime", "bootstrap", "analytics:"];
+  const PERSIST_MAX_AGE_MS = 600000;
+
+  let bootstrapInflight = null;
+  let bootstrapCompletedAt = 0;
+  let sseConnected = false;
+  let lastStatusFingerprint = null;
+  const BOOTSTRAP_COALESCE_MS = 20000;
 
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
     monitor: ["status", "system", "uptime"],
     control: ["status", "cooldowns"],
     signals: ["signals"],
-    reports: ["analytics"],
+    reports: ["report", "analytics"],
     telegram: ["telegram"],
     settings: ["status", "ops", "audit"],
     logs: ["logs"],
@@ -169,12 +181,24 @@
       return this._mem.get(key);
     },
 
+    shouldPersist(key) {
+      return PERSIST_PREFIXES.some((p) => key === p || key.startsWith(p));
+    },
+
     set(key, data, ts = Date.now()) {
       this._mem.set(key, { data, ts });
-      if (PERSIST_KEYS.has(key)) {
+      if (this.shouldPersist(key)) {
         try {
           sessionStorage.setItem(`tc:${key}`, JSON.stringify({ data, ts }));
-        } catch {}
+        } catch {
+          try {
+            Object.keys(sessionStorage)
+              .filter((k) => k.startsWith("tc:"))
+              .slice(0, 8)
+              .forEach((k) => sessionStorage.removeItem(k));
+            sessionStorage.setItem(`tc:${key}`, JSON.stringify({ data, ts }));
+          } catch {}
+        }
       }
     },
 
@@ -183,6 +207,12 @@
       try {
         sessionStorage.removeItem(`tc:${key}`);
       } catch {}
+    },
+
+    deletePrefix(prefix) {
+      [...this._mem.keys()].forEach((k) => {
+        if (k.startsWith(prefix)) this.delete(k);
+      });
     },
 
     clear() {
@@ -201,23 +231,33 @@
 
     canServeStale(key, ttl) {
       const e = this.getEntry(key);
-      return Boolean(e && Date.now() - e.ts < ttl * 8);
+      return Boolean(e && Date.now() - e.ts < ttl * 12);
     },
 
     hydrate() {
-      PERSIST_KEYS.forEach((key) => {
-        try {
-          const raw = sessionStorage.getItem(`tc:${key}`);
-          if (!raw) return;
-          const { data, ts } = JSON.parse(raw);
-          if (Date.now() - ts < 300000) this._mem.set(key, { data, ts });
-        } catch {}
-      });
+      try {
+        Object.keys(sessionStorage)
+          .filter((k) => k.startsWith("tc:"))
+          .forEach((storageKey) => {
+            const key = storageKey.slice(3);
+            const raw = sessionStorage.getItem(storageKey);
+            if (!raw) return;
+            const { data, ts } = JSON.parse(raw);
+            if (Date.now() - ts < PERSIST_MAX_AGE_MS) {
+              this._mem.set(key, { data, ts });
+            }
+          });
+      } catch {}
     },
 
     onRevalidate(key, fn) {
       if (!this._revalidate.has(key)) this._revalidate.set(key, new Set());
       this._revalidate.get(key).add(fn);
+    },
+
+    onRevalidatePrefix(prefix, fn) {
+      if (!this._revalidate.has(`prefix:${prefix}`)) this._revalidate.set(`prefix:${prefix}`, new Set());
+      this._revalidate.get(`prefix:${prefix}`).add(fn);
     },
 
     _emitRevalidate(key, data) {
@@ -226,12 +266,31 @@
           fn(data);
         } catch {}
       });
+      PERSIST_PREFIXES.forEach((prefix) => {
+        if (key.startsWith(prefix)) {
+          this._revalidate.get(`prefix:${prefix}`)?.forEach((fn) => {
+            try {
+              fn(data, key);
+            } catch {}
+          });
+        }
+      });
     },
 
-    async load(key, fetcher, ttl, { force = false } = {}) {
-      if (!force && this.isFresh(key, ttl)) return this.get(key);
+    async load(key, fetcher, ttl, { force = false, onStale = null } = {}) {
+      const cached = this.get(key);
+      const entry = this.getEntry(key);
 
-      const stale = !force && this.canServeStale(key, ttl) ? this.get(key) : null;
+      if (!force && cached && this.isFresh(key, ttl)) {
+        return cached;
+      }
+
+      const stale = !force && this.canServeStale(key, ttl) ? cached : null;
+      if (stale && onStale) {
+        try {
+          onStale(stale, true);
+        } catch {}
+      }
 
       if (this._inflight.has(key)) {
         if (stale) return stale;
@@ -243,7 +302,13 @@
         .then((data) => {
           this.set(key, data);
           this._inflight.delete(key);
-          this._emitRevalidate(key, data);
+          if (onStale) {
+            try {
+              onStale(data, false);
+            } catch {}
+          } else {
+            this._emitRevalidate(key, data);
+          }
           return data;
         })
         .catch((err) => {
@@ -255,9 +320,7 @@
       this._inflight.set(key, task);
 
       if (stale) {
-        task.then((data) => {
-          if (data) this._emitRevalidate(key, data);
-        });
+        task.catch(() => {});
         return stale;
       }
 
@@ -266,7 +329,57 @@
   };
 
   function invalidateCache(...keys) {
-    keys.forEach((k) => DataCache.delete(k));
+    keys.forEach((k) => {
+      if (k.endsWith("*")) {
+        DataCache.deletePrefix(k.slice(0, -1));
+      } else {
+        DataCache.delete(k);
+      }
+    });
+    bootstrapCompletedAt = 0;
+  }
+
+  function isBootstrapFresh() {
+    return bootstrapCompletedAt && Date.now() - bootstrapCompletedAt < BOOTSTRAP_COALESCE_MS;
+  }
+
+  async function waitForBootstrap() {
+    if (bootstrapInflight) {
+      try {
+        await bootstrapInflight;
+      } catch {}
+    }
+  }
+
+  function applyAllCachedData() {
+    const status = DataCache.get("status");
+    if (status) applyStatusData(status);
+    const sys = DataCache.get("system");
+    if (sys) updateSystem(sys);
+    const report7 = DataCache.get("report:7");
+    if (report7) applyReportData(report7, 7);
+    const sig = DataCache.get(signalsCacheKey(30, "all", "all", "all"));
+    if (sig) applySignalsPayload(sig);
+    const tg = DataCache.get("telegram:30:all");
+    if (tg) applyTelegramData(tg);
+    const ops = DataCache.get("ops");
+    if (ops) applyOpsConfig(ops);
+    const cooldowns = DataCache.get("cooldowns");
+    if (cooldowns) renderCooldownPanel(cooldowns);
+    const uptime = DataCache.get("uptime");
+    if (uptime) renderUptimeHistory(uptime);
+    applyPageFromCache(activePage);
+  }
+
+  function prefetchAfterBootstrap() {
+    const jobs = [
+      fetchTelegram({ force: false }).catch(() => {}),
+      fetchOpsConfig({ force: false }).catch(() => {}),
+      fetchCooldowns({ force: false }).catch(() => {}),
+      fetchUptimeHistory({ force: false }).catch(() => {}),
+      fetchReportAnalytics(30, { force: false }).catch(() => {}),
+    ];
+    Promise.allSettled(jobs);
   }
 
   function reportCacheKey(days = 30) {
@@ -327,7 +440,7 @@
 
   function showDashboard() {
     DataCache.hydrate();
-    applyPageFromCache(activePage);
+    applyAllCachedData();
     $("#loginOverlay").classList.add("hidden");
     $("#dashboard").classList.remove("hidden");
     startStreams();
@@ -630,8 +743,25 @@
     });
   }
 
+  function statusFingerprint(data) {
+    if (!data) return "";
+    return [
+      data.overall,
+      data.server_time,
+      data.signal_stats?.today,
+      data.signal_stats?.total,
+      data.outcome_summary?.win_rate,
+      data.delivery_summary?.rate,
+      (data.recent_signals || []).length,
+      data.latest_signal?.timestamp,
+    ].join("|");
+  }
+
   function applyStatusData(data) {
     if (!data) return;
+    const fp = statusFingerprint(data);
+    if (fp && fp === lastStatusFingerprint) return;
+    lastStatusFingerprint = fp;
     updateStatusBanner(data.overall);
     renderProcesses(data.all_processes || data.processes);
     applyControlPage(data);
@@ -1114,7 +1244,16 @@
   }
 
   async function fetchCooldowns({ force = false } = {}) {
-    const data = await DataCache.load("cooldowns", () => api("/api/analytics/cooldowns"), CACHE_TTL.status, { force });
+    if (!force && isBootstrapFresh() && DataCache.get("cooldowns")) {
+      renderCooldownPanel(DataCache.get("cooldowns"));
+      return DataCache.get("cooldowns");
+    }
+    const data = await DataCache.load(
+      "cooldowns",
+      () => api("/api/analytics/cooldowns"),
+      CACHE_TTL.cooldowns,
+      { force, onStale: (d) => renderCooldownPanel(d) }
+    );
     renderCooldownPanel(data);
     return data;
   }
@@ -1190,8 +1329,14 @@
         ]);
         return { symbols, hourly };
       },
-      CACHE_TTL.report,
-      { force }
+      CACHE_TTL.analytics,
+      {
+        force,
+        onStale: (payload) => {
+          renderSymbolReportTable(payload.symbols?.symbols, payload.symbols?.generated_at ? `بروزرسانی ${payload.symbols.generated_at}` : null);
+          renderHourlyHeatmap(payload.hourly?.hours || []);
+        },
+      }
     );
     renderSymbolReportTable(data.symbols?.symbols, data.symbols?.generated_at ? `بروزرسانی ${data.symbols.generated_at}` : null);
     renderHourlyHeatmap(data.hourly?.hours || []);
@@ -1224,7 +1369,16 @@
   }
 
   async function fetchUptimeHistory({ force = false } = {}) {
-    const data = await DataCache.load("uptime", () => api("/api/ops/uptime"), CACHE_TTL.status, { force });
+    if (!force && isBootstrapFresh() && DataCache.get("uptime")) {
+      renderUptimeHistory(DataCache.get("uptime"));
+      return DataCache.get("uptime");
+    }
+    const data = await DataCache.load(
+      "uptime",
+      () => api("/api/ops/uptime"),
+      CACHE_TTL.uptime,
+      { force, onStale: (d) => renderUptimeHistory(d) }
+    );
     renderUptimeHistory(data);
     return data;
   }
@@ -1244,7 +1398,16 @@
   }
 
   async function fetchOpsConfig({ force = false } = {}) {
-    const data = await DataCache.load("ops", () => api("/api/ops/config"), CACHE_TTL.bootstrap, { force });
+    if (!force && isBootstrapFresh() && DataCache.get("ops")) {
+      applyOpsConfig(DataCache.get("ops"));
+      return DataCache.get("ops");
+    }
+    const data = await DataCache.load(
+      "ops",
+      () => api("/api/ops/config"),
+      CACHE_TTL.ops,
+      { force, onStale: (d) => applyOpsConfig(d) }
+    );
     applyOpsConfig(data);
     return data;
   }
@@ -1488,7 +1651,7 @@
         body: JSON.stringify(payload),
       });
       toast(data.message || "ارسال مجدد انجام شد");
-      invalidateCache("telegram:30", "telegram:7", "status", "bootstrap");
+      invalidateCache("telegram:*", "status", "bootstrap");
       await fetchTelegram({ force: true });
     } catch (err) {
       toast(err.message, "error");
@@ -1504,7 +1667,7 @@
       btn?.classList.add("loading");
       const data = await api("/api/telegram/test", { method: "POST", body: "{}" });
       toast(data.message || "پیام تست ارسال شد");
-      invalidateCache("telegram:30", "telegram:7", "status", "bootstrap");
+      invalidateCache("telegram:*", "status", "bootstrap");
       if (activePage === "telegram") await fetchTelegram({ force: true });
     } catch (err) {
       toast(err.message, "error");
@@ -1568,12 +1731,28 @@
     }
     if (payload.report_30) {
       DataCache.set("report:30", payload.report_30);
-      applyReportData(payload.report_30, 30);
     }
     if (payload.telegram) {
-      DataCache.set("telegram:30", payload.telegram);
-      applyTelegramData({ summary: payload.telegram, entries: [] });
+      const tgPayload = payload.telegram.entries
+        ? payload.telegram
+        : { summary: payload.telegram, entries: [] };
+      DataCache.set("telegram:30:all", tgPayload);
+      applyTelegramData(tgPayload);
     }
+    if (payload.ops) {
+      DataCache.set("ops", payload.ops);
+      applyOpsConfig(payload.ops);
+    }
+    if (payload.cooldowns) {
+      DataCache.set("cooldowns", payload.cooldowns);
+      renderCooldownPanel(payload.cooldowns);
+    }
+    if (payload.uptime) {
+      DataCache.set("uptime", payload.uptime);
+      renderUptimeHistory(payload.uptime);
+    }
+    DataCache.set("bootstrap", payload);
+    bootstrapCompletedAt = Date.now();
   }
 
   function applyPageFromCache(page) {
@@ -1660,13 +1839,35 @@
   }
 
   async function fetchStatus({ force = false } = {}) {
-    const data = await DataCache.load("status", () => api("/api/status"), CACHE_TTL.status, { force });
+    if (!force && isBootstrapFresh() && DataCache.get("status")) {
+      const cached = DataCache.get("status");
+      applyStatusData(cached);
+      return cached;
+    }
+    await waitForBootstrap();
+    const data = await DataCache.load(
+      "status",
+      () => api("/api/status"),
+      CACHE_TTL.status,
+      { force, onStale: (d) => applyStatusData(d) }
+    );
     applyStatusData(data);
     return data;
   }
 
   async function fetchSystem({ force = false } = {}) {
-    const data = await DataCache.load("system", () => api("/api/system"), CACHE_TTL.system, { force });
+    if (!force && isBootstrapFresh() && DataCache.get("system")) {
+      const cached = DataCache.get("system");
+      updateSystem(cached);
+      return cached;
+    }
+    await waitForBootstrap();
+    const data = await DataCache.load(
+      "system",
+      () => api("/api/system"),
+      CACHE_TTL.system,
+      { force, onStale: (d) => updateSystem(d) }
+    );
     updateSystem(data);
     return data;
   }
@@ -1674,11 +1875,19 @@
   async function fetchSignals({ force = false } = {}) {
     const { days, delivery, direction, outcome } = getSignalsFilterParams();
     const key = signalsCacheKey(days, delivery, direction, outcome);
+    if (!force && days === 30 && delivery === "all" && direction === "all" && outcome === "all" && isBootstrapFresh()) {
+      const cached = DataCache.get(key);
+      if (cached) {
+        applySignalsPayload(cached);
+        return cached;
+      }
+    }
+    await waitForBootstrap();
     const data = await DataCache.load(
       key,
       () => api(`/api/signals?days=${days}&delivery=${delivery}&direction=${direction}&outcome=${outcome}&limit=100`),
       CACHE_TTL.signals,
-      { force }
+      { force, onStale: (d) => applySignalsPayload(d) }
     );
     applySignalsPayload(data);
     return data;
@@ -1686,11 +1895,17 @@
 
   async function fetchReport(days = 30, { force = false } = {}) {
     const key = reportCacheKey(days);
+    if (!force && days === 7 && isBootstrapFresh() && DataCache.get(key)) {
+      const cached = DataCache.get(key);
+      applyReportData(cached, days);
+      return cached;
+    }
+    await waitForBootstrap();
     const data = await DataCache.load(
       key,
       () => api(`/api/reports/summary?days=${days}`),
       CACHE_TTL.report,
-      { force }
+      { force, onStale: (d) => applyReportData(d, days) }
     );
     applyReportData(data, days);
     return data;
@@ -1700,11 +1915,19 @@
     const days = Number($("#telegramDays")?.value || 30);
     const status = $("#telegramStatus")?.value || "all";
     const key = telegramCacheKey(days, status);
+    if (!force && days === 30 && status === "all" && isBootstrapFresh()) {
+      const cached = DataCache.get(key);
+      if (cached?.entries?.length) {
+        applyTelegramData(cached);
+        return cached;
+      }
+    }
+    await waitForBootstrap();
     const data = await DataCache.load(
       key,
       () => api(`/api/telegram/log?days=${days}&limit=200&status=${status}`),
       CACHE_TTL.telegram,
-      { force }
+      { force, onStale: (d) => applyTelegramData(d) }
     );
     applyTelegramData(data);
     return data;
@@ -1736,15 +1959,37 @@
   }
 
   async function fetchBootstrap({ force = false } = {}) {
-    const data = await DataCache.load("bootstrap", () => api("/api/bootstrap"), CACHE_TTL.bootstrap, { force });
-    applyBootstrap(data);
-    return data;
+    if (!force && isBootstrapFresh() && DataCache.get("bootstrap")) {
+      return DataCache.get("bootstrap");
+    }
+    if (bootstrapInflight && !force) return bootstrapInflight;
+
+    const run = async () => {
+      const data = await DataCache.load(
+        "bootstrap",
+        () => api("/api/bootstrap"),
+        CACHE_TTL.bootstrap,
+        { force, onStale: (d) => applyBootstrap(d) }
+      );
+      applyBootstrap(data);
+      prefetchAfterBootstrap();
+      return data;
+    };
+
+    bootstrapInflight = run().finally(() => {
+      bootstrapInflight = null;
+    });
+    return bootstrapInflight;
   }
 
   async function ensurePageData(page, { force = false } = {}) {
     const needs = PAGE_NEEDS[page] || [];
-    const tasks = [];
+    if (!force && isBootstrapFresh()) {
+      applyPageFromCache(page);
+      return;
+    }
 
+    const tasks = [];
     if (needs.includes("status")) tasks.push(fetchStatus({ force }));
     if (needs.includes("system")) tasks.push(fetchSystem({ force }));
     if (needs.includes("signals")) tasks.push(fetchSignals({ force }));
@@ -1753,12 +1998,12 @@
     if (needs.includes("ops")) tasks.push(fetchOpsConfig({ force }));
     if (needs.includes("audit")) tasks.push(fetchAuditLog({ force }));
     if (needs.includes("report:7")) tasks.push(fetchReport(7, { force }));
-    if (page === "reports") {
+    if (page === "reports" || needs.includes("report")) {
       const days = Number($("#reportDays")?.value || 30);
       tasks.push(fetchReport(days, { force }));
       tasks.push(fetchReportAnalytics(days, { force }));
     }
-    if (page === "telegram") tasks.push(fetchTelegram({ force }));
+    if (page === "telegram" || needs.includes("telegram")) tasks.push(fetchTelegram({ force }));
     if (needs.includes("logs")) tasks.push(fetchLogs({ force }));
 
     await Promise.allSettled(tasks);
@@ -1939,8 +2184,8 @@
     clearInterval(monitorInterval);
     monitorInterval = null;
     if (activePage === "monitor" && isAuthenticated) {
-      fetchSystem({ force: true }).catch(() => {});
-      monitorInterval = setInterval(() => fetchSystem().catch(() => {}), 5000);
+      fetchSystem().catch(() => {});
+      monitorInterval = setInterval(() => fetchSystem().catch(() => {}), sseConnected ? 10000 : 5000);
     }
   }
 
@@ -3139,39 +3384,44 @@
     if (!isAuthenticated) return;
     eventSource?.close();
     eventSource = new EventSource("/api/stream", { withCredentials: true });
+    eventSource.onopen = () => {
+      sseConnected = true;
+      if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = setInterval(() => fetchStatus().catch(() => {}), 45000);
+      }
+      syncMonitorPolling();
+    };
     eventSource.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        updateStatusBanner(data.overall);
-        renderProcesses(data.all_processes || data.processes);
-        renderHomeProcesses(data.processes);
-        renderMonitorProcesses(data.processes);
-        updateSystem(data.system);
+        if (data.system) {
+          DataCache.set("system", data.system);
+          updateSystem(data.system);
+        }
         handleLiveNotifications(data);
-        if (data.server_time) $("#liveTime").textContent = data.server_time;
-
-        if (data.signal_stats) {
-          const statusCached = DataCache.get("status");
-          renderStats(data.signal_stats, statusCached || { outcome_summary: {}, delivery_summary: {} });
-        }
-        if (data.latest_signal !== undefined) {
-          renderLatestSignal(data.latest_signal);
+        if (data.uptime_history) {
+          DataCache.set("uptime", data.uptime_history);
+          renderUptimeHistory(data.uptime_history);
         }
 
-        DataCache.set("system", data.system);
-        const statusCached = DataCache.get("status");
-        if (statusCached) {
-          DataCache.set("status", {
-            ...statusCached,
-            overall: data.overall,
-            processes: data.processes,
-            signal_stats: data.signal_stats || statusCached.signal_stats,
-            latest_signal: data.latest_signal !== undefined ? data.latest_signal : statusCached.latest_signal,
-          });
-        }
+        const prev = DataCache.get("status") || {};
+        const merged = {
+          ...prev,
+          overall: data.overall,
+          processes: data.processes,
+          all_processes: data.all_processes || data.processes,
+          signal_stats: data.signal_stats || prev.signal_stats,
+          latest_signal: data.latest_signal !== undefined ? data.latest_signal : prev.latest_signal,
+          server_time: data.server_time || prev.server_time,
+        };
+        DataCache.set("status", merged);
+        applyStatusData(merged);
       } catch {}
     };
     eventSource.onerror = async () => {
+      sseConnected = false;
+      syncMonitorPolling();
       eventSource?.close();
       eventSource = null;
       if (!isAuthenticated) return;
@@ -3199,12 +3449,11 @@
     fetchBootstrap().catch(() => {
       fetchStatus({ force: true }).catch(() => {});
       fetchSystem({ force: true }).catch(() => {});
-      fetchSignals({ force: true }).catch(() => {});
-      fetchReport(7, { force: true }).catch(() => {});
-      fetchReport(30, { force: true }).catch(() => {});
     });
 
-    statusInterval = setInterval(() => fetchStatus().catch(() => {}), 15000);
+    statusInterval = setInterval(() => {
+      if (!sseConnected) fetchStatus().catch(() => {});
+    }, sseConnected ? 45000 : 20000);
     syncLogPolling();
     connectSSE();
   }

@@ -1,10 +1,17 @@
 {
   "major": 2,
   "minor": 8,
-  "patch": 0,
+  "patch": 1,
   "label": "v2.8",
   "released": "2026-07-08",
   "history": [
+    {
+      "version": "2.8.1",
+      "label": "v2.8",
+      "date": "2026-07-08",
+      "title": "Fast cache layer — instant paint, server-side parse cache",
+      "level": "patch"
+    },
     {
       "version": "2.8.0",
       "label": "v2.8",
