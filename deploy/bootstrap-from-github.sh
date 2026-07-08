@@ -81,6 +81,8 @@ else
   gitx -C "${BOT_ROOT}" reset --hard "origin/${DEPLOY_BRANCH}"
 fi
 
+git -C "${BOT_ROOT}" config core.hooksPath .githooks
+
 if [[ -f "${DEPLOY_KEY}" ]]; then
   mkdir -p /root/.ssh
   chmod 700 /root/.ssh
