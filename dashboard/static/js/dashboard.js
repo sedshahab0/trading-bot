@@ -47,6 +47,149 @@
   const CHART_FONT = { family: "Vazirmatn", size: 11 };
   const CHART_COLORS = ["#63ffd0", "#5b9cf6", "#a78bfa", "#fbbf24", "#f87171"];
 
+  // ── Smart Cache (stale-while-revalidate + session persist) ──
+  const CACHE_TTL = {
+    status: 8000,
+    system: 5000,
+    signals: 20000,
+    logs: 3000,
+    report: 90000,
+    bootstrap: 10000,
+  };
+
+  const PERSIST_KEYS = new Set(["status", "system", "signals", "report:7", "report:30"]);
+
+  const PAGE_NEEDS = {
+    home: ["status", "report:7"],
+    monitor: ["status", "system"],
+    control: ["status"],
+    signals: ["signals"],
+    reports: [],
+    settings: ["status"],
+    logs: ["logs"],
+  };
+
+  const DataCache = {
+    _mem: new Map(),
+    _inflight: new Map(),
+    _revalidate: new Map(),
+
+    get(key) {
+      return this._mem.get(key)?.data ?? null;
+    },
+
+    getEntry(key) {
+      return this._mem.get(key);
+    },
+
+    set(key, data, ts = Date.now()) {
+      this._mem.set(key, { data, ts });
+      if (PERSIST_KEYS.has(key)) {
+        try {
+          sessionStorage.setItem(`tc:${key}`, JSON.stringify({ data, ts }));
+        } catch {}
+      }
+    },
+
+    delete(key) {
+      this._mem.delete(key);
+      try {
+        sessionStorage.removeItem(`tc:${key}`);
+      } catch {}
+    },
+
+    clear() {
+      this._mem.clear();
+      try {
+        Object.keys(sessionStorage)
+          .filter((k) => k.startsWith("tc:"))
+          .forEach((k) => sessionStorage.removeItem(k));
+      } catch {}
+    },
+
+    isFresh(key, ttl) {
+      const e = this.getEntry(key);
+      return Boolean(e && Date.now() - e.ts < ttl);
+    },
+
+    canServeStale(key, ttl) {
+      const e = this.getEntry(key);
+      return Boolean(e && Date.now() - e.ts < ttl * 8);
+    },
+
+    hydrate() {
+      PERSIST_KEYS.forEach((key) => {
+        try {
+          const raw = sessionStorage.getItem(`tc:${key}`);
+          if (!raw) return;
+          const { data, ts } = JSON.parse(raw);
+          if (Date.now() - ts < 300000) this._mem.set(key, { data, ts });
+        } catch {}
+      });
+    },
+
+    onRevalidate(key, fn) {
+      if (!this._revalidate.has(key)) this._revalidate.set(key, new Set());
+      this._revalidate.get(key).add(fn);
+    },
+
+    _emitRevalidate(key, data) {
+      this._revalidate.get(key)?.forEach((fn) => {
+        try {
+          fn(data);
+        } catch {}
+      });
+    },
+
+    async load(key, fetcher, ttl, { force = false } = {}) {
+      if (!force && this.isFresh(key, ttl)) return this.get(key);
+
+      const stale = !force && this.canServeStale(key, ttl) ? this.get(key) : null;
+
+      if (this._inflight.has(key)) {
+        if (stale) return stale;
+        return this._inflight.get(key);
+      }
+
+      const task = Promise.resolve()
+        .then(fetcher)
+        .then((data) => {
+          this.set(key, data);
+          this._inflight.delete(key);
+          this._emitRevalidate(key, data);
+          return data;
+        })
+        .catch((err) => {
+          this._inflight.delete(key);
+          if (stale) return stale;
+          throw err;
+        });
+
+      this._inflight.set(key, task);
+
+      if (stale) {
+        task.then((data) => {
+          if (data) this._emitRevalidate(key, data);
+        });
+        return stale;
+      }
+
+      return task;
+    },
+  };
+
+  function invalidateCache(...keys) {
+    keys.forEach((k) => DataCache.delete(k));
+  }
+
+  function reportCacheKey(days = 30) {
+    return `report:${days}`;
+  }
+
+  function logsCacheKey(process) {
+    return `logs:${process}`;
+  }
+
   // ── Toast ──
   function toast(msg, type = "success") {
     const el = document.createElement("div");
@@ -88,6 +231,8 @@
   }
 
   function showDashboard() {
+    DataCache.hydrate();
+    applyPageFromCache(activePage);
     $("#loginOverlay").classList.add("hidden");
     $("#dashboard").classList.remove("hidden");
     startStreams();
@@ -151,6 +296,7 @@
       await api("/api/auth/logout", { method: "POST" });
     } catch {}
     isAuthenticated = false;
+    DataCache.clear();
     showLogin();
   });
 
@@ -163,7 +309,9 @@
       });
       const labels = { start: "راه‌اندازی", stop: "توقف", restart: "ری‌استارت" };
       toast(`${labels[action]} انجام شد`);
-      refreshStatus();
+      invalidateCache("status", "system", "bootstrap");
+      fetchStatus({ force: true });
+      fetchSystem({ force: true });
       return data;
     } catch (err) {
       toast(err.message, "error");
@@ -311,15 +459,233 @@
     });
   }
 
-  async function refreshHomeExtras() {
-    try {
-      const data = await api("/api/reports/summary?days=7");
+  function applyStatusData(data) {
+    if (!data) return;
+    updateStatusBanner(data.overall);
+    renderProcesses(data.processes);
+    renderHomeProcesses(data.processes);
+    renderMonitorProcesses(data.processes);
+    renderEngineState(data.engine_state);
+    renderLatestSignal(data.latest_signal);
+    renderStats(data.signal_stats);
+    const time = data.server_time || "";
+    if ($("#liveTime")) $("#liveTime").textContent = time.split(" ")[1] || "--:--:--";
+    if ($("#heroUpdated")) $("#heroUpdated").textContent = time ? `بروزرسانی ${time}` : "";
+
+    const cfg = data.config || {};
+    if ($("#cfgSymbols")) $("#cfgSymbols").value = cfg.symbols || "";
+    if ($("#cfgMinScore")) $("#cfgMinScore").value = cfg.min_score || "5";
+    if ($("#cfgPoll")) $("#cfgPoll").value = cfg.poll_seconds || "30";
+    if ($("#cfgFacebook")) $("#cfgFacebook").checked = cfg.facebook_enable;
+    if ($("#cfgDebug")) $("#cfgDebug").checked = cfg.engine_debug;
+    if ($("#debugStatus")) $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
+  }
+
+  function applySignalsList(signals) {
+    if (!signals) return;
+    allSignals = signals;
+    renderSignals(signals);
+  }
+
+  function applyReportData(data, days = 30) {
+    if (!data) return;
+    if (days === 7) {
       renderHomeSparkline(data.daily);
+      return;
+    }
+    if ($("#rptAvg")) $("#rptAvg").textContent = data.avg_per_day;
+    if ($("#rptTop")) $("#rptTop").textContent = data.top_symbol;
+    if ($("#rptRatio")) $("#rptRatio").textContent = data.buy_sell_ratio;
+    if ($("#rptRestarts")) $("#rptRestarts").textContent = data.total_restarts;
+    if ($("#reportGenerated")) {
+      $("#reportGenerated").textContent = `بروزرسانی: ${data.generated_at} · ${data.total} سیگنال در ${days} روز`;
+    }
+    renderDailyChart(data.daily);
+    renderDirectionChart(data.by_direction?.BUY || 0, data.by_direction?.SELL || 0);
+    renderSymbolBarChart(data.by_symbol || {});
+  }
+
+  function applyBootstrap(payload) {
+    if (!payload) return;
+    if (payload.status) {
+      DataCache.set("status", payload.status);
+      applyStatusData(payload.status);
+    }
+    if (payload.system) {
+      DataCache.set("system", payload.system);
+      updateSystem(payload.system);
+    }
+    if (payload.signals) {
+      DataCache.set("signals", payload.signals);
+      applySignalsList(payload.signals);
+    }
+    if (payload.report_7) {
+      DataCache.set("report:7", payload.report_7);
+      applyReportData(payload.report_7, 7);
+    }
+    if (payload.report_30) {
+      DataCache.set("report:30", payload.report_30);
+      applyReportData(payload.report_30, 30);
+    }
+  }
+
+  function applyPageFromCache(page) {
+    switch (page) {
+      case "home": {
+        const status = DataCache.get("status");
+        const report = DataCache.get("report:7");
+        if (status) applyStatusData(status);
+        if (report) applyReportData(report, 7);
+        break;
+      }
+      case "monitor": {
+        const status = DataCache.get("status");
+        const sys = DataCache.get("system");
+        if (sys) updateSystem(sys);
+        if (status) {
+          renderEngineState(status.engine_state);
+          renderMonitorProcesses(status.processes);
+        }
+        requestAnimationFrame(() => {
+          updateSparkCharts();
+          renderResourceHistoryChart();
+        });
+        break;
+      }
+      case "control": {
+        const status = DataCache.get("status");
+        if (status) {
+          applyStatusData(status);
+        }
+        break;
+      }
+      case "signals": {
+        const signals = DataCache.get("signals");
+        if (signals) applySignalsList(signals);
+        break;
+      }
+      case "reports": {
+        const days = Number($("#reportDays")?.value || 30);
+        const report = DataCache.get(reportCacheKey(days));
+        if (report) applyReportData(report, days);
+        break;
+      }
+      case "settings": {
+        const status = DataCache.get("status");
+        if (status) applyStatusData(status);
+        break;
+      }
+      case "logs": {
+        const process = $("#logSelect")?.value || "signal-engine";
+        const cached = DataCache.get(logsCacheKey(process));
+        if (cached) applyLogs(cached);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  function applyLogs(lines) {
+    const body = $("#terminalBody");
+    if (!body || !lines) return;
+    body.innerHTML = lines.map(colorizeLog).join("\n");
+    body.scrollTop = body.scrollHeight;
+  }
+
+  async function fetchStatus({ force = false } = {}) {
+    const data = await DataCache.load("status", () => api("/api/status"), CACHE_TTL.status, { force });
+    applyStatusData(data);
+    return data;
+  }
+
+  async function fetchSystem({ force = false } = {}) {
+    const data = await DataCache.load("system", () => api("/api/system"), CACHE_TTL.system, { force });
+    updateSystem(data);
+    return data;
+  }
+
+  async function fetchSignals({ force = false } = {}) {
+    const data = await DataCache.load(
+      "signals",
+      async () => (await api("/api/signals?limit=50")).signals,
+      CACHE_TTL.signals,
+      { force }
+    );
+    applySignalsList(data);
+    return data;
+  }
+
+  async function fetchReport(days = 30, { force = false } = {}) {
+    const key = reportCacheKey(days);
+    const data = await DataCache.load(
+      key,
+      () => api(`/api/reports/summary?days=${days}`),
+      CACHE_TTL.report,
+      { force }
+    );
+    applyReportData(data, days);
+    return data;
+  }
+
+  const _emitRevalidateOrig = DataCache._emitRevalidate.bind(DataCache);
+  DataCache._emitRevalidate = function (key, data) {
+    if (key.startsWith("report:")) {
+      applyReportData(data, Number(key.split(":")[1] || 30));
+    } else if (key.startsWith("logs:")) {
+      if (activePage === "logs") applyLogs(data);
+    }
+    _emitRevalidateOrig(key, data);
+  };
+
+  async function fetchLogs({ force = false } = {}) {
+    const process = $("#logSelect")?.value || "signal-engine";
+    const key = logsCacheKey(process);
+    const data = await DataCache.load(
+      key,
+      async () => (await api(`/api/logs?process=${process}&lines=60`)).lines,
+      CACHE_TTL.logs,
+      { force }
+    );
+    applyLogs(data);
+    return data;
+  }
+
+  async function fetchBootstrap({ force = false } = {}) {
+    const data = await DataCache.load("bootstrap", () => api("/api/bootstrap"), CACHE_TTL.bootstrap, { force });
+    applyBootstrap(data);
+    return data;
+  }
+
+  async function ensurePageData(page, { force = false } = {}) {
+    const needs = PAGE_NEEDS[page] || [];
+    const tasks = [];
+
+    if (needs.includes("status")) tasks.push(fetchStatus({ force }));
+    if (needs.includes("system")) tasks.push(fetchSystem({ force }));
+    if (needs.includes("signals")) tasks.push(fetchSignals({ force }));
+    if (needs.includes("report:7")) tasks.push(fetchReport(7, { force }));
+    if (page === "reports") {
+      const days = Number($("#reportDays")?.value || 30);
+      tasks.push(fetchReport(days, { force }));
+    }
+    if (needs.includes("logs")) tasks.push(fetchLogs({ force }));
+
+    await Promise.allSettled(tasks);
+  }
+
+  function prefetchPage(page) {
+    ensurePageData(page).catch(() => {});
+  }
+
+  async function refreshHomeExtras({ force = false } = {}) {
+    try {
+      await fetchReport(7, { force });
     } catch {}
   }
 
   // ── Page Navigation ──
-  function switchPage(page) {
+  function switchPage(page, { revalidate = true } = {}) {
     activePage = page;
     const meta = PAGE_META[page] || PAGE_META.home;
     if ($("#pageTitle")) $("#pageTitle").textContent = meta.title;
@@ -329,16 +695,11 @@
     });
     $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${page}`));
     closeSidebar();
-    if (page === "reports") setTimeout(refreshReports, 100);
-    if (page === "logs") refreshLogs();
-    if (page === "monitor") {
-      setTimeout(() => {
-        updateSparkCharts();
-        renderResourceHistoryChart();
-        renderMonitorProcesses(lastProcesses);
-        if (lastEngineState) renderEngineState(lastEngineState);
-      }, 80);
-    }
+
+    applyPageFromCache(page);
+
+    if (revalidate) ensurePageData(page).catch(() => {});
+    syncLogPolling();
   }
 
   function openSidebar() {
@@ -353,6 +714,8 @@
 
   $$(".nav-item[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => switchPage(btn.dataset.page));
+    btn.addEventListener("mouseenter", () => prefetchPage(btn.dataset.page));
+    btn.addEventListener("focus", () => prefetchPage(btn.dataset.page));
   });
 
   $("#menuToggle")?.addEventListener("click", openSidebar);
@@ -360,6 +723,7 @@
 
   $$("[data-goto]").forEach((btn) => {
     btn.addEventListener("click", () => switchPage(btn.dataset.goto));
+    btn.addEventListener("mouseenter", () => prefetchPage(btn.dataset.goto));
   });
 
   function renderProcesses(procs) {
@@ -899,50 +1263,44 @@
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  async function refreshLogs() {
-    const process = $("#logSelect")?.value || "signal-engine";
+  async function refreshLogs({ force = false } = {}) {
     try {
-      const { lines } = await api(`/api/logs?process=${process}&lines=60`);
-      const body = $("#terminalBody");
-      if (body) {
-        body.innerHTML = lines.map(colorizeLog).join("\n");
-        body.scrollTop = body.scrollHeight;
-      }
+      await fetchLogs({ force });
     } catch {}
   }
 
-  async function refreshStatus() {
+  async function refreshStatus({ force = false } = {}) {
     try {
-      const data = await api("/api/status");
-      updateStatusBanner(data.overall);
-      renderProcesses(data.processes);
-      renderHomeProcesses(data.processes);
-      renderMonitorProcesses(data.processes);
-      renderEngineState(data.engine_state);
-      renderLatestSignal(data.latest_signal);
-      renderStats(data.signal_stats);
-      const time = data.server_time || "";
-      $("#liveTime").textContent = time.split(" ")[1] || "--:--:--";
-      if ($("#heroUpdated")) $("#heroUpdated").textContent = time ? `بروزرسانی ${time}` : "";
-
-      const cfg = data.config || {};
-      $("#cfgSymbols").value = cfg.symbols || "";
-      $("#cfgMinScore").value = cfg.min_score || "5";
-      $("#cfgPoll").value = cfg.poll_seconds || "30";
-      $("#cfgFacebook").checked = cfg.facebook_enable;
-      $("#cfgDebug").checked = cfg.engine_debug;
-      if ($("#debugStatus")) {
-        $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
-      }
+      await fetchStatus({ force });
     } catch {}
   }
 
-  async function refreshSignals() {
+  async function refreshSignals({ force = false } = {}) {
     try {
-      const { signals } = await api("/api/signals?limit=50");
-      allSignals = signals;
-      renderSignals(signals);
+      await fetchSignals({ force });
     } catch {}
+  }
+
+  async function refreshReports({ force = false } = {}) {
+    const days = Number($("#reportDays")?.value || 30);
+    try {
+      await fetchReport(days, { force });
+    } catch {}
+  }
+
+  async function refreshSystem({ force = false } = {}) {
+    try {
+      await fetchSystem({ force });
+    } catch {}
+  }
+
+  function syncLogPolling() {
+    clearInterval(logInterval);
+    logInterval = null;
+    if (activePage === "logs" && isAuthenticated) {
+      fetchLogs().catch(() => {});
+      logInterval = setInterval(() => fetchLogs().catch(() => {}), 5000);
+    }
   }
 
   // ── Reports ──
@@ -1008,22 +1366,6 @@
     });
   }
 
-  async function refreshReports() {
-    const days = $("#reportDays")?.value || 30;
-    try {
-      const data = await api(`/api/reports/summary?days=${days}`);
-      if ($("#rptAvg")) $("#rptAvg").textContent = data.avg_per_day;
-      if ($("#rptTop")) $("#rptTop").textContent = data.top_symbol;
-      if ($("#rptRatio")) $("#rptRatio").textContent = data.buy_sell_ratio;
-      if ($("#rptRestarts")) $("#rptRestarts").textContent = data.total_restarts;
-      if ($("#reportGenerated")) {
-        $("#reportGenerated").textContent = `بروزرسانی: ${data.generated_at} · ${data.total} سیگنال در ${days} روز`;
-      }
-      renderDailyChart(data.daily);
-      renderDirectionChart(data.by_direction?.BUY || 0, data.by_direction?.SELL || 0);
-      renderSymbolBarChart(data.by_symbol || {});
-    } catch {}
-  }
   async function mgmt(action) {
     try {
       const data = await api("/api/management", {
@@ -1031,8 +1373,10 @@
         body: JSON.stringify({ action }),
       });
       toast(data.message || "انجام شد");
-      refreshStatus();
-      if (action === "toggle_debug") refreshReports();
+      invalidateCache("status", "system", "bootstrap", "report:7", "report:30");
+      fetchStatus({ force: true });
+      fetchSystem({ force: true });
+      if (action === "toggle_debug") refreshReports({ force: true });
     } catch (err) {
       toast(err.message, "error");
     }
@@ -1047,7 +1391,7 @@
   });
   $("#btnToggleDebug")?.addEventListener("click", () => mgmt("toggle_debug"));
 
-  $("#reportDays")?.addEventListener("change", refreshReports);
+  $("#reportDays")?.addEventListener("change", () => refreshReports({ force: true }));
 
   async function downloadExport(url) {
     try {
@@ -1077,10 +1421,9 @@
 
   $("#signalSearch")?.addEventListener("input", () => renderSignals(allSignals));
 
-  async function refreshSystem() {
+  async function refreshSystem({ force = false } = {}) {
     try {
-      const sys = await api("/api/system");
-      updateSystem(sys);
+      await fetchSystem({ force });
     } catch {}
   }
 
@@ -1098,12 +1441,17 @@
         }),
       });
       toast("تنظیمات ذخیره شد");
+      invalidateCache("status", "bootstrap");
+      fetchStatus({ force: true });
     } catch (err) {
       toast(err.message, "error");
     }
   });
 
-  $("#logSelect")?.addEventListener("change", refreshLogs);
+  $("#logSelect")?.addEventListener("change", () => {
+    invalidateCache(logsCacheKey($("#logSelect")?.value || "signal-engine"));
+    refreshLogs({ force: true });
+  });
 
   // ── SSE Stream ──
   function connectSSE() {
@@ -1119,6 +1467,16 @@
         renderMonitorProcesses(data.processes);
         updateSystem(data.system);
         if (data.server_time) $("#liveTime").textContent = data.server_time;
+
+        DataCache.set("system", data.system);
+        const statusCached = DataCache.get("status");
+        if (statusCached) {
+          DataCache.set("status", {
+            ...statusCached,
+            overall: data.overall,
+            processes: data.processes,
+          });
+        }
       } catch {}
     };
     eventSource.onerror = async () => {
@@ -1144,15 +1502,18 @@
 
   function startStreams() {
     stopStreams();
-    switchPage(activePage);
-    refreshStatus();
-    refreshSignals();
-    refreshSystem();
-    refreshLogs();
-    refreshReports();
-    refreshHomeExtras();
-    statusInterval = setInterval(refreshStatus, 10000);
-    logInterval = setInterval(refreshLogs, 5000);
+    switchPage(activePage, { revalidate: false });
+
+    fetchBootstrap().catch(() => {
+      fetchStatus({ force: true }).catch(() => {});
+      fetchSystem({ force: true }).catch(() => {});
+      fetchSignals({ force: true }).catch(() => {});
+      fetchReport(7, { force: true }).catch(() => {});
+      fetchReport(30, { force: true }).catch(() => {});
+    });
+
+    statusInterval = setInterval(() => fetchStatus().catch(() => {}), 15000);
+    syncLogPolling();
     connectSSE();
   }
 
@@ -1162,7 +1523,13 @@
     clearTimeout(sseReconnectTimer);
     clearInterval(statusInterval);
     clearInterval(logInterval);
+    logInterval = null;
   }
+
+  // Background cache refresh hooks
+  DataCache.onRevalidate("status", applyStatusData);
+  DataCache.onRevalidate("system", updateSystem);
+  DataCache.onRevalidate("signals", applySignalsList);
 
   // ── Init ──
   checkAuth();

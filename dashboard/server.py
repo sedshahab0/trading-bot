@@ -490,9 +490,7 @@ def auth_check():
     })
 
 
-@app.route("/api/status")
-@auth_required
-def api_status():
+def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
     procs = []
     for name in PROCESSES:
         info = _proc_info(name)
@@ -501,7 +499,8 @@ def api_status():
 
     state = _read_json(STATE_FILE) or {}
     env = _parse_env()
-    signals = _parse_signals(100)
+    if stats_signals is None:
+        stats_signals = _parse_signals(100)
 
     last_signal_human = {}
     for sym, ts in (state.get("last_signal_at") or {}).items():
@@ -512,31 +511,79 @@ def api_status():
         except Exception:
             last_signal_human[sym] = "—"
 
+    return {
+        "overall": _overall_status(procs),
+        "processes": procs,
+        "engine_state": {
+            "last_bars": state.get("last_bars", {}),
+            "last_signal_at": last_signal_human,
+            "updated_at": state.get("updated_at"),
+            "startup_sent": state.get("startup_sent", False),
+        },
+        "config": {
+            "symbols": env.get("SYMBOLS", "EUR/USD,GBP/USD,XAU/USD"),
+            "min_score": env.get("MIN_SCORE", "5"),
+            "poll_seconds": env.get("POLL_SECONDS", "30"),
+            "data_provider": env.get("DATA_PROVIDER", "twelvedata"),
+            "facebook_enable": env.get("FACEBOOK_ENABLE", "1") == "1",
+            "telegram_configured": bool(env.get("TELEGRAM_BOT_TOKEN")),
+            "notifications_paused": env.get("NOTIFICATIONS_PAUSED", "0") == "1",
+            "engine_debug": env.get("ENGINE_DEBUG", "0") == "1",
+        },
+        "latest_signal": _read_json(SIGNAL_QUEUE),
+        "signal_stats": _signal_stats(stats_signals),
+        "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def _signal_after(s: dict, cutoff: datetime) -> bool:
+    try:
+        return datetime.strptime(s.get("timestamp", "")[:19], "%Y-%m-%d %H:%M:%S") >= cutoff
+    except ValueError:
+        return True
+
+
+@app.route("/api/status")
+@auth_required
+def api_status():
+    return jsonify(_build_status_payload())
+
+
+@app.route("/api/bootstrap")
+@auth_required
+def api_bootstrap():
+    """Single payload for fast dashboard boot — one signal-log read."""
+    all_signals = _parse_all_signals(days=30)
+    cutoff_7 = datetime.now() - timedelta(days=7)
+    signals_7d = [s for s in all_signals if _signal_after(s, cutoff_7)]
+    stats_signals = all_signals[:100]
+
     return jsonify(
         {
-            "overall": _overall_status(procs),
-            "processes": procs,
-            "engine_state": {
-                "last_bars": state.get("last_bars", {}),
-                "last_signal_at": last_signal_human,
-                "updated_at": state.get("updated_at"),
-                "startup_sent": state.get("startup_sent", False),
-            },
-            "config": {
-                "symbols": env.get("SYMBOLS", "EUR/USD,GBP/USD,XAU/USD"),
-                "min_score": env.get("MIN_SCORE", "5"),
-                "poll_seconds": env.get("POLL_SECONDS", "30"),
-                "data_provider": env.get("DATA_PROVIDER", "twelvedata"),
-                "facebook_enable": env.get("FACEBOOK_ENABLE", "1") == "1",
-                "telegram_configured": bool(env.get("TELEGRAM_BOT_TOKEN")),
-                "notifications_paused": env.get("NOTIFICATIONS_PAUSED", "0") == "1",
-                "engine_debug": env.get("ENGINE_DEBUG", "0") == "1",
-            },
-            "latest_signal": _read_json(SIGNAL_QUEUE),
-            "signal_stats": _signal_stats(signals),
-            "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "status": _build_status_payload(stats_signals=stats_signals),
+            "system": _system_stats(),
+            "signals": all_signals[:50],
+            "report_7": _report_summary(signals_7d),
+            "report_30": _report_summary(all_signals),
         }
     )
+
+
+@app.after_request
+def _cache_headers(response):
+    path = request.path or ""
+    if path.startswith("/static/"):
+        response.cache_control.public = True
+        response.cache_control.max_age = 86400
+        response.cache_control.immutable = True
+    elif path == "/" or path.endswith(".html"):
+        response.cache_control.no_cache = True
+        response.cache_control.must_revalidate = True
+    elif path.startswith("/api/") and path not in ("/api/stream", "/api/auth/login", "/api/auth/logout"):
+        response.cache_control.private = True
+        response.cache_control.max_age = 0
+        response.cache_control.must_revalidate = True
+    return response
 
 
 @app.route("/api/system")
