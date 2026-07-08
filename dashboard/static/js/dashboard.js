@@ -10,6 +10,7 @@
   let dailyChart = null;
   let directionChart = null;
   let symbolBarChart = null;
+  let homeSparkline = null;
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
@@ -178,10 +179,128 @@
     if (ind) ind.className = `status-indicator ${info.cls}`;
     if ($("#statusLabel")) $("#statusLabel").textContent = info.label;
     if ($("#statusSub")) $("#statusSub").textContent = info.sub;
+    if ($("#heroStatusText")) $("#heroStatusText").textContent = info.label;
     const dot = document.querySelector(".sidebar-status-dot");
     if (dot) dot.className = `sidebar-status-dot ${info.cls}`;
     if ($("#sidebarStatusText")) $("#sidebarStatusText").textContent = info.label;
-    $$(".nav-item").forEach((n) => n.classList.remove("status-running", "status-stopped"));
+  }
+
+  function renderHomeProcesses(procs) {
+    const el = $("#homeProcesses");
+    if (!el || !procs) return;
+    el.innerHTML = procs.map((p) => `
+      <div class="service-chip">
+        <span class="name">${p.name}</span>
+        <span class="dot ${p.status === "online" ? "online" : "stopped"}"></span>
+      </div>`).join("");
+  }
+
+  function renderLatestSignal(latest) {
+    const ls = $("#latestSignal");
+    if (!ls) return;
+    if (!latest) {
+      ls.className = "signal-ticket empty";
+      ls.textContent = "هنوز سیگنالی ثبت نشده";
+      return;
+    }
+    ls.className = "signal-ticket";
+    const dir = (latest.direction || "").toUpperCase();
+    const isBuy = dir === "BUY";
+    ls.innerHTML = `
+      <div class="ticket-header">
+        <span class="ticket-symbol">${latest.symbol}</span>
+        <span class="ticket-dir ${isBuy ? "buy" : "sell"}">${dir}</span>
+      </div>
+      <div class="ticket-grid">
+        <div class="ticket-field"><label>Entry</label><span class="accent">${latest.entry}</span></div>
+        <div class="ticket-field"><label>Stop Loss</label><span>${latest.sl}</span></div>
+        <div class="ticket-field"><label>TP1</label><span>${latest.tp1}</span></div>
+        <div class="ticket-field"><label>TP2</label><span>${latest.tp2 || "—"}</span></div>
+        <div class="ticket-field full"><label>Risk / Reward</label><span>${latest.rr || "—"}${latest.basis ? " · " + (latest.basis.length > 36 ? latest.basis.slice(0, 36) + "…" : latest.basis) : ""}</span></div>
+      </div>`;
+  }
+
+  function renderSymbolHealth(state) {
+    const el = $("#symbolHealth");
+    if (!el) return;
+    const bars = state?.last_bars || {};
+    const signals = state?.last_signal_at || {};
+    const symbols = [...new Set([...Object.keys(bars), ...Object.keys(signals)])];
+    if (!symbols.length) {
+      el.innerHTML = '<p style="color:var(--text-dim);font-size:var(--text-xs);text-align:center;padding:0.5rem">—</p>';
+      return;
+    }
+    el.innerHTML = symbols.map((sym) => {
+      const barTime = bars[sym] || "—";
+      const sigTime = signals[sym] || "—";
+      const pct = barTime !== "—" ? 85 : 30;
+      return `
+        <div class="health-row">
+          <span class="health-sym">${sym}</span>
+          <div class="health-info">
+            <div class="health-bar-label"><span>آخرین Bar</span><span>${barTime !== "—" ? "فعال" : "—"}</span></div>
+            <div class="health-bar"><div class="health-bar-fill" style="width:${pct}%"></div></div>
+          </div>
+          <span class="health-signal-time">${sigTime !== "—" ? sigTime.split(" ")[1] || sigTime : "—"}</span>
+        </div>`;
+    }).join("");
+  }
+
+  function renderSymbolLegend(bySymbol) {
+    const el = $("#symbolLegend");
+    if (!el) return;
+    const total = Object.values(bySymbol).reduce((a, b) => a + b, 0) || 1;
+    const colors = CHART_COLORS;
+    el.innerHTML = Object.entries(bySymbol).map(([sym, count], i) => `
+      <div class="legend-item">
+        <span class="legend-dot" style="background:${colors[i % colors.length]}"></span>
+        ${sym} <strong>${count}</strong> (${Math.round(count / total * 100)}%)
+      </div>`).join("");
+  }
+
+  function renderHomeSparkline(daily) {
+    const canvas = $("#homeSparkline");
+    if (!canvas || !daily) return;
+    const labels = daily.map((d) => d.date.slice(5));
+    const totals = daily.map((d) => d.total);
+    if (homeSparkline) {
+      homeSparkline.data.labels = labels;
+      homeSparkline.data.datasets[0].data = totals;
+      homeSparkline.update("none");
+      return;
+    }
+    homeSparkline = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          data: totals,
+          borderColor: "#63ffd0",
+          backgroundColor: "rgba(99,255,208,0.1)",
+          fill: true,
+          tension: 0.45,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        ...chartDefaults(),
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { display: false, beginAtZero: true },
+        },
+        interaction: { intersect: false, mode: "index" },
+      },
+    });
+  }
+
+  async function refreshHomeExtras() {
+    try {
+      const data = await api("/api/reports/summary?days=7");
+      renderHomeSparkline(data.daily);
+    } catch {}
   }
 
   // ── Page Navigation ──
@@ -215,6 +334,10 @@
 
   $("#menuToggle")?.addEventListener("click", openSidebar);
   $("#sidebarOverlay")?.addEventListener("click", closeSidebar);
+
+  $$("[data-goto]").forEach((btn) => {
+    btn.addEventListener("click", () => switchPage(btn.dataset.goto));
+  });
 
   function renderProcesses(procs) {
     const container = $("#processCards");
@@ -267,6 +390,7 @@
     $("#netUpBar").style.width = `${Math.min(up / 5, 100)}%`;
 
     $("#hostTag").textContent = sys.hostname;
+    if ($("#heroUptime")) $("#heroUptime").textContent = formatUptime(sys.uptime_secs);
   }
 
   function formatUptime(secs) {
@@ -275,43 +399,20 @@
     return d ? `${d}d ${h}h` : `${h}h`;
   }
 
-  function renderEngineState(state, latest, targetId = "engineInfo") {
-    const info = $(`#${targetId}`);
+  function renderEngineState(state) {
+    const info = $("#engineInfo");
     if (!info) return;
-
     const bars = state?.last_bars || {};
     const signals = state?.last_signal_at || {};
     const symbols = [...new Set([...Object.keys(bars), ...Object.keys(signals)])];
-
     info.innerHTML = symbols.length
-      ? symbols
-          .map(
-            (sym) => `
+      ? symbols.map((sym) => `
         <div class="engine-row">
           <span class="sym">${sym}</span>
           <span class="val">Bar: ${bars[sym] || "—"} · Signal: ${signals[sym] || "—"}</span>
-        </div>`
-          )
-          .join("")
+        </div>`).join("")
       : '<div class="engine-row"><span class="val">اطلاعاتی موجود نیست</span></div>';
-
-    if (targetId !== "engineInfo") return;
-
-    const ls = $("#latestSignal");
-    if (latest && ls) {
-      const dir = (latest.direction || "").toUpperCase();
-      ls.innerHTML = `
-        <div class="sig-header">
-          <strong>${latest.symbol}</strong>
-          <span class="sig-badge ${dir === "BUY" ? "buy" : "sell"}">${dir}</span>
-        </div>
-        <div class="sig-detail">
-          Entry: ${latest.entry} · SL: ${latest.sl}<br/>
-          TP1: ${latest.tp1} · TP2: ${latest.tp2} · RR: ${latest.rr}
-        </div>`;
-    } else if (ls) {
-      ls.innerHTML = '<span style="color:var(--text-muted)">سیگنالی ثبت نشده</span>';
-    }
+    renderSymbolHealth(state);
   }
 
   function renderStats(stats) {
@@ -328,6 +429,7 @@
     set("#sigToday", stats.today);
     set("#sigTotal", stats.total);
     updateChart(stats.by_symbol || {});
+    renderSymbolLegend(stats.by_symbol || {});
   }
 
   function updateChart(bySymbol) {
@@ -335,12 +437,13 @@
     if (!canvas) return;
     const labels = Object.keys(bySymbol);
     const values = Object.values(bySymbol);
-    const colors = ["#63ffd0", "#5b9cf6", "#a78bfa", "#fbbf24", "#f87171"];
 
     if (symbolChart) {
       symbolChart.data.labels = labels;
       symbolChart.data.datasets[0].data = values;
+      symbolChart.data.datasets[0].backgroundColor = CHART_COLORS.slice(0, labels.length);
       symbolChart.update("none");
+      renderSymbolLegend(bySymbol);
       return;
     }
 
@@ -348,28 +451,23 @@
       type: "doughnut",
       data: {
         labels,
-        datasets: [
-          {
-            data: values,
-            backgroundColor: colors.slice(0, labels.length),
-            borderWidth: 0,
-            hoverOffset: 6,
-          },
-        ],
+        datasets: [{
+          data: values,
+          backgroundColor: CHART_COLORS.slice(0, labels.length),
+          borderWidth: 0,
+          hoverOffset: 10,
+          spacing: 2,
+        }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "65%",
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: "#8b95a8", font: CHART_FONT, padding: 14, usePointStyle: true },
-          },
-        },
-        animation: { animateRotate: true, duration: 800 },
+        cutout: "72%",
+        plugins: { legend: { display: false } },
+        animation: { animateRotate: true, duration: 900, easing: "easeOutQuart" },
       },
     });
+    renderSymbolLegend(bySymbol);
   }
 
   function chartDefaults() {
@@ -500,10 +598,13 @@
       const data = await api("/api/status");
       updateStatusBanner(data.overall);
       renderProcesses(data.processes);
-      renderEngineState(data.engine_state, data.latest_signal);
-      renderEngineState(data.engine_state, null, "engineInfoHome");
+      renderHomeProcesses(data.processes);
+      renderEngineState(data.engine_state);
+      renderLatestSignal(data.latest_signal);
       renderStats(data.signal_stats);
-      $("#liveTime").textContent = data.server_time?.split(" ")[1] || "--:--:--";
+      const time = data.server_time || "";
+      $("#liveTime").textContent = time.split(" ")[1] || "--:--:--";
+      if ($("#heroUpdated")) $("#heroUpdated").textContent = time ? `بروزرسانی ${time}` : "";
 
       const cfg = data.config || {};
       $("#cfgSymbols").value = cfg.symbols || "";
@@ -695,6 +796,7 @@
         const data = JSON.parse(e.data);
         updateStatusBanner(data.overall);
         renderProcesses(data.processes);
+        renderHomeProcesses(data.processes);
         updateSystem(data.system);
         if (data.server_time) $("#liveTime").textContent = data.server_time;
       } catch {}
@@ -728,6 +830,7 @@
     refreshSystem();
     refreshLogs();
     refreshReports();
+    refreshHomeExtras();
     statusInterval = setInterval(refreshStatus, 10000);
     logInterval = setInterval(refreshLogs, 5000);
     connectSSE();

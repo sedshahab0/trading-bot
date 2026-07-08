@@ -137,21 +137,88 @@
 
         <!-- PAGE: Home -->
         <div class="page active" id="page-home">
-          <div class="status-banner" id="statusBanner">
-            <div class="status-indicator" id="statusIndicator"></div>
-            <div class="status-text"><span class="status-label" id="statusLabel">—</span><span class="status-sub" id="statusSub"></span></div>
-            <div class="status-meta"><span class="tag" id="hostTag">—</span><span class="tag tag-ip">agennews.store</span></div>
-          </div>
-          <div class="kpi-grid">
-            <div class="kpi-card"><span class="kpi-val" id="kpiToday">0</span><span class="kpi-lbl">سیگنال امروز</span></div>
-            <div class="kpi-card"><span class="kpi-val" id="kpiTotal">0</span><span class="kpi-lbl">کل سیگنال‌ها</span></div>
-            <div class="kpi-card accent-green"><span class="kpi-val" id="kpiBuy">0</span><span class="kpi-lbl">BUY</span></div>
-            <div class="kpi-card accent-red"><span class="kpi-val" id="kpiSell">0</span><span class="kpi-lbl">SELL</span></div>
-          </div>
-          <div class="grid-2">
-            <div class="panel"><h3 class="panel-heading">توزیع نمادها</h3><div class="chart-box"><canvas id="symbolChart"></canvas></div></div>
-            <div class="panel"><h3 class="panel-heading">آخرین سیگنال</h3><div class="latest-signal" id="latestSignal"></div><div class="engine-info compact" id="engineInfoHome"></div></div>
-          </div>
+
+          <!-- Hero Status -->
+          <section class="home-hero">
+            <div class="hero-bg"></div>
+            <div class="hero-body">
+              <div class="hero-main">
+                <div class="hero-status-row">
+                  <span class="status-pill" id="heroStatusPill"><span class="status-indicator" id="statusIndicator"></span><span id="heroStatusText">—</span></span>
+                  <span class="hero-time" id="heroUpdated">—</span>
+                </div>
+                <h2 class="hero-title" id="statusLabel">در حال بارگذاری...</h2>
+                <p class="hero-sub" id="statusSub"></p>
+                <div class="hero-chips">
+                  <div class="hero-chip"><span class="chip-lbl">دامنه</span><span class="chip-val">agennews.store</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">سرور</span><span class="chip-val" id="hostTag">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Uptime</span><span class="chip-val" id="heroUptime">—</span></div>
+                </div>
+              </div>
+              <div class="hero-side">
+                <p class="hero-side-label">سرویس‌ها</p>
+                <div class="hero-services" id="homeProcesses"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- KPI Cards -->
+          <section class="kpi-grid pro">
+            <article class="kpi-card pro today">
+              <div class="kpi-icon">📊</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiToday">0</span><span class="kpi-lbl">سیگنال امروز</span></div>
+            </article>
+            <article class="kpi-card pro">
+              <div class="kpi-icon">∑</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiTotal">0</span><span class="kpi-lbl">کل سیگنال‌ها</span></div>
+            </article>
+            <article class="kpi-card pro buy">
+              <div class="kpi-icon">↑</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiBuy">0</span><span class="kpi-lbl">BUY</span></div>
+            </article>
+            <article class="kpi-card pro sell">
+              <div class="kpi-icon">↓</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiSell">0</span><span class="kpi-lbl">SELL</span></div>
+            </article>
+          </section>
+
+          <!-- Main Home Grid -->
+          <section class="home-grid">
+            <article class="panel panel-highlight">
+              <div class="panel-top">
+                <h3 class="panel-heading">آخرین سیگنال</h3>
+                <button class="link-btn" data-goto="signals">مشاهده همه ←</button>
+              </div>
+              <div class="signal-ticket" id="latestSignal"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">توزیع نمادها</h3>
+              </div>
+              <div class="chart-box home-chart"><canvas id="symbolChart"></canvas></div>
+              <div class="symbol-legend" id="symbolLegend"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">فعالیت ۷ روز اخیر</h3>
+              </div>
+              <div class="chart-box home-chart-sm"><canvas id="homeSparkline"></canvas></div>
+              <div class="panel-top" style="margin-top:1rem;margin-bottom:0.5rem">
+                <h3 class="panel-heading">سلامت نمادها</h3>
+              </div>
+              <div class="symbol-health" id="symbolHealth"></div>
+            </article>
+          </section>
+
+          <!-- Quick Actions -->
+          <section class="quick-actions">
+            <button class="quick-btn" data-goto="control"><span>⚙️</span>کنترل ربات</button>
+            <button class="quick-btn" data-goto="reports"><span>📈</span>گزارش Excel</button>
+            <button class="quick-btn" data-goto="monitor"><span>🖥</span>مانیتورینگ</button>
+            <button class="quick-btn" data-goto="logs"><span>⌘</span>لاگ زنده</button>
+          </section>
         </div>
 
         <!-- PAGE: Monitor -->
