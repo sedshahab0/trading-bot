@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+STAGED="$(git diff --cached --name-only --diff-filter=ACM)"
+
+if [[ -z "${STAGED}" ]]; then
+  exit 0
+fi
+
+if [[ "${SKIP_DASHBOARD_VERSION_BUMP:-}" == "1" ]]; then
+  exit 0
+fi
+
+if ! printf '%s\n' "${STAGED}" | grep -qE '^dashboard/(server\.py|static/)'; then
+  exit 0
+fi
+
+if ! printf '%s\n' "${STAGED}" | grep -qEv '^dashboard/version\.json$'; then
+  exit 0
+fi
+
+LEVEL="${DASHBOARD_VERSION_LEVEL:-minor}"
+TITLE="${DASHBOARD_VERSION_TITLE:-Automated dashboard update}"
+
+python "${ROOT}/scripts/bump_dashboard_version.py" --level "${LEVEL}" --title "${TITLE}"
+
+git add \
+  dashboard/version.json \
+  dashboard/server.py \
+  dashboard/static/index.html \
+  dashboard/static/js/dashboard.js
+
+exit 0
