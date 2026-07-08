@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=6" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=6" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=7" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=7" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.1</span>
+            <span class="version-badge" id="loginVersion">v2.2</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.1</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.2</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.1.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.2.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -318,17 +318,125 @@
 
         <!-- PAGE: Control -->
         <div class="page" id="page-control">
-          <div class="panel"><h3 class="panel-heading">مرکز مدیریت</h3>
-            <div class="mgmt-grid">
-              <button class="mgmt-card" id="btnRestartAll"><span class="mgmt-icon restart">↻</span><span class="mgmt-label">ری‌استارت کامل</span></button>
-              <button class="mgmt-card" id="btnPauseNotif"><span class="mgmt-icon pause">⏸</span><span class="mgmt-label">توقف نوتیفیکیشن</span></button>
-              <button class="mgmt-card" id="btnResumeNotif"><span class="mgmt-icon play">▶</span><span class="mgmt-label">ادامه نوتیفیکیشن</span></button>
-              <button class="mgmt-card" id="btnResetCooldown"><span class="mgmt-icon reset">⟲</span><span class="mgmt-label">ریست Cooldown</span></button>
-              <button class="mgmt-card" id="btnFlushLogs"><span class="mgmt-icon logs">⌫</span><span class="mgmt-label">پاکسازی لاگ</span></button>
-              <button class="mgmt-card" id="btnToggleDebug"><span class="mgmt-icon debug">⚙</span><span class="mgmt-label">Debug</span><span class="mgmt-desc" id="debugStatus">خاموش</span></button>
+
+          <!-- Control Hero -->
+          <section class="control-hero">
+            <div class="hero-bg"></div>
+            <div class="control-hero-body">
+              <div class="control-hero-main">
+                <div class="hero-status-row">
+                  <span class="status-pill" id="ctrlStatusPill"><span class="status-indicator" id="ctrlStatusDot"></span><span id="ctrlStatusLabel">—</span></span>
+                  <span class="hero-time" id="ctrlUpdated">—</span>
+                </div>
+                <h2 class="hero-title">مرکز کنترل ربات</h2>
+                <p class="hero-sub" id="ctrlStatusSub">مدیریت PM2، نوتیفیکیشن و عملیات موتور</p>
+                <div class="control-status-chips" id="controlStatusChips"></div>
+              </div>
+              <div class="control-quick-actions">
+                <button type="button" class="ctrl-quick-btn start" id="ctrlStartAll" title="روشن کردن همه">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>
+                  <span>روشن</span>
+                </button>
+                <button type="button" class="ctrl-quick-btn stop" id="ctrlStopAll" title="توقف همه">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                  <span>توقف</span>
+                </button>
+                <button type="button" class="ctrl-quick-btn restart" id="ctrlRestartAll" title="ری‌استارت ربات">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <span>ری‌استارت</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Config snapshot -->
+          <section class="control-config-bar" id="controlConfigBar"></section>
+
+          <div class="control-grid">
+            <!-- Management sections -->
+            <div class="control-col">
+              <article class="panel">
+                <div class="panel-top">
+                  <h3 class="panel-heading">نوتیفیکیشن</h3>
+                  <p class="panel-desc">کنترل ارسال سیگنال به تلگرام</p>
+                </div>
+                <div class="mgmt-grid mgmt-grid-2">
+                  <button type="button" class="mgmt-card v2" id="btnPauseNotif" data-mgmt="pause_notifications">
+                    <span class="mgmt-icon pause">⏸</span>
+                    <span class="mgmt-label">توقف نوتیفیکیشن</span>
+                    <span class="mgmt-desc">متوقف کردن موتور</span>
+                  </button>
+                  <button type="button" class="mgmt-card v2" id="btnResumeNotif" data-mgmt="resume_notifications">
+                    <span class="mgmt-icon play">▶</span>
+                    <span class="mgmt-label">ادامه نوتیفیکیشن</span>
+                    <span class="mgmt-desc">راه‌اندازی مجدد</span>
+                  </button>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-top">
+                  <h3 class="panel-heading">موتور تحلیل</h3>
+                  <p class="panel-desc">تنظیمات runtime موتور سیگنال</p>
+                </div>
+                <div class="mgmt-grid mgmt-grid-2">
+                  <button type="button" class="mgmt-card v2" id="btnResetCooldown" data-mgmt="reset_cooldowns">
+                    <span class="mgmt-icon reset">⟲</span>
+                    <span class="mgmt-label">ریست Cooldown</span>
+                    <span class="mgmt-desc">آزادسازی محدودیت زمانی</span>
+                  </button>
+                  <button type="button" class="mgmt-card v2" id="btnResetStartup" data-mgmt="reset_startup_flag">
+                    <span class="mgmt-icon reset">🚀</span>
+                    <span class="mgmt-label">ریست Startup</span>
+                    <span class="mgmt-desc">پیام شروع مجدد</span>
+                  </button>
+                  <button type="button" class="mgmt-card v2" id="btnToggleDebug" data-mgmt="toggle_debug">
+                    <span class="mgmt-icon debug">⚙</span>
+                    <span class="mgmt-label">Debug Engine</span>
+                    <span class="mgmt-desc" id="debugStatus">خاموش</span>
+                  </button>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-top">
+                  <h3 class="panel-heading">نگهداری</h3>
+                  <p class="panel-desc">عملیات سیستمی و لاگ</p>
+                </div>
+                <div class="mgmt-grid mgmt-grid-2">
+                  <button type="button" class="mgmt-card v2" id="btnFlushLogs" data-mgmt="flush_logs" data-confirm="لاگ‌های PM2 پاک شوند؟">
+                    <span class="mgmt-icon logs">⌫</span>
+                    <span class="mgmt-label">پاکسازی لاگ</span>
+                    <span class="mgmt-desc">PM2 flush</span>
+                  </button>
+                  <button type="button" class="mgmt-card v2" id="btnRestartDashboard" data-mgmt="restart_dashboard" data-confirm="داشبورد ری‌استارت شود؟">
+                    <span class="mgmt-icon restart">↻</span>
+                    <span class="mgmt-label">ری‌استارت داشبورد</span>
+                    <span class="mgmt-desc">PM2 dashboard</span>
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <!-- Processes + Activity -->
+            <div class="control-col">
+              <article class="panel">
+                <div class="panel-top">
+                  <h3 class="panel-heading">فرآیندهای PM2</h3>
+                  <button type="button" class="link-btn" id="btnRefreshProcesses">بروزرسانی ↻</button>
+                </div>
+                <div class="process-cards v2" id="processCards"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-top">
+                  <h3 class="panel-heading">فعالیت اخیر</h3>
+                  <button type="button" class="link-btn" id="btnClearActivity">پاک کردن</button>
+                </div>
+                <ul class="control-activity" id="controlActivity"></ul>
+              </article>
             </div>
           </div>
-          <div class="panel"><h3 class="panel-heading">فرآیندهای PM2</h3><div class="process-cards" id="processCards"></div></div>
         </div>
 
         <!-- PAGE: Signals -->
