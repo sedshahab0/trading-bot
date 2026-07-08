@@ -1221,23 +1221,105 @@ body {
     padding: 0.85rem 0.85rem calc(5rem + env(safe-area-inset-bottom));
   }
 
+  .login-overlay {
+    padding: calc(0.55rem + env(safe-area-inset-top)) 0.55rem calc(0.55rem + env(safe-area-inset-bottom));
+    align-items: center;
+  }
+
   .login-wrap {
     grid-template-columns: 1fr;
-    max-width: 440px;
-    min-height: unset;
+    max-width: 420px;
+    min-height: auto;
+    border-radius: 20px;
   }
 
   .login-brand {
-    padding: 1.8rem 1.5rem 1.2rem;
+    padding: 1.4rem 1.25rem 1rem;
     border-left: none;
     border-bottom: 1px solid rgba(255,255,255,0.06);
+    justify-content: center;
   }
 
-  .brand-title { font-size: 1.5rem; }
-  .brand-desc { font-size: 0.85rem; margin-bottom: 1rem; }
+  .login-brand-inner {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .brand-logo {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 1.05rem;
+    border-radius: 16px;
+  }
+
+  .brand-logo svg { width: 28px; height: 28px; }
+
+  .brand-logo-ring {
+    inset: -5px;
+    border-radius: 20px;
+  }
+
+  .brand-tag {
+    font-size: 0.66rem;
+    padding: 0.22rem 0.58rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .brand-title {
+    font-size: 1.35rem;
+    margin-bottom: 0.6rem;
+    text-align: center;
+  }
+
+  .brand-desc { font-size: 0.82rem; line-height: 1.6; margin-bottom: 0; }
   .brand-features { display: none; }
 
-  .login-panel { padding: 1.8rem 1.5rem 2rem; }
+  .login-panel { padding: 1.35rem 1.25rem 1.5rem; }
+
+  .login-panel-header {
+    margin-bottom: 1.2rem;
+    text-align: center;
+  }
+
+  .login-panel-header h2 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+  .login-panel-header p { font-size: 0.82rem; }
+
+  .login-form { gap: 0.95rem; }
+
+  .field-group label {
+    font-size: 0.78rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .input-wrap input {
+    min-height: 46px;
+    padding: 0.82rem 2.7rem 0.82rem 2.7rem;
+    font-size: 0.92rem;
+  }
+
+  .input-icon { right: 0.8rem; }
+  .toggle-pw { left: 0.65rem; }
+
+  .login-submit {
+    min-height: 48px;
+    padding: 0.88rem 1rem;
+    font-size: 0.95rem;
+  }
+
+  .login-error {
+    margin-top: 0.35rem;
+    min-height: 1rem;
+    font-size: 0.8rem;
+  }
+
+  .login-footer {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    gap: 0.4rem;
+  }
 
   .header {
     flex-direction: row;
@@ -1329,5 +1411,16 @@ body {
   .stat-cards { grid-template-columns: 1fr 1fr; }
   .report-summary { grid-template-columns: 1fr 1fr; }
   .mgmt-grid { grid-template-columns: 1fr; }
-  .login-overlay { padding: 0.5rem; }
+  .login-overlay { padding: calc(0.45rem + env(safe-area-inset-top)) 0.45rem calc(0.45rem + env(safe-area-inset-bottom)); }
+  .login-wrap { border-radius: 18px; }
+  .login-brand { padding: 1.25rem 1rem 0.9rem; }
+  .brand-logo { width: 54px; height: 54px; }
+  .brand-title { font-size: 1.25rem; }
+  .login-panel { padding: 1.2rem 1rem 1.25rem; }
+  .login-panel-header h2 { font-size: 1.18rem; }
+  .login-panel-header p { font-size: 0.78rem; }
+  .field-group label { font-size: 0.76rem; }
+  .input-wrap input { min-height: 44px; padding-inline: 2.55rem; }
+  .login-submit { min-height: 46px; }
+  .login-footer { margin-top: 1rem; padding-top: 0.85rem; }
 }
