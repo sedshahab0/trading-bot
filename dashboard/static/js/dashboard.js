@@ -30,6 +30,7 @@
   let allSignals = [];
   let signalPage = 1;
   let allTelegramEntries = [];
+  let telegramPage = 1;
   let activePage = "home";
   let lastEngineState = null;
   let lastProcesses = [];
@@ -183,6 +184,10 @@
   const firedAlertKeys = new Set();
   function normalizePage(page) {
     return PAGE_META[page] ? page : "home";
+  }
+
+  function resetTelegramPage() {
+    telegramPage = 1;
   }
 
   const PAGE_META = {
@@ -1861,8 +1866,21 @@
     const filtered = q
       ? entries.filter((e) => (e.symbol || "").toUpperCase().includes(q) || (e.detail || "").toUpperCase().includes(q))
       : entries;
-    feed.innerHTML = filtered.length
-      ? filtered.map((e, i) => {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / 10));
+    telegramPage = Math.min(Math.max(1, telegramPage), totalPages);
+    const start = (telegramPage - 1) * 10;
+    const pageEntries = filtered.slice(start, start + 10);
+
+    if ($("#tgFeedCount")) {
+      const pageStart = filtered.length ? start + 1 : 0;
+      const pageEnd = Math.min(start + 10, filtered.length);
+      $("#tgFeedCount").textContent = filtered.length
+        ? `${pageStart}-${pageEnd} از ${filtered.length}`
+        : "0 مورد";
+    }
+
+    feed.innerHTML = pageEntries.length
+      ? pageEntries.map((e, i) => {
           const ok = e.ok;
           const dir = (e.direction || "").toUpperCase();
           const retryBtn = !ok
@@ -1888,6 +1906,37 @@
         </article>`;
         }).join("")
       : '<p class="telegram-empty">موردی یافت نشد</p>';
+    renderTelegramPagination(filtered.length, totalPages);
+  }
+
+  function renderTelegramPagination(totalItems, totalPages) {
+    const nav = $("#telegramPagination");
+    if (!nav) return;
+    if (totalItems <= 10 || totalPages <= 1) {
+      nav.innerHTML = "";
+      nav.hidden = true;
+      return;
+    }
+    nav.hidden = false;
+    const pages = [];
+    for (let p = 1; p <= totalPages; p += 1) {
+      if (p === 1 || p === totalPages || Math.abs(p - telegramPage) <= 1) {
+        pages.push(p);
+      } else if (pages[pages.length - 1] !== "...") {
+        pages.push("...");
+      }
+    }
+    nav.innerHTML = `
+      <button type="button" class="sig-page-btn prev" data-telegram-page="${telegramPage - 1}" ${telegramPage <= 1 ? "disabled" : ""}>قبلی</button>
+      <div class="sig-page-list">
+        ${pages.map((p) => p === "..."
+          ? '<span class="sig-page-ellipsis">...</span>'
+          : `<button type="button" class="sig-page-btn num ${p === telegramPage ? "active" : ""}" data-telegram-page="${p}" aria-current="${p === telegramPage ? "page" : "false"}">${p}</button>`
+        ).join("")}
+      </div>
+      <button type="button" class="sig-page-btn next" data-telegram-page="${telegramPage + 1}" ${telegramPage >= totalPages ? "disabled" : ""}>بعدی</button>
+      <span class="sig-page-summary">صفحه ${telegramPage} از ${totalPages}</span>
+    `;
   }
 
   async function retryTelegramSend(btn) {
@@ -2205,7 +2254,7 @@
     await waitForBootstrap();
     const data = await DataCache.load(
       key,
-      () => api(`/api/telegram/log?days=${days}&limit=200&status=${status}`),
+      () => api(`/api/telegram/log?days=${days}&limit=500&status=${status}`),
       CACHE_TTL.telegram,
       { force, onStale: (d) => applyTelegramData(d) }
     );
@@ -3703,9 +3752,18 @@
     downloadExport(`/api/export/telegram.csv?days=${days}`);
   });
 
-  $("#telegramSearch")?.addEventListener("input", () => renderTelegramFeed(allTelegramEntries));
-  $("#telegramStatus")?.addEventListener("change", () => refreshTelegram({ force: true }));
-  $("#telegramDays")?.addEventListener("change", () => refreshTelegram({ force: true }));
+  $("#telegramSearch")?.addEventListener("input", () => {
+    resetTelegramPage();
+    renderTelegramFeed(allTelegramEntries);
+  });
+  $("#telegramStatus")?.addEventListener("change", () => {
+    resetTelegramPage();
+    refreshTelegram({ force: true });
+  });
+  $("#telegramDays")?.addEventListener("change", () => {
+    resetTelegramPage();
+    refreshTelegram({ force: true });
+  });
 
   $("#signalSearch")?.addEventListener("input", () => {
     resetSignalPage();
@@ -3733,6 +3791,13 @@
     signalPage = Number(btn.dataset.signalPage || 1);
     renderSignals(allSignals);
     $("#signalFeed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("#telegramPagination")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-telegram-page]");
+    if (!btn || btn.disabled) return;
+    telegramPage = Number(btn.dataset.telegramPage || 1);
+    renderTelegramFeed(allTelegramEntries);
+    $("#telegramFeed")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   $("#btnTelegramTest")?.addEventListener("click", (e) => sendTelegramTest(e.currentTarget));
