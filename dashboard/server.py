@@ -2059,13 +2059,16 @@ def api_bootstrap():
 def _cache_headers(response):
     path = request.path or ""
     if path.startswith("/static/"):
-        response.cache_control.public = True
-        response.cache_control.max_age = 86400
-        response.cache_control.immutable = True
+        response.cache_control.no_store = True
+        response.cache_control.no_cache = True
+        response.cache_control.must_revalidate = True
+        response.cache_control.max_age = 0
     elif path == "/" or path.endswith(".html"):
+        response.cache_control.no_store = True
         response.cache_control.no_cache = True
         response.cache_control.must_revalidate = True
     elif path.startswith("/api/") and path not in ("/api/stream", "/api/auth/login", "/api/auth/logout", "/api/version"):
+        response.cache_control.no_store = True
         response.cache_control.private = True
         response.cache_control.max_age = 0
         response.cache_control.must_revalidate = True

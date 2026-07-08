@@ -76,6 +76,20 @@
     }
   }
 
+  function clearDashboardCache() {
+    DataCache.clear();
+    try {
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith("tc:"))
+        .forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("tc:"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  }
+
   let browserNotifEnabled = safeLocalStorageGet("tc:browser-notif", "0") === "1";
   const firedAlertKeys = new Set();
 
@@ -2154,9 +2168,17 @@
   // ── Version display ──
   function applyVersion(info) {
     if (!info) return;
+    const nextFull = info.full || `${info.major}.${info.minor}.${info.patch || 0}`;
+    const storedFull = safeLocalStorageGet("tc:build-version", "");
+    if (storedFull && storedFull !== nextFull) {
+      clearDashboardCache();
+      safeLocalStorageSet("tc:build-version", nextFull);
+      location.reload();
+      return;
+    }
     dashboardVersion = {
       label: info.label || `v${info.major}.${info.minor}`,
-      full: info.full || `${info.major}.${info.minor}.${info.patch || 0}`,
+      full: nextFull,
       major: info.major,
       minor: info.minor,
       patch: info.patch || 0,
@@ -2170,6 +2192,7 @@
     }
     if ($("#loginVersion")) $("#loginVersion").textContent = label;
     document.title = `TradeChi ${label} — Dashboard`;
+    safeLocalStorageSet("tc:build-version", nextFull);
   }
 
   async function loadVersion() {
