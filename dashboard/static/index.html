@@ -223,13 +223,123 @@
 
         <!-- PAGE: Monitor -->
         <div class="page" id="page-monitor">
-          <div class="resource-grid">
-            <div class="resource-card"><div class="resource-header"><span class="resource-label">CPU</span><span class="resource-value" id="cpuValue">0%</span></div><div class="progress-bar"><div class="progress-fill cpu-fill" id="cpuBar"></div></div><span class="resource-sub">ربات: <strong id="cpuBot">0%</strong></span></div>
-            <div class="resource-card"><div class="resource-header"><span class="resource-label">RAM</span><span class="resource-value" id="ramValue">0%</span></div><div class="progress-bar"><div class="progress-fill ram-fill" id="ramBar"></div></div><span class="resource-sub"><strong id="ramTotal">0</strong> GB · ربات <strong id="ramBot">0</strong> MB</span></div>
-            <div class="resource-card"><div class="resource-header"><span class="resource-label">DISK</span><span class="resource-value" id="diskValue">0%</span></div><div class="progress-bar"><div class="progress-fill disk-fill" id="diskBar"></div></div><span class="resource-sub">آزاد <strong id="diskFree">0</strong> GB</span></div>
-            <div class="resource-card"><div class="resource-header"><span class="resource-label">NET</span><span class="resource-value" id="netValue">0</span></div><div class="net-bars"><div class="net-row"><span>↓</span><div class="progress-bar sm"><div class="progress-fill net-down" id="netDownBar"></div></div><span id="netDown">0</span></div><div class="net-row"><span>↑</span><div class="progress-bar sm"><div class="progress-fill net-up" id="netUpBar"></div></div><span id="netUp">0</span></div></div></div>
-          </div>
-          <div class="panel"><h3 class="panel-heading">وضعیت موتور تحلیل</h3><div class="engine-info" id="engineInfo"></div></div>
+
+          <!-- Monitor Hero -->
+          <section class="monitor-hero">
+            <div class="hero-bg"></div>
+            <div class="monitor-hero-body">
+              <div class="monitor-hero-main">
+                <div class="hero-status-row">
+                  <span class="status-pill" id="monitorHealthPill"><span class="status-indicator" id="monitorHealthDot"></span><span id="monitorHealthLabel">—</span></span>
+                  <span class="hero-time" id="monitorSyncTime">آخرین بروزرسانی: —</span>
+                </div>
+                <h2 class="hero-title" id="monitorHostTitle">سرور</h2>
+                <p class="hero-sub" id="monitorHostSub">منابع سیستم و موتور تحلیل</p>
+                <div class="hero-chips">
+                  <div class="hero-chip"><span class="chip-lbl">Hostname</span><span class="chip-val" id="monHost">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Uptime</span><span class="chip-val" id="monUptime">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Health Score</span><span class="chip-val" id="monHealthScore">—</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">Bot RAM</span><span class="chip-val" id="monBotRam">—</span></div>
+                </div>
+              </div>
+              <div class="monitor-score-ring">
+                <svg viewBox="0 0 120 120" class="score-svg">
+                  <circle class="score-track" cx="60" cy="60" r="52"/>
+                  <circle class="score-fill" id="monitorScoreArc" cx="60" cy="60" r="52"/>
+                </svg>
+                <div class="score-center">
+                  <span class="score-num" id="monitorScoreNum">—</span>
+                  <span class="score-lbl">سلامت</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Resource Gauges -->
+          <section class="monitor-gauges">
+            <article class="gauge-card cpu">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">CPU</span><span class="gauge-value" id="cpuValue">0%</span></div>
+              </div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 80 80" class="mini-gauge"><circle class="gauge-track" cx="40" cy="40" r="34"/><circle class="gauge-fill cpu-gauge" id="cpuGaugeArc" cx="40" cy="40" r="34"/></svg>
+              </div>
+              <div class="gauge-footer"><span>ربات</span><strong id="cpuBot">0%</strong></div>
+              <div class="gauge-spark"><canvas id="cpuSpark"></canvas></div>
+            </article>
+
+            <article class="gauge-card ram">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M8 11V9M12 11V9M16 11V9M6 15h12a2 2 0 002-2V7H4v6a2 2 0 002 2z"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">RAM</span><span class="gauge-value" id="ramValue">0%</span></div>
+              </div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 80 80" class="mini-gauge"><circle class="gauge-track" cx="40" cy="40" r="34"/><circle class="gauge-fill ram-gauge" id="ramGaugeArc" cx="40" cy="40" r="34"/></svg>
+              </div>
+              <div class="gauge-footer"><span><strong id="ramTotal">0</strong> GB</span><span>ربات <strong id="ramBot">0</strong> MB</span></div>
+              <div class="gauge-spark"><canvas id="ramSpark"></canvas></div>
+            </article>
+
+            <article class="gauge-card disk">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">DISK</span><span class="gauge-value" id="diskValue">0%</span></div>
+              </div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 80 80" class="mini-gauge"><circle class="gauge-track" cx="40" cy="40" r="34"/><circle class="gauge-fill disk-gauge" id="diskGaugeArc" cx="40" cy="40" r="34"/></svg>
+              </div>
+              <div class="gauge-footer"><span>آزاد</span><strong id="diskFree">0</strong> GB</div>
+              <div class="gauge-spark"><canvas id="diskSpark"></canvas></div>
+            </article>
+
+            <article class="gauge-card net">
+              <div class="gauge-top">
+                <div class="gauge-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></div>
+                <div class="gauge-meta"><span class="gauge-label">NET</span><span class="gauge-value" id="netValue">0</span></div>
+              </div>
+              <div class="net-dual">
+                <div class="net-stat down"><span class="net-arrow">↓</span><div class="net-stat-body"><span class="net-stat-lbl">Download</span><span class="net-stat-val" id="netDown">0 KB/s</span><div class="progress-bar sm"><div class="progress-fill net-down" id="netDownBar"></div></div></div></div>
+                <div class="net-stat up"><span class="net-arrow">↑</span><div class="net-stat-body"><span class="net-stat-lbl">Upload</span><span class="net-stat-val" id="netUp">0 KB/s</span><div class="progress-bar sm"><div class="progress-fill net-up" id="netUpBar"></div></div></div></div>
+              </div>
+              <div class="gauge-spark"><canvas id="netSpark"></canvas></div>
+            </article>
+          </section>
+
+          <!-- Charts + Processes -->
+          <section class="monitor-grid">
+            <article class="panel panel-wide">
+              <div class="panel-top">
+                <h3 class="panel-heading">روند منابع (زنده)</h3>
+                <div class="chart-legend-inline">
+                  <span class="legend-dot" style="background:#5b9cf6"></span> CPU
+                  <span class="legend-dot" style="background:#63ffd0"></span> RAM
+                </div>
+              </div>
+              <div class="chart-box monitor-chart"><canvas id="resourceHistoryChart"></canvas></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">فرآیندهای PM2</h3>
+                <button class="link-btn" data-goto="control">مدیریت ←</button>
+              </div>
+              <div class="monitor-processes" id="monitorProcesses"></div>
+            </article>
+          </section>
+
+          <!-- Engine Status -->
+          <section class="panel monitor-engine-panel">
+            <div class="panel-top">
+              <div>
+                <h3 class="panel-heading">وضعیت موتور تحلیل</h3>
+                <p class="panel-desc" id="engineUpdatedAt">—</p>
+              </div>
+              <div class="engine-summary-chips" id="engineSummaryChips"></div>
+            </div>
+            <div class="engine-cards" id="engineInfo"></div>
+          </section>
+
         </div>
 
         <!-- PAGE: Control -->

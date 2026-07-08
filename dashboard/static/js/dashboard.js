@@ -11,6 +11,11 @@
   let directionChart = null;
   let symbolBarChart = null;
   let homeSparkline = null;
+  let resourceHistoryChart = null;
+  let cpuSparkChart = null;
+  let ramSparkChart = null;
+  let diskSparkChart = null;
+  let netSparkChart = null;
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
@@ -18,10 +23,20 @@
   let sseReconnectTimer = null;
   let allSignals = [];
   let activePage = "home";
+  let lastEngineState = null;
+  let lastProcesses = [];
+  const resourceHistory = {
+    labels: [],
+    cpu: [],
+    ram: [],
+    disk: [],
+    net: [],
+    max: 30,
+  };
 
   const PAGE_META = {
     home: { title: "داشبورد", sub: "نمای کلی ربات" },
-    monitor: { title: "مانیتورینگ", sub: "منابع سرور و موتور" },
+    monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم" },
     control: { title: "کنترل ربات", sub: "مدیریت PM2 و عملیات" },
     signals: { title: "سیگنال‌ها", sub: "تاریخچه سیگنال‌های ارسالی" },
     reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد و خروجی Excel" },
@@ -316,6 +331,14 @@
     closeSidebar();
     if (page === "reports") setTimeout(refreshReports, 100);
     if (page === "logs") refreshLogs();
+    if (page === "monitor") {
+      setTimeout(() => {
+        updateSparkCharts();
+        renderResourceHistoryChart();
+        renderMonitorProcesses(lastProcesses);
+        if (lastEngineState) renderEngineState(lastEngineState);
+      }, 80);
+    }
   }
 
   function openSidebar() {
@@ -366,19 +389,246 @@
 
   window._ctrl = (action, process) => control(action, process);
 
+  function setGaugeArc(el, pct, max = 214) {
+    if (!el) return;
+    const clamped = Math.max(0, Math.min(100, pct));
+    el.style.strokeDashoffset = String(max - (max * clamped) / 100);
+  }
+
+  function healthFromPct(pct) {
+    if (pct >= 75) return { cls: "good", label: "عالی" };
+    if (pct >= 50) return { cls: "warn", label: "متوسط" };
+    return { cls: "bad", label: "ضعیف" };
+  }
+
+  function computeHealthScore(sys, procs) {
+    if (!sys) return 0;
+    const cpuScore = Math.max(0, 100 - sys.cpu.total);
+    const ramScore = Math.max(0, 100 - sys.ram.used_pct);
+    const diskScore = Math.max(0, 100 - sys.disk.used_pct);
+    const procScore = procs?.length
+      ? (procs.filter((p) => p.status === "online").length / procs.length) * 100
+      : 50;
+    return Math.round(cpuScore * 0.3 + ramScore * 0.3 + diskScore * 0.2 + procScore * 0.2);
+  }
+
+  function parseAgeMinutes(value) {
+    if (!value || value === "—") return null;
+    const normalized = String(value).replace(" UTC", "Z").replace("+00:00", "Z");
+    const ts = Date.parse(normalized);
+    if (Number.isNaN(ts)) return null;
+    return Math.max(0, Math.floor((Date.now() - ts) / 60000));
+  }
+
+  function freshnessMeta(ageMin) {
+    if (ageMin === null) return { cls: "idle", label: "بدون داده", pct: 8 };
+    if (ageMin <= 15) return { cls: "ok", label: "فعال", pct: Math.max(20, 100 - ageMin * 2) };
+    if (ageMin <= 60) return { cls: "warn", label: "تأخیر", pct: Math.max(15, 70 - ageMin) };
+    return { cls: "bad", label: "منقضی", pct: Math.max(8, 30 - Math.min(ageMin, 120) / 4) };
+  }
+
+  function formatAge(ageMin) {
+    if (ageMin === null) return "—";
+    if (ageMin < 60) return `${ageMin}m ago`;
+    const h = Math.floor(ageMin / 60);
+    const m = ageMin % 60;
+    return m ? `${h}h ${m}m ago` : `${h}h ago`;
+  }
+
+  function pushResourceHistory(sys) {
+    if (!sys) return;
+    const label = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    resourceHistory.labels.push(label);
+    resourceHistory.cpu.push(sys.cpu.total);
+    resourceHistory.ram.push(sys.ram.used_pct);
+    resourceHistory.net.push(Math.max(sys.network.down_kbps, sys.network.up_kbps));
+    resourceHistory.disk.push(sys.disk.used_pct);
+    if (resourceHistory.labels.length > resourceHistory.max) {
+      resourceHistory.labels.shift();
+      resourceHistory.cpu.shift();
+      resourceHistory.ram.shift();
+      resourceHistory.net.shift();
+      resourceHistory.disk.shift();
+    }
+  }
+
+  function sparkOptions(color) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
+      elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0.4 } },
+      animation: { duration: 400 },
+    };
+  }
+
+  function ensureSparkChart(key, canvasId, color, bg) {
+    const canvas = $(canvasId);
+    if (!canvas) return null;
+    const existing = { cpuSparkChart, ramSparkChart, diskSparkChart, netSparkChart }[key];
+    if (existing) return existing;
+    const chart = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: resourceHistory.labels,
+        datasets: [{ data: [], borderColor: color, backgroundColor: bg, fill: true }],
+      },
+      options: sparkOptions(color),
+    });
+    if (key === "cpuSparkChart") cpuSparkChart = chart;
+    if (key === "ramSparkChart") ramSparkChart = chart;
+    if (key === "diskSparkChart") diskSparkChart = chart;
+    if (key === "netSparkChart") netSparkChart = chart;
+    return chart;
+  }
+
+  function updateSparkCharts() {
+    const configs = [
+      { key: "cpuSparkChart", id: "#cpuSpark", color: "#5b9cf6", bg: "rgba(91,156,246,0.12)", data: resourceHistory.cpu },
+      { key: "ramSparkChart", id: "#ramSpark", color: "#63ffd0", bg: "rgba(99,255,208,0.1)", data: resourceHistory.ram },
+      { key: "diskSparkChart", id: "#diskSpark", color: "#fbbf24", bg: "rgba(251,191,36,0.1)", data: resourceHistory.disk || [] },
+      { key: "netSparkChart", id: "#netSpark", color: "#a78bfa", bg: "rgba(167,139,250,0.1)", data: resourceHistory.net },
+    ];
+    configs.forEach(({ key, id, color, bg, data }) => {
+      let chart = { cpuSparkChart, ramSparkChart, diskSparkChart, netSparkChart }[key];
+      if (!chart) chart = ensureSparkChart(key, id, color, bg);
+      if (!chart) return;
+      chart.data.labels = resourceHistory.labels;
+      chart.data.datasets[0].data = data;
+      chart.update("none");
+    });
+  }
+
+  function renderResourceHistoryChart() {
+    const canvas = $("#resourceHistoryChart");
+    if (!canvas) return;
+    if (resourceHistoryChart) {
+      resourceHistoryChart.data.labels = resourceHistory.labels;
+      resourceHistoryChart.data.datasets[0].data = resourceHistory.cpu;
+      resourceHistoryChart.data.datasets[1].data = resourceHistory.ram;
+      resourceHistoryChart.update("none");
+      return;
+    }
+    resourceHistoryChart = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: resourceHistory.labels,
+        datasets: [
+          {
+            label: "CPU",
+            data: resourceHistory.cpu,
+            borderColor: "#5b9cf6",
+            backgroundColor: "rgba(91,156,246,0.08)",
+            fill: true,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            borderWidth: 2,
+          },
+          {
+            label: "RAM",
+            data: resourceHistory.ram,
+            borderColor: "#63ffd0",
+            backgroundColor: "rgba(99,255,208,0.06)",
+            fill: true,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        ...chartDefaults(),
+        interaction: { intersect: false, mode: "index" },
+        scales: {
+          x: {
+            ticks: { color: "#5a6478", maxTicksLimit: 8, font: CHART_FONT },
+            grid: { color: "rgba(255,255,255,0.04)" },
+          },
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { color: "#5a6478", callback: (v) => `${v}%`, font: CHART_FONT },
+            grid: { color: "rgba(255,255,255,0.04)" },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(8,12,24,0.95)",
+            titleFont: CHART_FONT,
+            bodyFont: CHART_FONT,
+            callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%` },
+          },
+        },
+      },
+    });
+  }
+
+  function renderMonitorProcesses(procs) {
+    const el = $("#monitorProcesses");
+    if (!el) return;
+    lastProcesses = procs || lastProcesses;
+    if (!lastProcesses.length) {
+      el.innerHTML = '<p style="color:var(--text-dim);font-size:var(--text-xs);text-align:center;padding:1rem">—</p>';
+      return;
+    }
+    el.innerHTML = lastProcesses.map((p) => {
+      const online = p.status === "online";
+      const cpuW = Math.min(p.cpu || 0, 100);
+      const memW = Math.min((p.memory_mb || 0) / 512 * 100, 100);
+      return `
+        <div class="mon-proc">
+          <span class="mon-proc-dot ${online ? "online" : p.status === "stopped" ? "stopped" : "unknown"}"></span>
+          <div class="mon-proc-info">
+            <div class="mon-proc-name">${p.name}</div>
+            <div class="mon-proc-meta">${online ? `PID ${p.pid} · ${p.uptime_human || "—"}` : "متوقف"}${p.restarts ? ` · ${p.restarts} restart` : ""}</div>
+          </div>
+          <div class="mon-proc-bars">
+            <div class="mon-proc-bar-row"><div class="mon-proc-bar"><div class="mon-proc-bar-fill cpu" style="width:${cpuW}%"></div></div><span>${p.cpu || 0}%</span></div>
+            <div class="mon-proc-bar-row"><div class="mon-proc-bar"><div class="mon-proc-bar-fill mem" style="width:${memW}%"></div></div><span>${p.memory_mb || 0}M</span></div>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  function updateMonitorHero(sys, procs) {
+    if (!sys) return;
+    const score = computeHealthScore(sys, procs || lastProcesses);
+    const health = healthFromPct(score);
+    setGaugeArc($("#monitorScoreArc"), score, 327);
+    const arc = $("#monitorScoreArc");
+    if (arc) arc.className = `score-fill ${health.cls}`;
+    const scoreNum = $("#monitorScoreNum");
+    if (scoreNum) scoreNum.textContent = score;
+    if ($("#monHealthScore")) $("#monHealthScore").textContent = `${score}%`;
+    if ($("#monHost")) $("#monHost").textContent = sys.hostname;
+    if ($("#monUptime")) $("#monUptime").textContent = formatUptime(sys.uptime_secs);
+    if ($("#monBotRam")) $("#monBotRam").textContent = `${sys.ram.bot_mb} MB`;
+    if ($("#monitorHostTitle")) $("#monitorHostTitle").textContent = sys.hostname;
+    if ($("#monitorHostSub")) $("#monitorHostSub").textContent = `CPU ${sys.cpu.total}% · RAM ${sys.ram.used_pct}% · Disk ${sys.disk.used_pct}%`;
+    if ($("#monitorHealthLabel")) $("#monitorHealthLabel").textContent = health.label;
+    const dot = $("#monitorHealthDot");
+    if (dot) dot.className = `status-indicator ${health.cls === "good" ? "running" : health.cls === "warn" ? "partial" : "stopped"}`;
+    const pill = $("#monitorHealthPill");
+    if (pill) pill.className = `status-pill health-${health.cls}`;
+  }
+
   function updateSystem(sys) {
     if (!sys) return;
     animateValue($("#cpuValue"), `${sys.cpu.total}%`);
-    $("#cpuBar").style.width = `${sys.cpu.total}%`;
-    $("#cpuBot").textContent = `${sys.cpu.bot}%`;
-
     animateValue($("#ramValue"), `${sys.ram.used_pct}%`);
-    $("#ramBar").style.width = `${sys.ram.used_pct}%`;
+    animateValue($("#diskValue"), `${sys.disk.used_pct}%`);
+
+    setGaugeArc($("#cpuGaugeArc"), sys.cpu.total);
+    setGaugeArc($("#ramGaugeArc"), sys.ram.used_pct);
+    setGaugeArc($("#diskGaugeArc"), sys.disk.used_pct);
+
+    $("#cpuBot").textContent = `${sys.cpu.bot}%`;
     $("#ramTotal").textContent = sys.ram.total_gb;
     $("#ramBot").textContent = sys.ram.bot_mb;
-
-    animateValue($("#diskValue"), `${sys.disk.used_pct}%`);
-    $("#diskBar").style.width = `${sys.disk.used_pct}%`;
     $("#diskFree").textContent = sys.disk.free_gb;
 
     const down = sys.network.down_kbps;
@@ -391,6 +641,16 @@
 
     $("#hostTag").textContent = sys.hostname;
     if ($("#heroUptime")) $("#heroUptime").textContent = formatUptime(sys.uptime_secs);
+
+    pushResourceHistory(sys);
+    updateMonitorHero(sys, lastProcesses);
+    if ($("#monitorSyncTime")) {
+      $("#monitorSyncTime").textContent = `آخرین بروزرسانی: ${new Date().toLocaleTimeString("fa-IR")}`;
+    }
+    if (activePage === "monitor") {
+      updateSparkCharts();
+      renderResourceHistoryChart();
+    }
   }
 
   function formatUptime(secs) {
@@ -400,18 +660,76 @@
   }
 
   function renderEngineState(state) {
+    lastEngineState = state;
     const info = $("#engineInfo");
     if (!info) return;
+
     const bars = state?.last_bars || {};
     const signals = state?.last_signal_at || {};
     const symbols = [...new Set([...Object.keys(bars), ...Object.keys(signals)])];
+
+    if ($("#engineUpdatedAt")) {
+      $("#engineUpdatedAt").textContent = state?.updated_at
+        ? `Engine sync: ${state.updated_at}`
+        : "Engine sync: —";
+    }
+
+    const summary = { ok: 0, warn: 0, bad: 0 };
+    symbols.forEach((sym) => {
+      const barAge = parseAgeMinutes(bars[sym]);
+      const meta = freshnessMeta(barAge);
+      summary[meta.cls === "idle" ? "bad" : meta.cls] += 1;
+    });
+
+    const chips = $("#engineSummaryChips");
+    if (chips) {
+      chips.innerHTML = symbols.length
+        ? `
+          <span class="engine-chip ok"><span class="dot"></span>${summary.ok} فعال</span>
+          <span class="engine-chip warn"><span class="dot"></span>${summary.warn} تأخیر</span>
+          <span class="engine-chip bad"><span class="dot"></span>${summary.bad} مشکل</span>
+          <span class="engine-chip"><span class="dot" style="background:var(--accent)"></span>${symbols.length} نماد</span>`
+        : "";
+    }
+
     info.innerHTML = symbols.length
-      ? symbols.map((sym) => `
-        <div class="engine-row">
-          <span class="sym">${sym}</span>
-          <span class="val">Bar: ${bars[sym] || "—"} · Signal: ${signals[sym] || "—"}</span>
-        </div>`).join("")
-      : '<div class="engine-row"><span class="val">اطلاعاتی موجود نیست</span></div>';
+      ? symbols.map((sym) => {
+          const barVal = bars[sym] || "—";
+          const sigVal = signals[sym] || "—";
+          const barAge = parseAgeMinutes(barVal);
+          const sigAge = parseAgeMinutes(sigVal);
+          const barMeta = freshnessMeta(barAge);
+          const sigMeta = freshnessMeta(sigAge);
+          const overall = barMeta.cls === "bad" || sigMeta.cls === "bad"
+            ? "bad"
+            : barMeta.cls === "warn" || sigMeta.cls === "warn"
+              ? "warn"
+              : barMeta.cls === "idle"
+                ? "idle"
+                : "ok";
+          const badgeLabel = { ok: "فعال", warn: "تأخیر", bad: "منقضی", idle: "بدون داده" }[overall];
+          return `
+            <article class="engine-card ${overall}">
+              <div class="engine-card-head">
+                <span class="engine-card-sym">${sym}</span>
+                <span class="engine-card-badge ${overall}">${badgeLabel}</span>
+              </div>
+              <div class="engine-card-rows">
+                <div class="engine-card-row">
+                  <div class="engine-card-row-label"><span>آخرین Bar</span><span>${formatAge(barAge)}</span></div>
+                  <div class="engine-card-row-val">${barVal}</div>
+                  <div class="engine-card-row-bar"><div class="engine-card-row-bar-fill ${barMeta.cls === "idle" ? "bad" : barMeta.cls}" style="width:${barMeta.pct}%"></div></div>
+                </div>
+                <div class="engine-card-row">
+                  <div class="engine-card-row-label"><span>آخرین Signal</span><span>${formatAge(sigAge)}</span></div>
+                  <div class="engine-card-row-val">${sigVal}</div>
+                  <div class="engine-card-row-bar"><div class="engine-card-row-bar-fill ${sigMeta.cls === "idle" ? "bad" : sigMeta.cls}" style="width:${sigMeta.pct}%"></div></div>
+                </div>
+              </div>
+            </article>`;
+        }).join("")
+      : '<div class="engine-cards-empty">اطلاعات موتور تحلیل در دسترس نیست — ربات را روشن کنید</div>';
+
     renderSymbolHealth(state);
   }
 
@@ -599,6 +917,7 @@
       updateStatusBanner(data.overall);
       renderProcesses(data.processes);
       renderHomeProcesses(data.processes);
+      renderMonitorProcesses(data.processes);
       renderEngineState(data.engine_state);
       renderLatestSignal(data.latest_signal);
       renderStats(data.signal_stats);
@@ -797,6 +1116,7 @@
         updateStatusBanner(data.overall);
         renderProcesses(data.processes);
         renderHomeProcesses(data.processes);
+        renderMonitorProcesses(data.processes);
         updateSystem(data.system);
         if (data.server_time) $("#liveTime").textContent = data.server_time;
       } catch {}
