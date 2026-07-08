@@ -1172,6 +1172,162 @@
 .kpi-card.pro.buy .kpi-val { color: var(--green); }
 .kpi-card.pro.sell .kpi-val { color: var(--red); }
 
+.kpi-grid.pro.home-kpi-extended {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.kpi-card.pro.win::before { background: var(--green); opacity: 0.75; }
+.kpi-card.pro.delivery::before { background: var(--blue); opacity: 0.75; }
+.kpi-card.pro.win .kpi-icon { color: var(--green); background: rgba(74,222,128,0.08); }
+.kpi-card.pro.delivery .kpi-icon { color: var(--blue); background: rgba(91,156,246,0.08); }
+.kpi-card.pro.win .kpi-val { color: var(--green); }
+.kpi-card.pro.delivery .kpi-val { color: var(--blue); }
+
+.home-secondary {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.home-recent-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.home-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.home-recent-symbol {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.85rem;
+  direction: ltr;
+}
+
+.home-recent-time {
+  margin-right: auto;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+
+.home-health-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.25rem 0;
+}
+
+.home-health-score {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.home-health-num {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.home-health-num.health-good { color: var(--green); }
+.home-health-num.health-warn { color: var(--amber); }
+.home-health-num.health-bad { color: var(--red); }
+
+.home-health-lbl {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.home-health-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.home-health-meta strong {
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.home-ops {
+  margin-bottom: 0.65rem;
+}
+
+.panel-empty {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: 1rem 0.5rem;
+}
+
+.outcome-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.outcome-badge.outcome-win {
+  background: rgba(74,222,128,0.14);
+  color: var(--green);
+  border: 1px solid rgba(74,222,128,0.25);
+}
+
+.outcome-badge.outcome-loss {
+  background: rgba(248,113,113,0.14);
+  color: var(--red);
+  border: 1px solid rgba(248,113,113,0.25);
+}
+
+.outcome-badge.outcome-open {
+  background: rgba(251,191,36,0.12);
+  color: var(--amber);
+  border: 1px solid rgba(251,191,36,0.22);
+}
+
+.outcome-badge.outcome-expired {
+  background: rgba(139,149,168,0.12);
+  color: var(--text-muted);
+  border: 1px solid rgba(139,149,168,0.22);
+}
+
+.sym-signal-count {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(99,255,208,0.1);
+  color: var(--accent);
+  border: 1px solid rgba(99,255,208,0.2);
+}
+
+.tg-retry-btn {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.65rem;
+}
+
+.sig-kpi.win .sig-kpi-num { color: var(--green); }
+
 /* Home Grid */
 .home-grid {
   display: grid;
@@ -1406,6 +1562,8 @@
 @media (max-width: 1100px) {
   .home-grid { grid-template-columns: 1fr 1fr; }
   .home-grid .panel-highlight { grid-column: 1 / -1; }
+  .home-secondary { grid-template-columns: 1fr; }
+  .kpi-grid.pro.home-kpi-extended { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 768px) {
@@ -1416,6 +1574,7 @@
   .home-grid { grid-template-columns: 1fr; }
   .quick-actions { grid-template-columns: repeat(2, 1fr); }
   .kpi-grid.pro { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid.pro.home-kpi-extended { grid-template-columns: repeat(2, 1fr); }
   .ticket-grid { grid-template-columns: 1fr; }
 }
 

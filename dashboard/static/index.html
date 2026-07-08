@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=14" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=14" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=15" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=15" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.5</span>
+            <span class="version-badge" id="loginVersion">v2.6</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.5</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.6</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.5.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.6.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -137,7 +137,7 @@
           </section>
 
           <!-- KPI Cards -->
-          <section class="kpi-grid pro">
+          <section class="kpi-grid pro home-kpi-extended">
             <article class="kpi-card pro today">
               <div class="kpi-icon">📊</div>
               <div class="kpi-body"><span class="kpi-val" id="kpiToday">0</span><span class="kpi-lbl">سیگنال امروز</span></div>
@@ -153,6 +153,42 @@
             <article class="kpi-card pro sell">
               <div class="kpi-icon">↓</div>
               <div class="kpi-body"><span class="kpi-val" id="kpiSell">0</span><span class="kpi-lbl">SELL</span></div>
+            </article>
+            <article class="kpi-card pro win">
+              <div class="kpi-icon">◎</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiWinRate">—</span><span class="kpi-lbl">نرخ برد</span></div>
+            </article>
+            <article class="kpi-card pro delivery">
+              <div class="kpi-icon">✓</div>
+              <div class="kpi-body"><span class="kpi-val" id="kpiDeliveryRate">—</span><span class="kpi-lbl">ارسال تلگرام</span></div>
+            </article>
+          </section>
+
+          <!-- Recent signals + health -->
+          <section class="home-secondary">
+            <article class="panel home-recent-panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">آخرین سیگنال‌ها</h3>
+                <button class="link-btn" data-goto="signals">همه ←</button>
+              </div>
+              <div class="home-recent-feed" id="homeRecentSignals"></div>
+            </article>
+            <article class="panel home-health-panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">سلامت سیستم</h3>
+                <button class="link-btn" data-goto="monitor">جزئیات ←</button>
+              </div>
+              <div class="home-health-body">
+                <div class="home-health-score">
+                  <span class="home-health-num" id="homeHealthScore">—</span>
+                  <span class="home-health-lbl" id="homeHealthLabel">—</span>
+                </div>
+                <div class="home-health-meta">
+                  <span>برد امروز: <strong id="homeTodayWins">0</strong></span>
+                  <span>باخت امروز: <strong id="homeTodayLosses">0</strong></span>
+                  <span>باز: <strong id="homeOpenSignals">0</strong></span>
+                </div>
+              </div>
             </article>
           </section>
 
@@ -187,6 +223,12 @@
           </section>
 
           <!-- Quick Actions -->
+          <section class="quick-actions home-ops">
+            <button type="button" class="quick-btn ops" id="homeBtnSymbols"><span>📋</span>نمادها</button>
+            <button type="button" class="quick-btn ops" id="homeBtnTelegramTest"><span>📨</span>تست تلگرام</button>
+            <button type="button" class="quick-btn ops" id="homeBtnPauseNotif"><span>⏸</span>توقف ارسال</button>
+            <button type="button" class="quick-btn ops" id="homeBtnResumeNotif"><span>▶</span>ادامه ارسال</button>
+          </section>
           <section class="quick-actions">
             <button class="quick-btn" data-goto="control"><span>⚙️</span>کنترل ربات</button>
             <button class="quick-btn" data-goto="reports"><span>📈</span>گزارش Excel</button>
@@ -500,6 +542,15 @@
               <option value="BUY">BUY</option>
               <option value="SELL">SELL</option>
             </select>
+            <select id="signalOutcome" class="select-input">
+              <option value="all">همه نتایج</option>
+              <option value="win">✓ برد (TP)</option>
+              <option value="loss">✗ باخت (SL)</option>
+              <option value="open">○ باز</option>
+              <option value="tp1">TP1</option>
+              <option value="tp2">TP2</option>
+              <option value="sl">SL</option>
+            </select>
             <div class="toolbar-stats signals-toolbar-stats">
               <span>امروز: <strong id="sigToday">0</strong></span>
               <span>کل: <strong id="sigTotal">0</strong></span>
@@ -511,6 +562,10 @@
             <div class="sig-kpi sell"><span class="sig-kpi-num" id="sigSellCount">0</span><span class="sig-kpi-lbl">SELL</span></div>
             <div class="sig-kpi"><span class="sig-kpi-num" id="sigDupCount">0</span><span class="sig-kpi-lbl">تکراری</span></div>
             <div class="sig-kpi"><span class="sig-kpi-num" id="sigTopSymbol">—</span><span class="sig-kpi-lbl">پرسیگنال‌ترین</span></div>
+            <div class="sig-kpi win"><span class="sig-kpi-num" id="sigWinsCount">0</span><span class="sig-kpi-lbl">برد</span></div>
+            <div class="sig-kpi sell"><span class="sig-kpi-num" id="sigLossCount">0</span><span class="sig-kpi-lbl">باخت</span></div>
+            <div class="sig-kpi"><span class="sig-kpi-num" id="sigWinRate">—</span><span class="sig-kpi-lbl">نرخ برد</span></div>
+            <div class="sig-kpi"><span class="sig-kpi-num" id="sigOpenCount">0</span><span class="sig-kpi-lbl">باز</span></div>
           </section>
 
           <section class="grid-2 signals-charts">
@@ -595,6 +650,7 @@
               <option value="30" selected>۳۰ روز</option>
               <option value="90">۹۰ روز</option>
             </select>
+            <button class="btn btn-primary" id="btnTelegramTest">📨 تست ارسال</button>
             <button class="btn btn-export csv" id="btnExportTelegram">CSV</button>
           </div>
 
@@ -815,6 +871,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=9"></script>
+  <script src="/static/js/dashboard.js?v=10"></script>
 </body>
 </html>

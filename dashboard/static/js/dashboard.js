@@ -65,7 +65,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.5", full: "2.5.0", major: 2, minor: 5, patch: 0 };
+  let dashboardVersion = { label: "v2.6", full: "2.6.0", major: 2, minor: 6, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -267,8 +267,8 @@
     return `report:${days}`;
   }
 
-  function signalsCacheKey(days = 30, delivery = "all", direction = "all") {
-    return `signals:${days}:${delivery}:${direction}`;
+  function signalsCacheKey(days = 30, delivery = "all", direction = "all", outcome = "all") {
+    return `signals:${days}:${delivery}:${direction}:${outcome}`;
   }
 
   function telegramCacheKey(days = 30, status = "all") {
@@ -469,6 +469,60 @@
       </div>`).join("");
   }
 
+  function renderHomeSecondary(data) {
+    const el = $("#homeRecentSignals");
+    if (el) {
+      const recent = Array.isArray(data?.recent_signals) ? data.recent_signals : [];
+      if (!recent.length) {
+        el.innerHTML = '<p class="panel-empty">هنوز سیگنالی ثبت نشده.</p>';
+      } else {
+        el.innerHTML = recent
+          .map((s) => {
+            const dir = (s.direction || "").toUpperCase();
+            const meta = OUTCOME_META[s.outcome] || OUTCOME_META.open;
+            const time = s.timestamp ? String(s.timestamp).split(" ")[1] || s.timestamp : "—";
+            return `<article class="home-recent-item">
+              <span class="home-recent-symbol">${esc(s.symbol || "?")}</span>
+              <span class="sig-dir-badge ${dir === "BUY" ? "buy" : "sell"}">${dir || "—"}</span>
+              <span class="outcome-badge ${meta.cls}">${meta.label}</span>
+              <span class="home-recent-time">${esc(time)}</span>
+            </article>`;
+          })
+          .join("");
+      }
+    }
+
+    const oc = data?.outcome_summary || {};
+    const sys = DataCache.get("system");
+    const procs = data?.processes || [];
+    const score = computeHealthScore(sys, procs);
+    const health = healthFromPct(score);
+    const healthEl = $("#homeHealthScore");
+    const healthLbl = $("#homeHealthLabel");
+    if (healthEl) {
+      healthEl.textContent = `${score}%`;
+      healthEl.className = `home-health-num health-${health.cls}`;
+    }
+    if (healthLbl) healthLbl.textContent = health.label;
+
+    if ($("#homeTodayWins")) $("#homeTodayWins").textContent = String(oc.today_wins ?? 0);
+    if ($("#homeTodayLosses")) $("#homeTodayLosses").textContent = String(oc.today_losses ?? 0);
+    if ($("#homeOpenSignals")) $("#homeOpenSignals").textContent = String(oc.open ?? 0);
+  }
+
+  function applyHomeKpis(data) {
+    const oc = data?.outcome_summary || {};
+    const delivery = data?.delivery_summary || {};
+    const winEl = $("#kpiWinRate");
+    const delEl = $("#kpiDeliveryRate");
+    if (winEl) {
+      winEl.textContent = oc.win_rate != null ? `${oc.win_rate}%` : "—";
+    }
+    if (delEl) {
+      delEl.textContent = delivery.rate != null ? `${delivery.rate}%` : "—";
+    }
+  }
+
   function renderLatestSignal(latest) {
     const ls = $("#latestSignal");
     if (!ls) return;
@@ -579,7 +633,8 @@
     renderMonitorProcesses(data.processes);
     renderEngineState(data.engine_state);
     renderLatestSignal(data.latest_signal);
-    renderStats(data.signal_stats);
+    renderStats(data.signal_stats, data);
+    renderHomeSecondary(data);
     const time = data.server_time || "";
     if ($("#liveTime")) $("#liveTime").textContent = time.split(" ")[1] || "--:--:--";
     if ($("#heroUpdated")) $("#heroUpdated").textContent = time ? `بروزرسانی ${time}` : "";
@@ -819,10 +874,14 @@
         .map((sym) => {
           const enabled = symbolsEnabled.has(sym);
           const cat = symbolCategory(sym);
+          const counts = signalsSummary?.by_symbol || {};
+          const count = counts[sym] ?? counts[sym.replace("/", "")] ?? 0;
+          const countBadge = count ? `<span class="sym-signal-count" title="تعداد سیگنال">${count}</span>` : "";
           return `
         <div class="sym-track-row ${enabled ? "enabled" : "disabled"}">
           <input type="checkbox" class="sym-track-check" data-toggle="${esc(sym)}" ${enabled ? "checked" : ""} aria-label="ردیابی ${esc(sym)}" />
           <span class="sym-track-name">${esc(sym)}</span>
+          ${countBadge}
           <span class="sym-track-cat ${cat}">${cat === "metal" ? "Metal" : cat === "crypto" ? "Crypto" : "Forex"}</span>
           <button type="button" class="sym-tag-remove" data-remove="${esc(sym)}" aria-label="حذف ${esc(sym)}">×</button>
         </div>`;
@@ -992,6 +1051,7 @@
       days: Number($("#signalDays")?.value || 30),
       delivery: $("#signalDelivery")?.value || "all",
       direction: $("#signalDirection")?.value || "all",
+      outcome: $("#signalOutcome")?.value || "all",
     };
   }
 
@@ -1075,6 +1135,9 @@
       ? filtered.map((e, i) => {
           const ok = e.ok;
           const dir = (e.direction || "").toUpperCase();
+          const retryBtn = !ok
+            ? `<button type="button" class="btn btn-sm tg-retry-btn" data-retry-symbol="${esc(e.symbol || "")}" data-retry-ts="${esc(e.timestamp || "")}" data-retry-dir="${esc(dir)}" data-retry-entry="${esc(String(e.entry || ""))}">↻ ارسال مجدد</button>`
+            : "";
           return `
         <article class="telegram-item ${ok ? "ok" : "failed"}" style="animation-delay:${i * 0.03}s">
           <div class="tg-item-head">
@@ -1090,10 +1153,52 @@
             <p class="tg-detail">${esc(e.detail || (ok ? "ارسال موفق" : "ارسال ناموفق"))}</p>
             ${e.entry ? `<span class="tg-meta">Entry: ${e.entry}</span>` : ""}
             ${e.error ? `<span class="tg-error">${esc(e.error)}</span>` : ""}
+            ${retryBtn}
           </div>
         </article>`;
         }).join("")
       : '<p class="telegram-empty">موردی یافت نشد</p>';
+  }
+
+  async function retryTelegramSend(btn) {
+    if (!btn || btn.classList.contains("loading")) return;
+    const payload = {
+      symbol: btn.dataset.retrySymbol,
+      timestamp: btn.dataset.retryTs,
+      direction: btn.dataset.retryDir,
+      entry: btn.dataset.retryEntry || undefined,
+    };
+    try {
+      btn.classList.add("loading");
+      btn.disabled = true;
+      const data = await api("/api/telegram/retry", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      toast(data.message || "ارسال مجدد انجام شد");
+      invalidateCache("telegram:30", "telegram:7", "status", "bootstrap");
+      await fetchTelegram({ force: true });
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      btn.classList.remove("loading");
+      btn.disabled = false;
+    }
+  }
+
+  async function sendTelegramTest(btn) {
+    if (btn?.classList.contains("loading")) return;
+    try {
+      btn?.classList.add("loading");
+      const data = await api("/api/telegram/test", { method: "POST", body: "{}" });
+      toast(data.message || "پیام تست ارسال شد");
+      invalidateCache("telegram:30", "telegram:7", "status", "bootstrap");
+      if (activePage === "telegram") await fetchTelegram({ force: true });
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      btn?.classList.remove("loading");
+    }
   }
 
   function renderTelegramReportChart(daily) {
@@ -1141,7 +1246,7 @@
       updateSystem(payload.system);
     }
     if (payload.signals) {
-      const sigKey = signalsCacheKey(30, "all", "all");
+      const sigKey = signalsCacheKey(30, "all", "all", "all");
       DataCache.set(sigKey, payload.signals);
       applySignalsPayload(payload.signals);
     }
@@ -1190,8 +1295,8 @@
         break;
       }
       case "signals": {
-        const { days, delivery, direction } = getSignalsFilterParams();
-        const cached = DataCache.get(signalsCacheKey(days, delivery, direction));
+        const { days, delivery, direction, outcome } = getSignalsFilterParams();
+        const cached = DataCache.get(signalsCacheKey(days, delivery, direction, outcome));
         if (cached) applySignalsPayload(cached);
         break;
       }
@@ -1244,11 +1349,11 @@
   }
 
   async function fetchSignals({ force = false } = {}) {
-    const { days, delivery, direction } = getSignalsFilterParams();
-    const key = signalsCacheKey(days, delivery, direction);
+    const { days, delivery, direction, outcome } = getSignalsFilterParams();
+    const key = signalsCacheKey(days, delivery, direction, outcome);
     const data = await DataCache.load(
       key,
-      () => api(`/api/signals?days=${days}&delivery=${delivery}&direction=${direction}&limit=100`),
+      () => api(`/api/signals?days=${days}&delivery=${delivery}&direction=${direction}&outcome=${outcome}&limit=100`),
       CACHE_TTL.signals,
       { force }
     );
@@ -1890,6 +1995,10 @@
     if (activePage === "monitor") {
       refreshMonitorLiveCharts();
     }
+    if (activePage === "home") {
+      const status = DataCache.get("status");
+      if (status) renderHomeSecondary(status);
+    }
   }
 
   function formatUptime(secs) {
@@ -1972,7 +2081,7 @@
     renderSymbolHealth(state);
   }
 
-  function renderStats(stats) {
+  function renderStats(stats, statusData) {
     if (!stats) return;
     const setCounter = (id, v) => setStableCounter($(id), v);
     setCounter("#kpiToday", stats.today);
@@ -1987,6 +2096,7 @@
       setStableCounter($("#sigToday"), stats.today);
       setStableCounter($("#sigTotal"), stats.total);
     }
+    if (statusData) applyHomeKpis(statusData);
     updateChart(stats.by_symbol || {});
     renderSymbolLegend(stats.by_symbol || {});
 
@@ -2127,6 +2237,14 @@
     unsent: { label: "؟ بدون تأیید", cls: "unsent", icon: "?" },
   };
 
+  const OUTCOME_META = {
+    tp1: { label: "TP1 ✓", cls: "outcome-win" },
+    tp2: { label: "TP2 ✓", cls: "outcome-win" },
+    sl: { label: "SL ✗", cls: "outcome-loss" },
+    open: { label: "باز", cls: "outcome-open" },
+    expired: { label: "منقضی", cls: "outcome-expired" },
+  };
+
   function applySignalsPage(summary) {
     if (!summary) return;
     if ($("#sigSentTotal")) $("#sigSentTotal").textContent = summary.sent ?? 0;
@@ -2148,6 +2266,11 @@
         : null;
       $("#sigTopSymbol").textContent = top ? top[0] : "—";
     }
+    const oc = summary.outcomes || {};
+    if ($("#sigWinRate")) $("#sigWinRate").textContent = oc.win_rate != null ? `${oc.win_rate}%` : "—";
+    if ($("#sigWinsCount")) $("#sigWinsCount").textContent = oc.wins ?? 0;
+    if ($("#sigLossCount")) $("#sigLossCount").textContent = oc.losses ?? 0;
+    if ($("#sigOpenCount")) $("#sigOpenCount").textContent = oc.open ?? 0;
     renderSignalDailyChart(summary.daily || []);
     renderSignalDirChart(dir);
   }
@@ -2262,6 +2385,7 @@
         const isBuy = dir === "BUY";
         const delivery = s.delivery_status || "unsent";
         const meta = DELIVERY_META[delivery] || DELIVERY_META.unsent;
+        const outcomeMeta = OUTCOME_META[s.outcome] || OUTCOME_META.open;
         const cardCls = s.duplicate ? `${meta.cls} duplicate` : meta.cls;
         const dupBadge = s.duplicate
           ? '<span class="delivery-badge duplicate">⚠ تکراری</span>'
@@ -2282,6 +2406,7 @@
               <span class="signal-card-symbol">${esc(s.symbol || "?")}</span>
               <span class="sig-dir-badge ${isBuy ? "buy" : "sell"}">${dir || "—"}</span>
               <span class="delivery-badge ${meta.cls}">${meta.label}</span>
+              <span class="outcome-badge ${outcomeMeta.cls}">${outcomeMeta.label}</span>
               ${dupBadge}
               <span class="signal-card-time">${esc(s.timestamp || "")}</span>
             </div>
@@ -2544,6 +2669,18 @@
   $("#signalDays")?.addEventListener("change", () => refreshSignals({ force: true }));
   $("#signalDelivery")?.addEventListener("change", () => refreshSignals({ force: true }));
   $("#signalDirection")?.addEventListener("change", () => refreshSignals({ force: true }));
+  $("#signalOutcome")?.addEventListener("change", () => refreshSignals({ force: true }));
+
+  $("#btnTelegramTest")?.addEventListener("click", (e) => sendTelegramTest(e.currentTarget));
+  $("#homeBtnSymbols")?.addEventListener("click", openSymbolsModal);
+  $("#homeBtnTelegramTest")?.addEventListener("click", (e) => sendTelegramTest(e.currentTarget));
+  $("#homeBtnPauseNotif")?.addEventListener("click", () => mgmt("pause_notifications", { confirmMsg: "ارسال نوتیفیکیشن متوقف شود؟" }));
+  $("#homeBtnResumeNotif")?.addEventListener("click", () => mgmt("resume_notifications"));
+
+  $("#telegramFeed")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-retry-symbol]");
+    if (btn) retryTelegramSend(btn);
+  });
 
   async function refreshSystem({ force = false } = {}) {
     try {

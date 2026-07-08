@@ -11,7 +11,10 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import time
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -36,6 +39,7 @@ STATE_FILE = BOT_ROOT / "engine_state.json"
 SIGNAL_LOG = BOT_ROOT / "Facebook" / "signal_log.txt"
 SIGNAL_QUEUE = BOT_ROOT / "Facebook" / "signal_queue.json"
 TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
+OUTCOMES_LOG = BOT_ROOT / "Facebook" / "signal_outcomes.log"
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -298,6 +302,241 @@ def _parse_all_signals(days: int | None = None) -> list[dict]:
     return list(reversed(signals))
 
 
+_OUTCOME_ENGINE_RES = (
+    re.compile(
+        r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ .*?(?P<outcome>TP1|TP2|TP|SL|STOP.?LOSS|TAKE.?PROFIT).*?hit.*?(?P<symbol>[\w/]+)",
+        re.I,
+    ),
+    re.compile(
+        r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ .*?(?P<symbol>[\w/]+).*?(?P<outcome>TP1|TP2|TP|SL).*?(?:hit|reached|triggered)",
+        re.I,
+    ),
+)
+
+
+def _parse_outcomes(days: int | None = 30) -> list[dict]:
+    """Load trade outcomes from JSONL log and engine log patterns."""
+    outcomes: list[dict] = []
+    cutoff = datetime.now() - timedelta(days=days) if days else None
+
+    if OUTCOMES_LOG.exists():
+        for line in reversed(OUTCOMES_LOG.read_text(encoding="utf-8", errors="replace").splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            ts = str(row.get("ts") or row.get("timestamp") or "")
+            if cutoff and _parse_ts(ts) and _parse_ts(ts) < cutoff:
+                continue
+            raw_out = str(row.get("outcome") or row.get("result") or "open").lower()
+            if raw_out in ("tp", "take_profit", "takeprofit"):
+                raw_out = "tp1"
+            elif raw_out.startswith("tp2"):
+                raw_out = "tp2"
+            elif raw_out.startswith("tp1"):
+                raw_out = "tp1"
+            elif raw_out in ("sl", "stop_loss", "stoploss", "loss"):
+                raw_out = "sl"
+            elif raw_out in ("expired", "timeout"):
+                raw_out = "expired"
+            else:
+                raw_out = "open"
+            outcomes.append({
+                "timestamp": ts[:19],
+                "symbol": _normalize_symbol(str(row.get("symbol", ""))),
+                "direction": str(row.get("direction", "")).upper(),
+                "entry": row.get("entry"),
+                "outcome": raw_out,
+                "exit_price": row.get("exit_price"),
+                "source": "outcomes_log",
+            })
+
+    if ENGINE_LOG.exists():
+        seen_engine: set[str] = set()
+        for line in reversed(ENGINE_LOG.read_text(encoding="utf-8", errors="replace").splitlines()):
+            for pat in _OUTCOME_ENGINE_RES:
+                m = pat.search(line)
+                if not m:
+                    continue
+                ts_str = m.group("ts")
+                if cutoff and _parse_ts(ts_str) and _parse_ts(ts_str) < cutoff:
+                    continue
+                oc_raw = m.group("outcome").upper()
+                if "TP2" in oc_raw:
+                    oc = "tp2"
+                elif "TP" in oc_raw:
+                    oc = "tp1"
+                else:
+                    oc = "sl"
+                key = f"{ts_str}|{m.group('symbol')}|{oc}"
+                if key in seen_engine:
+                    continue
+                seen_engine.add(key)
+                outcomes.append({
+                    "timestamp": ts_str,
+                    "symbol": _normalize_symbol(m.group("symbol")),
+                    "direction": "",
+                    "entry": None,
+                    "outcome": oc,
+                    "exit_price": None,
+                    "source": "engine_log",
+                })
+                break
+
+    return outcomes
+
+
+def _attach_outcomes(signals: list[dict], outcomes: list[dict]) -> list[dict]:
+    for sig in signals:
+        sym = _normalize_symbol(str(sig.get("symbol", "")))
+        direction = str(sig.get("direction", "")).upper()
+        ts = _parse_ts(sig.get("timestamp", ""))
+        match = None
+        best_delta = 999999.0
+        for o in outcomes:
+            if _normalize_symbol(str(o.get("symbol", ""))) != sym:
+                continue
+            o_dir = str(o.get("direction", "")).upper()
+            if o_dir and direction and o_dir != direction:
+                continue
+            o_ts = _parse_ts(o.get("timestamp", ""))
+            if ts and o_ts:
+                delta = abs((ts - o_ts).total_seconds())
+                if delta > 86400:
+                    continue
+                if delta < best_delta:
+                    best_delta = delta
+                    match = o
+            elif not ts:
+                match = o
+                break
+        if match and match.get("outcome") not in (None, "open"):
+            sig["outcome"] = match["outcome"]
+            sig["outcome_source"] = match.get("source")
+            sig["exit_price"] = match.get("exit_price")
+        else:
+            sig["outcome"] = "open"
+            sig["outcome_source"] = None
+            sig["exit_price"] = None
+    return signals
+
+
+def _outcome_summary(signals: list[dict]) -> dict:
+    wins = [s for s in signals if s.get("outcome") in ("tp1", "tp2")]
+    losses = [s for s in signals if s.get("outcome") == "sl"]
+    open_ = [s for s in signals if s.get("outcome") in (None, "open")]
+    expired = [s for s in signals if s.get("outcome") == "expired"]
+    closed = len(wins) + len(losses)
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_sigs = [s for s in signals if str(s.get("timestamp", "")).startswith(today)]
+    today_wins = [s for s in today_sigs if s.get("outcome") in ("tp1", "tp2")]
+    today_losses = [s for s in today_sigs if s.get("outcome") == "sl"]
+    today_closed = len(today_wins) + len(today_losses)
+    return {
+        "wins": len(wins),
+        "losses": len(losses),
+        "open": len(open_),
+        "expired": len(expired),
+        "closed": closed,
+        "win_rate": round(len(wins) / closed * 100, 1) if closed else None,
+        "today_wins": len(today_wins),
+        "today_losses": len(today_losses),
+        "today_closed": today_closed,
+        "today_win_rate": round(len(today_wins) / today_closed * 100, 1) if today_closed else None,
+    }
+
+
+def _log_telegram_delivery(**kwargs) -> None:
+    try:
+        sys.path.insert(0, str(BOT_ROOT))
+        from telegram_logger import log_telegram_delivery
+
+        log_telegram_delivery(**kwargs)
+    except Exception:
+        TELEGRAM_DELIVERY_LOG.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            **kwargs,
+        }
+        with TELEGRAM_DELIVERY_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+
+
+def _telegram_send(text: str) -> dict:
+    env = _parse_env()
+    token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = env.get("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return {"ok": False, "error": "تلگرام تنظیم نشده (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)", "http_status": None}
+    payload = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML"}).encode("utf-8")
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            ok = bool(body.get("ok"))
+            err = None if ok else str(body.get("description") or body)
+            return {"ok": ok, "error": err, "http_status": resp.status, "response": body}
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            err = str(body.get("description") or body)
+        except Exception:
+            err = str(exc)
+        return {"ok": False, "error": err, "http_status": exc.code}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "http_status": None}
+
+
+def _format_signal_telegram_message(sig: dict) -> str:
+    sym = sig.get("symbol", "?")
+    direction = str(sig.get("direction", "")).upper()
+    emoji = "🟢" if direction == "BUY" else "🔴"
+    lines = [
+        f"{emoji} <b>{direction} {sym}</b>",
+        f"Entry: <code>{sig.get('entry', '—')}</code>",
+        f"SL: <code>{sig.get('sl', '—')}</code>",
+        f"TP1: <code>{sig.get('tp1', '—')}</code>",
+    ]
+    if sig.get("tp2"):
+        lines.append(f"TP2: <code>{sig.get('tp2')}</code>")
+    if sig.get("rr"):
+        lines.append(f"RR: {sig.get('rr')}")
+    if sig.get("score") is not None:
+        lines.append(f"Score: {sig.get('score')}")
+    if sig.get("basis"):
+        lines.append(f"\n{sig.get('basis')}")
+    return "\n".join(lines)
+
+
+def _find_signal_for_retry(symbol: str, timestamp: str = "", direction: str = "") -> dict | None:
+    sym = _normalize_symbol(symbol)
+    direction = direction.upper()
+    candidates = _parse_all_signals(days=30)
+    best = None
+    best_delta = 999999.0
+    target_ts = _parse_ts(timestamp) if timestamp else None
+    for sig in candidates:
+        if _normalize_symbol(str(sig.get("symbol", ""))) != sym:
+            continue
+        if direction and str(sig.get("direction", "")).upper() != direction:
+            continue
+        if target_ts:
+            sig_ts = _parse_ts(sig.get("timestamp", ""))
+            if not sig_ts:
+                continue
+            delta = abs((target_ts - sig_ts).total_seconds())
+            if delta < best_delta:
+                best_delta = delta
+                best = sig
+        else:
+            return sig
+    return best if best_delta <= 600 else None
+
+
 def _enrich_signals(signals: list[dict], telegram_entries: list[dict]) -> list[dict]:
     """Attach telegram delivery status and quality flags to each saved signal."""
     tg_signals = [e for e in telegram_entries if e.get("message_type", "signal") == "signal"]
@@ -370,7 +609,8 @@ def _enrich_signals(signals: list[dict], telegram_entries: list[dict]) -> list[d
         enriched.append(row)
 
     enriched.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
-    return enriched
+    outcomes = _parse_outcomes(days=90)
+    return _attach_outcomes(enriched, outcomes)
 
 
 def _signals_page_summary(enriched: list[dict]) -> dict:
@@ -397,6 +637,7 @@ def _signals_page_summary(enriched: list[dict]) -> dict:
             daily[day][st] += 1
     daily_list = sorted(daily.values(), key=lambda d: d["date"])[-30:]
     total = len(enriched) or 1
+    oc = _outcome_summary(enriched)
     return {
         "total": len(enriched),
         "sent": len(sent),
@@ -414,6 +655,7 @@ def _signals_page_summary(enriched: list[dict]) -> dict:
         },
         "daily": daily_list,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "outcomes": oc,
     }
 
 
@@ -922,6 +1164,9 @@ def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
     state = _read_json(STATE_FILE) or {}
     env = _parse_env()
     signal_stats = _live_signal_stats()
+    telegram_recent = _parse_telegram_deliveries(days=7, limit=500)
+    all_recent = _parse_all_signals(days=7)
+    enriched_recent = _enrich_signals(all_recent, telegram_recent)
 
     last_signal_human = {}
     for sym, ts in (state.get("last_signal_at") or {}).items():
@@ -954,6 +1199,20 @@ def _build_status_payload(stats_signals: list[dict] | None = None) -> dict:
         },
         "latest_signal": _read_json(SIGNAL_QUEUE),
         "signal_stats": signal_stats,
+        "recent_signals": enriched_recent[:5],
+        "outcome_summary": _outcome_summary(enriched_recent),
+        "delivery_summary": {
+            "sent": len([s for s in enriched_recent if s.get("delivery_status") == "sent"]),
+            "total": len(enriched_recent),
+            "rate": round(
+                len([s for s in enriched_recent if s.get("delivery_status") == "sent"])
+                / max(len(enriched_recent), 1)
+                * 100,
+                1,
+            )
+            if enriched_recent
+            else None,
+        },
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -1032,6 +1291,7 @@ def api_signals():
     limit = request.args.get("limit", 100, type=int)
     delivery = request.args.get("delivery", "all")
     direction = request.args.get("direction", "all")
+    outcome = request.args.get("outcome", "all")
     symbol = request.args.get("symbol", "").strip().upper()
 
     days = min(max(days, 1), 365)
@@ -1050,6 +1310,14 @@ def api_signals():
 
     if direction in ("BUY", "SELL"):
         enriched = [s for s in enriched if str(s.get("direction", "")).upper() == direction]
+
+    if outcome in ("tp1", "tp2", "sl", "open", "win", "loss"):
+        if outcome == "win":
+            enriched = [s for s in enriched if s.get("outcome") in ("tp1", "tp2")]
+        elif outcome == "loss":
+            enriched = [s for s in enriched if s.get("outcome") == "sl"]
+        else:
+            enriched = [s for s in enriched if s.get("outcome") == outcome]
 
     if symbol:
         enriched = [s for s in enriched if symbol in _normalize_symbol(str(s.get("symbol", ""))).replace("/", "")]
@@ -1187,6 +1455,71 @@ def api_telegram_summary():
     summary["telegram_configured"] = bool(env.get("TELEGRAM_BOT_TOKEN"))
     summary["notifications_paused"] = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
     return jsonify(summary)
+
+
+@app.route("/api/telegram/test", methods=["POST"])
+@auth_required
+def api_telegram_test():
+    env = _parse_env()
+    if not env.get("TELEGRAM_BOT_TOKEN"):
+        return jsonify({"ok": False, "error": "تلگرام تنظیم نشده"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    text = (
+        "✅ <b>TradeChi Bot — Test</b>\n"
+        f"Dashboard test message\n"
+        f"<code>{now}</code>"
+    )
+    result = _telegram_send(text)
+    _log_telegram_delivery(
+        symbol="TEST",
+        direction="INFO",
+        ok=result.get("ok", False),
+        error=result.get("error"),
+        http_status=result.get("http_status"),
+        message_type="test",
+    )
+    if not result.get("ok"):
+        return jsonify(result), 502
+    return jsonify({"ok": True, "message": "پیام تست ارسال شد", **result})
+
+
+@app.route("/api/telegram/retry", methods=["POST"])
+@auth_required
+def api_telegram_retry():
+    data = request.get_json(silent=True) or {}
+    symbol = str(data.get("symbol", "")).strip()
+    if not symbol:
+        return jsonify({"error": "symbol required"}), 400
+    timestamp = str(data.get("timestamp", "")).strip()
+    direction = str(data.get("direction", "")).strip()
+    sig = _find_signal_for_retry(symbol, timestamp, direction)
+    if not sig:
+        sig = {
+            "symbol": _normalize_symbol(symbol),
+            "direction": direction.upper() or "—",
+            "entry": data.get("entry"),
+            "sl": data.get("sl"),
+            "tp1": data.get("tp1"),
+            "tp2": data.get("tp2"),
+            "rr": data.get("rr"),
+            "score": data.get("score"),
+            "basis": data.get("basis") or "Retry from dashboard",
+        }
+    text = _format_signal_telegram_message(sig)
+    result = _telegram_send(text)
+    _log_telegram_delivery(
+        symbol=sig.get("symbol", symbol),
+        direction=str(sig.get("direction", direction or "—")),
+        ok=result.get("ok", False),
+        error=result.get("error"),
+        score=sig.get("score"),
+        entry=sig.get("entry"),
+        http_status=result.get("http_status"),
+        message_type="signal",
+    )
+    if not result.get("ok"):
+        return jsonify({**result, "message": "ارسال مجدد ناموفق"}), 502
+    return jsonify({"ok": True, "message": "سیگنال مجدداً ارسال شد", **result})
 
 
 @app.route("/api/export/telegram.csv")

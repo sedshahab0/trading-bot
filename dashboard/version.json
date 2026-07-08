@@ -1,10 +1,17 @@
 {
   "major": 2,
-  "minor": 5,
+  "minor": 6,
   "patch": 0,
-  "label": "v2.5",
+  "label": "v2.6",
   "released": "2026-07-08",
   "history": [
+    {
+      "version": "2.6.0",
+      "label": "v2.6",
+      "date": "2026-07-08",
+      "title": "Home KPIs, outcome tracking, Telegram test/retry",
+      "level": "minor"
+    },
     {
       "version": "2.5.0",
       "label": "v2.5",
