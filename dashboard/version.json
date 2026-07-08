@@ -1,10 +1,17 @@
 {
   "major": 2,
-  "minor": 3,
+  "minor": 4,
   "patch": 0,
-  "label": "v2.3",
+  "label": "v2.4",
   "released": "2026-07-08",
   "history": [
+    {
+      "version": "2.4.0",
+      "label": "v2.4",
+      "date": "2026-07-08",
+      "title": "Symbol manager modal on control page",
+      "level": "minor"
+    },
     {
       "version": "2.3.0",
       "label": "v2.3",
