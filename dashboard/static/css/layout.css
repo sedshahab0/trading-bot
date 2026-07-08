@@ -2697,6 +2697,73 @@
   .telegram-kpi { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 768px) {
+  .page#page-reports .page-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    align-items: stretch;
+  }
+
+  .page#page-reports .page-toolbar .toolbar-label {
+    grid-column: 1 / -1;
+    margin-bottom: -0.15rem;
+  }
+
+  .page#page-reports .page-toolbar .select-input,
+  .page#page-reports .page-toolbar .btn {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .page#page-reports .page-toolbar .btn-export.excel,
+  .page#page-reports .page-toolbar .btn-export.csv {
+    flex: 1;
+  }
+
+  .report-kpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .report-stat {
+    padding: 0.75rem 0.6rem;
+  }
+
+  .grid-2 .panel .chart-box.tall,
+  .grid-2 .panel .chart-box.wide {
+    height: 220px;
+  }
+
+  .symbol-report-table-wrap {
+    padding-inline: 0.75rem;
+  }
+
+  .symbol-report-table {
+    font-size: 0.74rem;
+  }
+
+  .symbol-report-table th,
+  .symbol-report-table td {
+    padding: 0.45rem 0.45rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .page#page-reports .page-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .report-kpi {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .grid-2 .panel .chart-box.tall,
+  .grid-2 .panel .chart-box.wide {
+    height: 190px;
+  }
+}
+
 /* ══════════════════════════════════════
    SIGNALS PAGE
    ══════════════════════════════════════ */

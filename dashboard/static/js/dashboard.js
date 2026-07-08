@@ -1912,6 +1912,7 @@
           renderSymbolReportTable(analytics.symbols?.symbols, analytics.symbols?.generated_at ? `بروزرسانی ${analytics.symbols.generated_at}` : null);
           renderHourlyHeatmap(analytics.hourly?.hours || []);
         }
+        requestAnimationFrame(() => resizeReportCharts());
         break;
       }
       case "telegram": {
@@ -3098,6 +3099,10 @@
         },
       },
     });
+  }
+
+  function resizeReportCharts() {
+    [dailyChart, directionChart, symbolBarChart, telegramReportChart, hourlyHeatmapChart].forEach((chart) => chart?.resize());
   }
 
   function setSignalChartState(canvasSel, hintSel, hasData) {
