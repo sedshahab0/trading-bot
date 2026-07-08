@@ -2490,23 +2490,65 @@
 .sym-preview-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.75rem;
+  gap: 0.45rem;
+  padding: 0.5rem 0.85rem;
   border-radius: 999px;
-  background: rgba(99,255,208,0.06);
-  border: 1px solid rgba(99,255,208,0.18);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
   font-family: var(--mono);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
   direction: ltr;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
+}
+
+.sym-preview-chip.forex {
+  color: #63ffd0;
+  background: rgba(99,255,208,0.14);
+  border-color: rgba(99,255,208,0.38);
+  text-shadow: 0 0 18px rgba(99,255,208,0.35);
+}
+
+.sym-preview-chip.metal {
+  color: #fcd34d;
+  background: rgba(251,191,36,0.14);
+  border-color: rgba(251,191,36,0.4);
+  text-shadow: 0 0 18px rgba(251,191,36,0.28);
+}
+
+.sym-preview-chip.crypto {
+  color: #c4b5fd;
+  background: rgba(167,139,250,0.14);
+  border-color: rgba(167,139,250,0.38);
+  text-shadow: 0 0 18px rgba(167,139,250,0.28);
 }
 
 .sym-preview-chip:hover {
-  border-color: var(--accent);
-  background: rgba(99,255,208,0.1);
   transform: translateY(-1px);
+}
+
+.sym-preview-chip.forex:hover {
+  color: #8bffe0;
+  border-color: rgba(99,255,208,0.65);
+  background: rgba(99,255,208,0.2);
+  box-shadow: 0 0 16px rgba(99,255,208,0.18);
+}
+
+.sym-preview-chip.metal:hover {
+  color: #fde68a;
+  border-color: rgba(251,191,36,0.65);
+  background: rgba(251,191,36,0.22);
+  box-shadow: 0 0 16px rgba(251,191,36,0.16);
+}
+
+.sym-preview-chip.crypto:hover {
+  color: #ddd6fe;
+  border-color: rgba(167,139,250,0.65);
+  background: rgba(167,139,250,0.22);
+  box-shadow: 0 0 16px rgba(167,139,250,0.16);
 }
 
 .sym-preview-chip .sym-dot {
@@ -2929,9 +2971,16 @@
 
 .settings-symbols-hint { margin: 0.5rem 0 0; }
 
+.settings-symbols-preview .sym-preview-chip {
+  font-size: 0.88rem;
+  padding: 0.55rem 0.95rem;
+}
+
 .settings-symbols-preview .sym-preview-chip.disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   border-style: dashed;
+  color: var(--text-muted);
+  text-shadow: none;
 }
 
 .settings-grid {
