@@ -72,7 +72,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.8", full: "2.8.1", major: 2, minor: 8, patch: 1 };
+  let dashboardVersion = { label: "v2.9", full: "2.9.0", major: 2, minor: 9, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -157,6 +157,9 @@
   let sseConnected = false;
   let lastStatusFingerprint = null;
   const BOOTSTRAP_COALESCE_MS = 20000;
+
+  let strategyPendingFile = null;
+  let strategyLastUploadId = null;
 
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
@@ -1918,6 +1921,7 @@
         if (status) applySettingsPage(status);
         if (ops) applyOpsConfig(ops);
         if (audit) renderAuditLog(audit.entries || []);
+        fetchStrategy().catch(() => {});
         break;
       }
       case "logs": {
@@ -3473,6 +3477,204 @@
     if ($("#settingsPollVal")) $("#settingsPollVal").textContent = `${v}s`;
   });
 
+  async function fetchStrategy({ force = false } = {}) {
+    const data = await DataCache.load(
+      "strategy",
+      () => api("/api/strategy"),
+      60000,
+      { force, onStale: (d) => renderStrategyPanel(d) }
+    );
+    renderStrategyPanel(data);
+    return data;
+  }
+
+  function formatBytes(n) {
+    if (!n) return "0 B";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  }
+
+  function renderStrategyPanel(payload) {
+    const currentEl = $("#strategyCurrent");
+    const historyEl = $("#strategyHistory");
+    if (!currentEl || !historyEl) return;
+
+    const active = payload?.active;
+    const activeId = payload?.active_id;
+
+    if (!active && !(payload?.history || []).length) {
+      currentEl.innerHTML = '<p class="panel-empty">هنوز استراتژی فعالی ثبت نشده — فایل .mq5 را آپلود کنید</p>';
+    } else if (active) {
+      currentEl.innerHTML = `
+        <div class="strategy-stat"><span class="strategy-stat-lbl">فایل فعال</span><span class="strategy-stat-val">${esc(active.original_name || "—")}</span></div>
+        <div class="strategy-stat"><span class="strategy-stat-lbl">نسخه / Inputs</span><span class="strategy-stat-val">${esc(active.version || "—")} · ${active.input_count ?? "—"}</span></div>
+        <div class="strategy-stat"><span class="strategy-stat-lbl">آخرین اعمال</span><span class="strategy-stat-val">${esc(active.applied_at || active.uploaded_at || "—")}</span></div>`;
+    } else {
+      currentEl.innerHTML = '<p class="panel-empty">فایل آپلود شده ولی هنوز فعال نشده — «فعال‌سازی روی ربات» را بزنید</p>';
+    }
+
+    const rows = payload?.history || [];
+    if (!rows.length) {
+      historyEl.innerHTML = '<p class="panel-empty">هنوز فایلی آپلود نشده</p>';
+    } else {
+      historyEl.innerHTML = rows
+        .map((row) => {
+          const isActive = row.id === activeId;
+          return `<div class="strategy-history-row${isActive ? " active" : ""}">
+            <div>
+              <strong>${esc(row.original_name || row.stored_name)}</strong>
+              <div class="strategy-history-meta">${esc(row.uploaded_at || "")} · ${formatBytes(row.size_bytes)} · ${esc(row.uploaded_by || "")}${row.version ? ` · v${esc(row.version)}` : ""}</div>
+            </div>
+            <div class="strategy-history-actions">
+              <button type="button" class="btn btn-sm btn-ghost" data-strategy-apply="${esc(row.id)}">فعال</button>
+              <button type="button" class="btn btn-sm btn-ghost" data-strategy-dl="${esc(row.id)}">⬇</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+      historyEl.querySelectorAll("[data-strategy-apply]").forEach((btn) => {
+        btn.addEventListener("click", () => applyStrategy(btn.dataset.strategyApply));
+      });
+      historyEl.querySelectorAll("[data-strategy-dl]").forEach((btn) => {
+        btn.addEventListener("click", () => downloadExport(`/api/strategy/download?id=${encodeURIComponent(btn.dataset.strategyDl)}`));
+      });
+    }
+
+    const applyBtn = $("#btnStrategyApply");
+    if (applyBtn) {
+      const targetId = strategyLastUploadId || activeId || rows[0]?.id;
+      applyBtn.disabled = !targetId;
+      applyBtn.dataset.strategyId = targetId || "";
+    }
+  }
+
+  function setStrategyPendingFile(file) {
+    strategyPendingFile = file || null;
+    const picked = $("#strategyFilePicked");
+    const nameEl = $("#strategyPickedName");
+    const uploadBtn = $("#btnStrategyUpload");
+    if (!file) {
+      picked?.classList.add("hidden");
+      if (uploadBtn) uploadBtn.disabled = true;
+      const input = $("#strategyFileInput");
+      if (input) input.value = "";
+      return;
+    }
+    if (!/\.mq5$/i.test(file.name)) {
+      toast("فقط فایل .mq5 مجاز است", "error");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast("حداکثر اندازه ۲ مگابایت", "error");
+      return;
+    }
+    if (nameEl) nameEl.textContent = file.name;
+    picked?.classList.remove("hidden");
+    if (uploadBtn) uploadBtn.disabled = false;
+  }
+
+  async function uploadStrategy() {
+    if (!strategyPendingFile) {
+      toast("ابتدا فایل را انتخاب کنید", "error");
+      return;
+    }
+    const btn = $("#btnStrategyUpload");
+    const form = new FormData();
+    form.append("file", strategyPendingFile);
+    try {
+      if (btn) btn.classList.add("loading");
+      btn && (btn.disabled = true);
+      const res = await authFetch("/api/strategy/upload", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "آپلود ناموفق");
+      strategyLastUploadId = data.entry?.id || null;
+      DataCache.set("strategy", data.strategy || data);
+      renderStrategyPanel(data.strategy || data);
+      setStrategyPendingFile(null);
+      toast("استراتژی آپلود شد — برای اعمال روی ربات «فعال‌سازی» را بزنید");
+      logControlActivity(`استراتژی آپلود: ${data.entry?.original_name || "?"}`, "ok");
+      invalidateCache("status", "bootstrap");
+      await fetchAuditLog({ force: true }).catch(() => {});
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      if (btn) {
+        btn.classList.remove("loading");
+        btn.disabled = !strategyPendingFile;
+      }
+    }
+  }
+
+  async function applyStrategy(entryId) {
+    const id = entryId || strategyLastUploadId || $("#btnStrategyApply")?.dataset.strategyId;
+    if (!id) {
+      toast("نسخه‌ای برای فعال‌سازی وجود ندارد", "error");
+      return;
+    }
+    if (!confirm("استراتژی جدید روی ربات فعال شود؟ signal-engine ری‌استارت می‌شود.")) return;
+    const btn = $("#btnStrategyApply");
+    try {
+      if (btn) btn.classList.add("loading");
+      const data = await api("/api/strategy/apply", {
+        method: "POST",
+        body: JSON.stringify({ id, restart_engine: true }),
+      });
+      DataCache.set("strategy", data.strategy);
+      renderStrategyPanel(data.strategy);
+      strategyLastUploadId = null;
+      lastStatusFingerprint = null;
+      invalidateCache("status", "bootstrap");
+      await fetchStatus({ force: true });
+      let msg = "استراتژی فعال شد";
+      if (data.min_score_synced) msg += ` — MIN_SCORE=${data.min_score_synced}`;
+      if (data.restart_engine === false) msg += " (ری‌استارت موتور ناموفق بود)";
+      toast(msg);
+      logControlActivity(`استراتژی فعال: ${data.entry?.original_name || id}`, "ok");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      if (btn) btn.classList.remove("loading");
+    }
+  }
+
+  function initStrategyUpload() {
+    const zone = $("#strategyDropZone");
+    const input = $("#strategyFileInput");
+    if (!zone || !input) return;
+
+    $("#btnStrategyBrowse")?.addEventListener("click", () => input.click());
+    $("#btnStrategyClear")?.addEventListener("click", () => setStrategyPendingFile(null));
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) setStrategyPendingFile(file);
+    });
+
+    ["dragenter", "dragover"].forEach((ev) => {
+      zone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach((ev) => {
+      zone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.classList.remove("dragover");
+      });
+    });
+    zone.addEventListener("drop", (e) => {
+      const file = e.dataTransfer?.files?.[0];
+      if (file) setStrategyPendingFile(file);
+    });
+
+    $("#btnStrategyUpload")?.addEventListener("click", () => uploadStrategy());
+    $("#btnStrategyApply")?.addEventListener("click", () => applyStrategy());
+    $("#btnStrategyDownload")?.addEventListener("click", () => downloadExport("/api/strategy/download?active=1"));
+    $("#btnStrategyRefresh")?.addEventListener("click", () => fetchStrategy({ force: true }).catch((e) => toast(e.message, "error")));
+  }
+
   // ── Config Save ──
   $("#btnSaveConfig")?.addEventListener("click", async () => {
     const btn = $("#btnSaveConfig");
@@ -3620,5 +3822,6 @@
   renderSidebarNav();
   initSidebarCollapse();
   renderControlActivity();
+  initStrategyUpload();
   checkAuth();
 })();

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import ast
 import csv
 import io
@@ -23,6 +24,7 @@ from pathlib import Path
 import psutil
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.utils import secure_filename
 
 try:
     from openpyxl import Workbook
@@ -41,6 +43,12 @@ SIGNAL_QUEUE = BOT_ROOT / "Facebook" / "signal_queue.json"
 TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
 OUTCOMES_LOG = BOT_ROOT / "Facebook" / "signal_outcomes.log"
 AUDIT_LOG = BOT_ROOT / "Facebook" / "dashboard_audit.log"
+STRATEGY_DIR = BOT_ROOT / "strategy"
+STRATEGY_UPLOADS = STRATEGY_DIR / "uploads"
+STRATEGY_ACTIVE = STRATEGY_DIR / "active.mq5"
+STRATEGY_LEGACY = BOT_ROOT / "SignalBot_MultiIndicator_MT5.mq5"
+STRATEGY_MANIFEST = STRATEGY_DIR / "manifest.json"
+STRATEGY_MAX_BYTES = 2 * 1024 * 1024
 PM2_EVENT_LOG = Path(os.environ.get("PM2_LOG_PATH", str(Path.home() / ".pm2" / "pm2.log")))
 METRICS_HISTORY: deque = deque(maxlen=720)
 _LAST_ALERT_TS: dict[str, float] = {}
@@ -1224,6 +1232,127 @@ def _parse_audit_log(limit: int = 100) -> list[dict]:
     return list(reversed(rows))
 
 
+_MQ5_VERSION_RE = re.compile(r'#property\s+version\s+"([^"]+)"', re.I)
+_MQ5_INPUT_RE = re.compile(
+    r"^\s*input\s+(?:bool|int|double|string|color|datetime|ulong|long|float)\s+(\w+)",
+    re.I | re.M,
+)
+_MQ5_MIN_CONFLUENCE_RE = re.compile(
+    r"^\s*input\s+int\s+InpMinConfluence\s*=\s*(\d+)",
+    re.I | re.M,
+)
+
+
+def _ensure_strategy_dirs() -> None:
+    STRATEGY_DIR.mkdir(parents=True, exist_ok=True)
+    STRATEGY_UPLOADS.mkdir(parents=True, exist_ok=True)
+
+
+def _load_strategy_manifest() -> dict:
+    _ensure_strategy_dirs()
+    if STRATEGY_MANIFEST.exists():
+        try:
+            data = json.loads(STRATEGY_MANIFEST.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("active_id", None)
+                data.setdefault("history", [])
+                return data
+        except Exception:
+            pass
+    return {"active_id": None, "history": []}
+
+
+def _save_strategy_manifest(data: dict) -> None:
+    _ensure_strategy_dirs()
+    STRATEGY_MANIFEST.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _analyze_mq5(content: str) -> dict:
+    version = None
+    m = _MQ5_VERSION_RE.search(content)
+    if m:
+        version = m.group(1)
+    inputs = _MQ5_INPUT_RE.findall(content)
+    title = None
+    for line in content.splitlines()[:20]:
+        if "SignalBot" in line and ".mq5" in line:
+            title = line.strip(" /|")
+            break
+    return {
+        "version": version,
+        "title": title,
+        "input_count": len(inputs),
+        "inputs_preview": inputs[:12],
+    }
+
+
+def _strategy_entry_by_id(manifest: dict, entry_id: str) -> dict | None:
+    for row in manifest.get("history", []):
+        if row.get("id") == entry_id:
+            return row
+    return None
+
+
+def _apply_strategy_file(entry: dict, content: str, *, restart_engine: bool = True) -> dict:
+    _ensure_strategy_dirs()
+    stored = STRATEGY_UPLOADS / entry["stored_name"]
+    if not stored.exists():
+        raise FileNotFoundError("Uploaded strategy file missing on server")
+    STRATEGY_ACTIVE.write_text(content, encoding="utf-8")
+    STRATEGY_LEGACY.write_text(content, encoding="utf-8")
+    env_updates: dict[str, str] = {"STRATEGY_MQ5_PATH": str(STRATEGY_ACTIVE)}
+    min_conf = _MQ5_MIN_CONFLUENCE_RE.search(content)
+    if min_conf:
+        env_updates["MIN_SCORE"] = min_conf.group(1)
+    _write_env(env_updates)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    entry["applied_at"] = ts
+    manifest = _load_strategy_manifest()
+    manifest["active_id"] = entry["id"]
+    for idx, row in enumerate(manifest.get("history", [])):
+        if row.get("id") == entry["id"]:
+            manifest["history"][idx] = entry
+            break
+    _save_strategy_manifest(manifest)
+    _audit("strategy_apply", f"{entry.get('original_name')} ({entry.get('id')})")
+    restart_ok = None
+    if restart_engine:
+        code, out, err = _run(["pm2", "restart", "signal-engine"])
+        _run(["pm2", "save"])
+        restart_ok = code == 0
+        if not restart_ok:
+            return {
+                "ok": True,
+                "applied": True,
+                "restart_engine": False,
+                "restart_error": err or out or "pm2 restart failed",
+                "entry": entry,
+                "min_score_synced": env_updates.get("MIN_SCORE"),
+            }
+    return {
+        "ok": True,
+        "applied": True,
+        "restart_engine": restart_ok,
+        "entry": entry,
+        "min_score_synced": env_updates.get("MIN_SCORE"),
+    }
+
+
+def _strategy_status_payload() -> dict:
+    manifest = _load_strategy_manifest()
+    active = _strategy_entry_by_id(manifest, manifest.get("active_id") or "")
+    active_exists = STRATEGY_ACTIVE.exists()
+    legacy_exists = STRATEGY_LEGACY.exists()
+    return {
+        "active": active,
+        "active_id": manifest.get("active_id"),
+        "active_path": str(STRATEGY_ACTIVE) if active_exists else None,
+        "legacy_path": str(STRATEGY_LEGACY) if legacy_exists else None,
+        "history": manifest.get("history", [])[:20],
+        "uploads_dir": str(STRATEGY_UPLOADS),
+    }
+
+
 def _ops_config() -> dict:
     env = _parse_env()
     return {
@@ -2303,6 +2432,116 @@ def api_ops_config_patch():
 @auth_required
 def api_ops_uptime():
     return jsonify(_pm2_restarts_24h())
+
+
+@app.route("/api/strategy")
+@auth_required
+def api_strategy_get():
+    return jsonify(_strategy_status_payload())
+
+
+@app.route("/api/strategy/upload", methods=["POST"])
+@auth_required
+def api_strategy_upload():
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "فایلی انتخاب نشده است"}), 400
+    original = secure_filename(upload.filename)
+    if not original.lower().endswith(".mq5"):
+        return jsonify({"error": "فقط فایل‌های .mq5 مجاز هستند"}), 400
+    raw = upload.read()
+    if not raw:
+        return jsonify({"error": "فایل خالی است"}), 400
+    if len(raw) > STRATEGY_MAX_BYTES:
+        return jsonify({"error": "حداکثر اندازه فایل ۲ مگابایت است"}), 400
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return jsonify({"error": "فایل باید متن UTF-8 باشد"}), 400
+    if "input " not in content and "#property" not in content:
+        return jsonify({"error": "فایل MQL5 معتبر به نظر نمی‌رسد"}), 400
+
+    meta = _analyze_mq5(content)
+    entry_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stored_name = f"{entry_id}_{original}"
+    _ensure_strategy_dirs()
+    stored_path = STRATEGY_UPLOADS / stored_name
+    stored_path.write_text(content, encoding="utf-8")
+    checksum = hashlib.sha256(raw).hexdigest()
+    who = session.get("username") or "admin"
+    entry = {
+        "id": entry_id,
+        "original_name": original,
+        "stored_name": stored_name,
+        "uploaded_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "uploaded_by": who,
+        "size_bytes": len(raw),
+        "checksum_sha256": checksum,
+        "version": meta.get("version"),
+        "title": meta.get("title"),
+        "input_count": meta.get("input_count"),
+        "inputs_preview": meta.get("inputs_preview"),
+        "applied_at": None,
+    }
+    manifest = _load_strategy_manifest()
+    history = manifest.get("history", [])
+    history.insert(0, entry)
+    manifest["history"] = history[:30]
+    _save_strategy_manifest(manifest)
+    _audit("strategy_upload", f"{original} ({entry_id})")
+    return jsonify({"ok": True, "entry": entry, "strategy": _strategy_status_payload()})
+
+
+@app.route("/api/strategy/apply", methods=["POST"])
+@auth_required
+def api_strategy_apply():
+    data = request.get_json(silent=True) or {}
+    entry_id = (data.get("id") or "").strip()
+    restart_engine = bool(data.get("restart_engine", True))
+    manifest = _load_strategy_manifest()
+    if not entry_id:
+        entry_id = manifest.get("active_id") or ""
+        if not entry_id and manifest.get("history"):
+            entry_id = manifest["history"][0]["id"]
+    entry = _strategy_entry_by_id(manifest, entry_id)
+    if not entry:
+        return jsonify({"error": "نسخه استراتژی یافت نشد"}), 404
+    stored = STRATEGY_UPLOADS / entry["stored_name"]
+    if not stored.exists():
+        return jsonify({"error": "فایل آپلودشده روی سرور موجود نیست"}), 404
+    content = stored.read_text(encoding="utf-8")
+    try:
+        result = _apply_strategy_file(entry, content, restart_engine=restart_engine)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    result["strategy"] = _strategy_status_payload()
+    return jsonify(result)
+
+
+@app.route("/api/strategy/download")
+@auth_required
+def api_strategy_download():
+    entry_id = request.args.get("id", "").strip()
+    use_active = request.args.get("active", "").lower() in ("1", "true", "yes")
+    path: Path | None = None
+    download_name = "strategy.mq5"
+    if use_active or not entry_id:
+        if STRATEGY_ACTIVE.exists():
+            path = STRATEGY_ACTIVE
+            download_name = "active.mq5"
+        elif STRATEGY_LEGACY.exists():
+            path = STRATEGY_LEGACY
+            download_name = STRATEGY_LEGACY.name
+    else:
+        manifest = _load_strategy_manifest()
+        entry = _strategy_entry_by_id(manifest, entry_id)
+        if not entry:
+            return jsonify({"error": "نسخه یافت نشد"}), 404
+        path = STRATEGY_UPLOADS / entry["stored_name"]
+        download_name = entry.get("original_name") or entry["stored_name"]
+    if not path or not path.exists():
+        return jsonify({"error": "فایل استراتژی موجود نیست"}), 404
+    return send_file(path, as_attachment=True, download_name=download_name, mimetype="text/plain")
 
 
 @app.route("/api/audit")
