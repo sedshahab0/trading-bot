@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=4" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=4" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=5" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=5" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -47,7 +47,10 @@
             <button type="submit" class="login-submit" id="loginSubmit"><span class="login-submit-text">ورود به پنل</span><span class="login-submit-loader hidden"></span></button>
           </form>
           <p class="login-error" id="loginError"></p>
-          <div class="login-footer"><span class="domain-badge"><span class="domain-dot"></span>agennews.store</span></div>
+          <div class="login-footer">
+            <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
+            <span class="version-badge" id="loginVersion">v2.1</span>
+          </div>
         </div>
       </div>
     </div>
@@ -57,58 +60,25 @@
   <div class="app-shell hidden" id="dashboard">
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-    <!-- Right Sidebar -->
+    <!-- Right Sidebar — collapsible groups, expandable width -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-        <div><strong>TradeChi Bot</strong><span>Control Panel v2</span></div>
+        <div class="sidebar-brand-text">
+          <strong>TradeChi Bot</strong>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.1</span></span>
+        </div>
+        <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
       </div>
 
-      <nav class="sidebar-nav">
-        <div class="nav-group">
-          <span class="nav-group-label">اصلی</span>
-          <button class="nav-item active" data-page="home">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-            <span>داشبورد</span>
-          </button>
-          <button class="nav-item" data-page="monitor">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            <span>مانیتورینگ</span>
-          </button>
-        </div>
-        <div class="nav-group">
-          <span class="nav-group-label">ربات</span>
-          <button class="nav-item" data-page="control">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83"/></svg>
-            <span>کنترل ربات</span>
-          </button>
-          <button class="nav-item" data-page="signals">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            <span>سیگنال‌ها</span>
-          </button>
-          <button class="nav-item" data-page="reports">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-            <span>گزارش‌ها</span>
-          </button>
-          <button class="nav-item" data-page="telegram">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-            <span>تلگرام</span>
-          </button>
-        </div>
-        <div class="nav-group">
-          <span class="nav-group-label">سیستم</span>
-          <button class="nav-item" data-page="settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            <span>تنظیمات</span>
-          </button>
-          <button class="nav-item" data-page="logs">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-            <span>لاگ‌ها</span>
-          </button>
-        </div>
-      </nav>
+      <nav class="sidebar-nav" id="sidebarNav" aria-label="منوی اصلی"></nav>
 
       <div class="sidebar-footer">
+        <div class="sidebar-meta">
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.1.0</span>
+        </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
           <span id="sidebarStatusText">—</span>

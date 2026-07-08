@@ -47,6 +47,64 @@
     logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها" },
   };
 
+  /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
+  let dashboardVersion = { label: "v2.1", full: "2.1.0", major: 2, minor: 1, patch: 0 };
+
+  const NAV_ICONS = {
+    home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    control: '<circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83"/>',
+    signals: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    reports: '<path d="M18 20V10M12 20V4M6 20v-6"/>',
+    telegram: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
+    logs: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+    tools: '<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>',
+    analytics: '<path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/>',
+  };
+
+  /** Sidebar nav config — add groups/items here for new features. */
+  const NAV_GROUPS = [
+    {
+      id: "main",
+      label: "اصلی",
+      defaultOpen: true,
+      items: [
+        { page: "home", label: "داشبورد", icon: "home" },
+        { page: "monitor", label: "مانیتورینگ", icon: "monitor" },
+      ],
+    },
+    {
+      id: "bot",
+      label: "ربات",
+      defaultOpen: true,
+      items: [
+        { page: "control", label: "کنترل ربات", icon: "control" },
+        { page: "signals", label: "سیگنال‌ها", icon: "signals" },
+        { page: "reports", label: "گزارش‌ها", icon: "reports" },
+        { page: "telegram", label: "تلگرام", icon: "telegram" },
+      ],
+    },
+    {
+      id: "system",
+      label: "سیستم",
+      defaultOpen: true,
+      items: [
+        { page: "settings", label: "تنظیمات", icon: "settings" },
+        { page: "logs", label: "لاگ‌ها", icon: "logs" },
+      ],
+    },
+    {
+      id: "upcoming",
+      label: "امکانات جدید",
+      defaultOpen: false,
+      items: [
+        { page: null, label: "تحلیل پیشرفته", icon: "analytics", disabled: true, badge: "به‌زودی" },
+        { page: null, label: "ابزارها", icon: "tools", disabled: true, badge: "به‌زودی" },
+      ],
+    },
+  ];
+
   const CHART_FONT = { family: "Vazirmatn", size: 11 };
   const CHART_COLORS = ["#63ffd0", "#5b9cf6", "#a78bfa", "#fbbf24", "#f87171"];
 
@@ -618,6 +676,7 @@
 
   function applyBootstrap(payload) {
     if (!payload) return;
+    if (payload.version) applyVersion(payload.version);
     if (payload.status) {
       DataCache.set("status", payload.status);
       applyStatusData(payload.status);
@@ -821,6 +880,122 @@
     } catch {}
   }
 
+  // ── Version display ──
+  function applyVersion(info) {
+    if (!info) return;
+    dashboardVersion = {
+      label: info.label || `v${info.major}.${info.minor}`,
+      full: info.full || `${info.major}.${info.minor}.${info.patch || 0}`,
+      major: info.major,
+      minor: info.minor,
+      patch: info.patch || 0,
+    };
+    const label = dashboardVersion.label;
+    const full = `v${dashboardVersion.full}`;
+    if ($("#sidebarVersion")) $("#sidebarVersion").textContent = label;
+    if ($("#sidebarVersionFull")) {
+      $("#sidebarVersionFull").textContent = full;
+      $("#sidebarVersionFull").title = `نسخه ${full}${info.released ? ` · ${info.released}` : ""}`;
+    }
+    if ($("#loginVersion")) $("#loginVersion").textContent = label;
+    document.title = `TradeChi ${label} — Dashboard`;
+  }
+
+  async function loadVersion() {
+    try {
+      const res = await fetch("/api/version");
+      if (res.ok) applyVersion(await res.json());
+    } catch {}
+  }
+
+  // ── Dynamic expandable sidebar ──
+  function getNavGroupState(id) {
+    try {
+      const raw = localStorage.getItem("tc:nav-groups");
+      const map = raw ? JSON.parse(raw) : {};
+      const group = NAV_GROUPS.find((g) => g.id === id);
+      return map[id] ?? group?.defaultOpen ?? true;
+    } catch {
+      return true;
+    }
+  }
+
+  function setNavGroupState(id, open) {
+    try {
+      const raw = localStorage.getItem("tc:nav-groups");
+      const map = raw ? JSON.parse(raw) : {};
+      map[id] = open;
+      localStorage.setItem("tc:nav-groups", JSON.stringify(map));
+    } catch {}
+  }
+
+  function renderSidebarNav() {
+    const nav = $("#sidebarNav");
+    if (!nav) return;
+    nav.innerHTML = NAV_GROUPS.map((group) => {
+      const open = getNavGroupState(group.id);
+      const itemsHtml = group.items
+        .map((item) => {
+          const disabled = item.disabled || !item.page;
+          const active = item.page && item.page === activePage;
+          const badge = item.badge
+            ? `<span class="nav-item-badge${item.badge === "به‌زودی" ? " soon" : ""}">${item.badge}</span>`
+            : "";
+          return `
+            <button type="button"
+              class="nav-item${active ? " active" : ""}${disabled ? " disabled" : ""}"
+              data-page="${item.page || ""}"
+              ${disabled ? "disabled aria-disabled=\"true\"" : ""}
+              title="${item.label}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${NAV_ICONS[item.icon] || NAV_ICONS.home}</svg>
+              <span>${item.label}</span>
+              ${badge}
+            </button>`;
+        })
+        .join("");
+      return `
+        <div class="nav-group${open ? "" : " collapsed"}" data-group="${group.id}">
+          <button type="button" class="nav-group-toggle" data-group-toggle="${group.id}" aria-expanded="${open}">
+            <span class="nav-group-toggle-label">${group.label}</span>
+            <svg class="nav-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="nav-group-items">${itemsHtml}</div>
+        </div>`;
+    }).join("");
+
+    nav.querySelectorAll("[data-group-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.groupToggle;
+        const groupEl = nav.querySelector(`[data-group="${id}"]`);
+        const willOpen = groupEl?.classList.contains("collapsed");
+        groupEl?.classList.toggle("collapsed", !willOpen);
+        btn.setAttribute("aria-expanded", String(willOpen));
+        setNavGroupState(id, willOpen);
+      });
+    });
+
+    nav.querySelectorAll(".nav-item[data-page]").forEach((btn) => {
+      if (!btn.dataset.page) return;
+      btn.addEventListener("click", () => switchPage(btn.dataset.page));
+      btn.addEventListener("mouseenter", () => prefetchPage(btn.dataset.page));
+    });
+  }
+
+  function initSidebarCollapse() {
+    const sidebar = $("#sidebar");
+    const btn = $("#sidebarCollapseBtn");
+    if (!sidebar || !btn) return;
+
+    const stored = localStorage.getItem("tc:sidebar-collapsed") === "1";
+    sidebar.classList.toggle("collapsed", stored);
+
+    btn.addEventListener("click", () => {
+      const next = !sidebar.classList.contains("collapsed");
+      sidebar.classList.toggle("collapsed", next);
+      localStorage.setItem("tc:sidebar-collapsed", next ? "1" : "0");
+    });
+  }
+
   // ── Page Navigation ──
   function switchPage(page, { revalidate = true } = {}) {
     activePage = page;
@@ -848,12 +1023,6 @@
     $("#sidebar")?.classList.remove("open");
     $("#sidebarOverlay")?.classList.remove("open");
   }
-
-  $$(".nav-item[data-page]").forEach((btn) => {
-    btn.addEventListener("click", () => switchPage(btn.dataset.page));
-    btn.addEventListener("mouseenter", () => prefetchPage(btn.dataset.page));
-    btn.addEventListener("focus", () => prefetchPage(btn.dataset.page));
-  });
 
   $("#menuToggle")?.addEventListener("click", openSidebar);
   $("#sidebarOverlay")?.addEventListener("click", closeSidebar);
@@ -1685,5 +1854,8 @@
   DataCache.onRevalidate("telegram:30", applyTelegramData);
 
   // ── Init ──
+  loadVersion();
+  renderSidebarNav();
+  initSidebarCollapse();
   checkAuth();
 })();
