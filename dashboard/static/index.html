@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=16" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=16" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=17" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=17" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.7</span>
+            <span class="version-badge" id="loginVersion">v2.8</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.7</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.8</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.7.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">v2.8.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -330,7 +330,10 @@
                 <div class="chart-legend-inline">
                   <span class="legend-dot" style="background:#5b9cf6"></span> CPU
                   <span class="legend-dot" style="background:#63ffd0"></span> RAM
+                  <span class="legend-dot" style="background:#fbbf24"></span> Disk
+                  <span class="legend-dot" style="background:#a78bfa"></span> Net
                 </div>
+                <button type="button" class="btn btn-sm btn-export csv" id="btnExportMetrics">CSV</button>
               </div>
               <div class="chart-box monitor-chart">
                 <canvas id="resourceHistoryChart"></canvas>
@@ -344,6 +347,13 @@
                 <button class="link-btn" data-goto="control">مدیریت ←</button>
               </div>
               <div class="monitor-processes" id="monitorProcesses"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">ری‌استارت PM2 (۲۴h)</h3>
+                <span class="hint" id="uptimeHistoryMeta">—</span>
+              </div>
+              <div class="uptime-history" id="uptimeHistory"></div>
             </article>
           </section>
 
@@ -823,6 +833,78 @@
             </article>
           </div>
 
+          <article class="panel settings-ops-panel">
+            <div class="panel-top">
+              <div>
+                <h3 class="panel-heading">عملیات و هشدارها</h3>
+                <p class="panel-desc">آستانه‌ها، وب‌هوک، نگهداری زمان‌بندی‌شده و پشتیبان‌گیری</p>
+              </div>
+              <button type="button" class="btn btn-sm btn-ghost" id="btnWhatsNew">✨ چه چیز جدید است؟</button>
+            </div>
+            <div class="settings-ops-grid">
+              <div class="settings-ops-block">
+                <h4>آستانه هشدار</h4>
+                <div class="ops-field-row">
+                  <label>CPU %</label>
+                  <input type="number" id="opsAlertCpu" min="50" max="100" class="ops-input" />
+                </div>
+                <div class="ops-field-row">
+                  <label>RAM %</label>
+                  <input type="number" id="opsAlertRam" min="50" max="100" class="ops-input" />
+                </div>
+                <div class="ops-field-row">
+                  <label>Disk %</label>
+                  <input type="number" id="opsAlertDisk" min="50" max="100" class="ops-input" />
+                </div>
+                <label class="ops-check"><input type="checkbox" id="opsAlertTelegram" /> ارسال هشدار به تلگرام</label>
+                <label class="ops-check"><input type="checkbox" id="opsBrowserNotif" /> نوتیفیکیشن مرورگر</label>
+              </div>
+              <div class="settings-ops-block">
+                <h4>Webhooks</h4>
+                <div class="ops-field-row">
+                  <label>Discord URL</label>
+                  <input type="url" id="opsWebhookDiscord" class="ops-input wide" placeholder="https://discord.com/api/webhooks/..." />
+                </div>
+                <div class="ops-field-row">
+                  <label>Slack URL</label>
+                  <input type="url" id="opsWebhookSlack" class="ops-input wide" placeholder="https://hooks.slack.com/..." />
+                </div>
+                <label class="ops-check"><input type="checkbox" id="opsWebhookOnSignal" /> ارسال روی سیگنال جدید</label>
+              </div>
+              <div class="settings-ops-block">
+                <h4>نگهداری زمان‌بندی‌شده</h4>
+                <label class="ops-check"><input type="checkbox" id="opsMaintenanceEnabled" /> فعال</label>
+                <div class="ops-field-row">
+                  <label>بازه (24h)</label>
+                  <input type="text" id="opsMaintenanceWindow" class="ops-input" placeholder="22:00-06:00" />
+                </div>
+                <p class="sym-hint">در این بازه، ارسال خودکار متوقف می‌شود</p>
+              </div>
+              <div class="settings-ops-block">
+                <h4>پشتیبان‌گیری</h4>
+                <div class="ops-btn-row">
+                  <button type="button" class="btn btn-primary btn-compact" id="btnConfigBackup">دانلود پشتیبان</button>
+                  <label class="btn btn-ghost btn-compact ops-file-btn">
+                    بازیابی JSON
+                    <input type="file" id="configRestoreFile" accept="application/json,.json" hidden />
+                  </label>
+                </div>
+                <p class="sym-hint">Telegram webhook: <code>/api/telegram/webhook</code> — دستورات: /status /pause /symbols /resume</p>
+              </div>
+            </div>
+            <div class="settings-ops-actions">
+              <button type="button" class="btn btn-primary" id="btnSaveOps">ذخیره تنظیمات عملیات</button>
+            </div>
+          </article>
+
+          <article class="panel settings-audit-panel">
+            <div class="panel-top">
+              <h3 class="panel-heading">گزارش ممیزی (Audit)</h3>
+              <button type="button" class="link-btn" id="btnRefreshAudit">بروزرسانی</button>
+            </div>
+            <div class="audit-log" id="auditLog"></div>
+          </article>
+
           <div class="settings-save-bar">
             <p class="hint">تغییرات تا زمان ذخیره اعمال نمی‌شوند</p>
             <button type="button" class="btn btn-primary btn-save-settings" id="btnSaveConfig">ذخیره تنظیمات</button>
@@ -911,6 +993,20 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=11"></script>
+  <!-- Changelog Modal -->
+  <div class="modal-overlay" id="changelogModalOverlay" aria-hidden="true">
+    <div class="modal-sheet changelog-modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">تغییرات نسخه</h2>
+          <p class="modal-sub" id="changelogCurrent">—</p>
+        </div>
+        <button type="button" class="modal-close" id="changelogModalClose" aria-label="بستن">✕</button>
+      </div>
+      <div class="modal-body changelog-body" id="changelogBody"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/dashboard.js?v=12"></script>
 </body>
 </html>

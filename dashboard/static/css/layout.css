@@ -3449,3 +3449,102 @@
 @media (max-width: 768px) {
   .cooldown-list { grid-template-columns: 1fr; }
 }
+
+/* Phase 3 — Ops, audit, uptime */
+.settings-ops-panel { margin-top: 1rem; }
+.settings-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  padding: 0 1rem;
+}
+.settings-ops-block {
+  padding: 0.85rem;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid var(--border);
+}
+.settings-ops-block h4 {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.ops-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.8rem;
+}
+.ops-input {
+  width: 4.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.3);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+.ops-input.wide { width: 100%; flex: 1; min-width: 0; }
+.ops-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  margin: 0.35rem 0;
+  cursor: pointer;
+}
+.ops-btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.35rem; }
+.ops-file-btn { cursor: pointer; }
+.settings-ops-actions { padding: 0.85rem 1rem 1rem; }
+.settings-audit-panel { margin-top: 1rem; }
+.audit-log {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.audit-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.8fr 1.5fr;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.audit-ts { font-family: var(--mono); color: var(--text-dim); direction: ltr; text-align: left; }
+.audit-user { color: var(--accent); font-weight: 600; }
+.audit-action { color: var(--amber); }
+.audit-detail { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uptime-history { padding: 0.85rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.uptime-row {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid var(--border);
+}
+.uptime-row-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+.uptime-name { font-family: var(--mono); font-weight: 700; direction: ltr; }
+.uptime-badge { font-size: 0.68rem; padding: 0.15rem 0.45rem; border-radius: 999px; background: rgba(251,191,36,0.12); color: var(--amber); }
+.uptime-meta { font-size: 0.72rem; color: var(--text-dim); }
+.uptime-events { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
+.uptime-events span { font-size: 0.65rem; font-family: var(--mono); padding: 0.1rem 0.35rem; border-radius: 6px; background: rgba(255,255,255,0.04); }
+.changelog-body { max-height: 60vh; overflow-y: auto; padding: 0 1rem 1rem; }
+.changelog-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.changelog-head { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.25rem; }
+.changelog-head span { color: var(--text-dim); font-size: 0.75rem; }
+.panel-top .btn-sm { margin-right: auto; font-size: 0.72rem; padding: 0.35rem 0.65rem; }
+
+@media (max-width: 900px) {
+  .settings-ops-grid { grid-template-columns: 1fr; }
+  .audit-row { grid-template-columns: 1fr; }
+}

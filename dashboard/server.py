@@ -15,7 +15,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
@@ -40,6 +40,12 @@ SIGNAL_LOG = BOT_ROOT / "Facebook" / "signal_log.txt"
 SIGNAL_QUEUE = BOT_ROOT / "Facebook" / "signal_queue.json"
 TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
 OUTCOMES_LOG = BOT_ROOT / "Facebook" / "signal_outcomes.log"
+AUDIT_LOG = BOT_ROOT / "Facebook" / "dashboard_audit.log"
+PM2_EVENT_LOG = Path(os.environ.get("PM2_LOG_PATH", str(Path.home() / ".pm2" / "pm2.log")))
+METRICS_HISTORY: deque = deque(maxlen=720)
+_LAST_ALERT_TS: dict[str, float] = {}
+_LAST_SIGNAL_KEY: str | None = None
+_MAINTENANCE_STATE: dict[str, bool] = {"paused_by_schedule": False}
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -51,7 +57,36 @@ SECRET_KEYS = (
     "TWELVE_DATA_API_KEY",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
+    "DASHBOARD_PASSWORD",
+    "DASHBOARD_TOKEN",
+    "GH_PAT",
+    "GITHUB_TOKEN",
 )
+
+OPS_CONFIG_KEYS = {
+    "ALERT_CPU_THRESHOLD",
+    "ALERT_RAM_THRESHOLD",
+    "ALERT_DISK_THRESHOLD",
+    "ALERT_TELEGRAM",
+    "WEBHOOK_DISCORD_URL",
+    "WEBHOOK_SLACK_URL",
+    "WEBHOOK_ON_SIGNAL",
+    "MAINTENANCE_ENABLED",
+    "MAINTENANCE_WINDOW",
+}
+
+BACKUP_KEYS = {
+    "SYMBOLS",
+    "MIN_SCORE",
+    "POLL_SECONDS",
+    "FACEBOOK_ENABLE",
+    "DATA_PROVIDER",
+    "ENGINE_DEBUG",
+    "SEND_STARTUP_MESSAGE",
+    "NOTIFICATIONS_PAUSED",
+    "SIGNAL_COOLDOWN_SECONDS",
+    *OPS_CONFIG_KEYS,
+}
 
 def _load_dotenv() -> None:
     if not ENV_FILE.exists():
@@ -1099,6 +1134,264 @@ def _system_stats() -> dict:
     }
 
 
+def _audit(action: str, detail: str = "", user: str | None = None) -> None:
+    try:
+        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        who = user or session.get("username") or "system"
+        line = json.dumps(
+            {
+                "ts": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "user": who,
+                "action": action,
+                "detail": detail,
+            },
+            ensure_ascii=False,
+        )
+        with AUDIT_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _parse_audit_log(limit: int = 100) -> list[dict]:
+    if not AUDIT_LOG.exists():
+        return []
+    rows: list[dict] = []
+    for line in AUDIT_LOG.read_text(errors="replace").splitlines()[-limit:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return list(reversed(rows))
+
+
+def _ops_config() -> dict:
+    env = _parse_env()
+    return {
+        "alert_cpu_threshold": int(env.get("ALERT_CPU_THRESHOLD", "90") or 90),
+        "alert_ram_threshold": int(env.get("ALERT_RAM_THRESHOLD", "90") or 90),
+        "alert_disk_threshold": int(env.get("ALERT_DISK_THRESHOLD", "92") or 92),
+        "alert_telegram": env.get("ALERT_TELEGRAM", "1") == "1",
+        "webhook_discord_url": env.get("WEBHOOK_DISCORD_URL", ""),
+        "webhook_slack_url": env.get("WEBHOOK_SLACK_URL", ""),
+        "webhook_on_signal": env.get("WEBHOOK_ON_SIGNAL", "0") == "1",
+        "maintenance_enabled": env.get("MAINTENANCE_ENABLED", "0") == "1",
+        "maintenance_window": env.get("MAINTENANCE_WINDOW", "22:00-06:00"),
+    }
+
+
+def _record_metrics(stats: dict) -> None:
+    METRICS_HISTORY.append(
+        {
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "cpu": stats.get("cpu", {}).get("total"),
+            "ram": stats.get("ram", {}).get("used_pct"),
+            "disk": stats.get("disk", {}).get("used_pct"),
+            "net_down": stats.get("network", {}).get("down_kbps"),
+            "net_up": stats.get("network", {}).get("up_kbps"),
+        }
+    )
+
+
+def _check_resource_alerts(stats: dict) -> list[dict]:
+    cfg = _ops_config()
+    alerts: list[dict] = []
+    checks = [
+        ("cpu", stats.get("cpu", {}).get("total", 0), cfg["alert_cpu_threshold"], "CPU"),
+        ("ram", stats.get("ram", {}).get("used_pct", 0), cfg["alert_ram_threshold"], "RAM"),
+        ("disk", stats.get("disk", {}).get("used_pct", 0), cfg["alert_disk_threshold"], "Disk"),
+    ]
+    now = time.time()
+    for key, value, threshold, label in checks:
+        if value is None or threshold <= 0:
+            continue
+        if float(value) >= float(threshold):
+            last = _LAST_ALERT_TS.get(key, 0)
+            if now - last > 300:
+                _LAST_ALERT_TS[key] = now
+                msg = f"{label} usage {value}% (threshold {threshold}%)"
+                alerts.append({"type": key, "message": msg, "value": value, "threshold": threshold})
+                if cfg["alert_telegram"]:
+                    _telegram_send(f"⚠️ <b>TradeChi Alert</b>\n{msg}")
+    return alerts
+
+
+def _pm2_restarts_24h() -> dict:
+    cutoff = datetime.now() - timedelta(hours=24)
+    counts: dict[str, int] = {name: 0 for name in DISPLAY_PROCESSES}
+    events: dict[str, list[str]] = {name: [] for name in DISPLAY_PROCESSES}
+    if PM2_EVENT_LOG.exists():
+        for line in PM2_EVENT_LOG.read_text(errors="replace").splitlines():
+            if "App [" not in line:
+                continue
+            m = re.search(r"App \[([\w-]+):\d+\]", line)
+            if not m:
+                continue
+            name = m.group(1)
+            if name not in counts:
+                continue
+            ts_match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+            if not ts_match:
+                continue
+            try:
+                ts = datetime.strptime(ts_match.group(1), "%Y-%m-%dT%H:%M:%S")
+            except ValueError:
+                continue
+            if ts < cutoff:
+                continue
+            if any(k in line.lower() for k in ("starting", "online", "exited with code", "stopped")):
+                counts[name] += 1
+                events[name].append(ts.strftime("%H:%M %d/%m"))
+    procs = []
+    for name in DISPLAY_PROCESSES:
+        info = _proc_info(name)
+        procs.append(
+            {
+                "name": name,
+                "status": info.get("status"),
+                "restarts_total": info.get("restarts", 0),
+                "restarts_24h": counts.get(name, 0),
+                "events_24h": events.get(name, [])[-8:],
+                "uptime_human": _uptime_str(info.get("uptime")),
+            }
+        )
+    return {"processes": procs, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+
+def _webhook_post(url: str, payload: dict, kind: str = "discord") -> bool:
+    if not url:
+        return False
+    try:
+        if kind == "slack":
+            body = json.dumps({"text": payload.get("text", "")}).encode("utf-8")
+        else:
+            body = json.dumps({"content": payload.get("text", "")[:1900]}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return 200 <= resp.status < 300
+    except Exception:
+        return False
+
+
+def _notify_signal_webhooks(sig: dict) -> None:
+    cfg = _ops_config()
+    if not cfg["webhook_on_signal"]:
+        return
+    sym = sig.get("symbol", "?")
+    direction = str(sig.get("direction", "")).upper()
+    text = f"New signal: {direction} {sym} entry={sig.get('entry', '—')}"
+    if cfg["webhook_discord_url"]:
+        _webhook_post(cfg["webhook_discord_url"], {"text": text}, "discord")
+    if cfg["webhook_slack_url"]:
+        _webhook_post(cfg["webhook_slack_url"], {"text": text}, "slack")
+
+
+def _detect_new_signal(latest: dict | None) -> bool:
+    global _LAST_SIGNAL_KEY
+    if not latest:
+        return False
+    key = f"{latest.get('symbol')}:{latest.get('timestamp')}:{latest.get('direction')}"
+    if key == _LAST_SIGNAL_KEY:
+        return False
+    if _LAST_SIGNAL_KEY is not None:
+        _LAST_SIGNAL_KEY = key
+        return True
+    _LAST_SIGNAL_KEY = key
+    return False
+
+
+def _in_maintenance_window(window: str) -> bool:
+    try:
+        start_s, end_s = window.split("-", 1)
+        now = datetime.now().time()
+        start = datetime.strptime(start_s.strip(), "%H:%M").time()
+        end = datetime.strptime(end_s.strip(), "%H:%M").time()
+        if start <= end:
+            return start <= now <= end
+        return now >= start or now <= end
+    except Exception:
+        return False
+
+
+def _apply_maintenance_schedule() -> None:
+    cfg = _ops_config()
+    if not cfg["maintenance_enabled"]:
+        if _MAINTENANCE_STATE["paused_by_schedule"]:
+            _MAINTENANCE_STATE["paused_by_schedule"] = False
+        return
+    env = _parse_env()
+    in_window = _in_maintenance_window(cfg["maintenance_window"])
+    paused = env.get("NOTIFICATIONS_PAUSED", "0") == "1"
+    if in_window and not paused and not _MAINTENANCE_STATE["paused_by_schedule"]:
+        _write_env({"NOTIFICATIONS_PAUSED": "1"})
+        _run(["pm2", "stop", "signal-engine"])
+        _MAINTENANCE_STATE["paused_by_schedule"] = True
+        _audit("maintenance_auto_pause", cfg["maintenance_window"])
+    elif not in_window and _MAINTENANCE_STATE["paused_by_schedule"]:
+        _write_env({"NOTIFICATIONS_PAUSED": "0"})
+        _run(["pm2", "start", "signal-engine"])
+        _MAINTENANCE_STATE["paused_by_schedule"] = False
+        _audit("maintenance_auto_resume", cfg["maintenance_window"])
+
+
+def _telegram_reply(chat_id: str, text: str) -> dict:
+    env = _parse_env()
+    token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token or not chat_id:
+        return {"ok": False, "error": "not configured"}
+    payload = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML"}).encode("utf-8")
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            return {"ok": bool(body.get("ok")), "response": body}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _handle_telegram_command(text: str, chat_id: str) -> None:
+    cmd = (text or "").strip().split()[0].lower() if text else ""
+    env = _parse_env()
+    if cmd == "/status":
+        procs = [_proc_info(n) for n in PROCESSES]
+        overall = _overall_status(procs)
+        stats = _live_signal_stats()
+        msg = (
+            f"📊 <b>TradeChi Status</b>\n"
+            f"Overall: <b>{overall}</b>\n"
+            f"Signals today: {stats.get('today', 0)}\n"
+            f"Paused: {env.get('NOTIFICATIONS_PAUSED', '0') == '1'}\n"
+            f"Symbols: {env.get('SYMBOLS', '—')}"
+        )
+        _telegram_reply(chat_id, msg)
+    elif cmd == "/pause":
+        _write_env({"NOTIFICATIONS_PAUSED": "1"})
+        _run(["pm2", "stop", "signal-engine"])
+        _audit("telegram_pause", "/pause command", user="telegram")
+        _telegram_reply(chat_id, "⏸ Notifications paused")
+    elif cmd == "/symbols":
+        _telegram_reply(chat_id, f"📋 Symbols:\n<code>{env.get('SYMBOLS', '—')}</code>")
+    elif cmd == "/resume":
+        _write_env({"NOTIFICATIONS_PAUSED": "0"})
+        _run(["pm2", "start", "signal-engine"])
+        _audit("telegram_resume", "/resume command", user="telegram")
+        _telegram_reply(chat_id, "▶ Notifications resumed")
+
+
+def _system_stats_with_ops() -> dict:
+    _apply_maintenance_schedule()
+    stats = _system_stats()
+    _record_metrics(stats)
+    alerts = _check_resource_alerts(stats)
+    stats["alerts"] = alerts
+    stats["ops"] = _ops_config()
+    return stats
+
+
 def _overall_status(procs: list[dict]) -> str:
     statuses = [p["status"] for p in procs]
     if all(s == "online" for s in statuses):
@@ -1128,6 +1421,7 @@ def login():
         session.permanent = True
         session["authenticated"] = True
         session["username"] = username
+        _audit("login", f"user {username}", user=username)
         return jsonify({"ok": True, "username": username})
     return jsonify({"error": "Invalid username or password"}), 401
 
@@ -1281,7 +1575,7 @@ def _cache_headers(response):
 @app.route("/api/system")
 @auth_required
 def api_system():
-    return jsonify(_system_stats())
+    return jsonify(_system_stats_with_ops())
 
 
 @app.route("/api/signals")
@@ -1373,11 +1667,13 @@ def api_config_patch():
         "ENGINE_DEBUG",
         "SEND_STARTUP_MESSAGE",
         "NOTIFICATIONS_PAUSED",
+        *OPS_CONFIG_KEYS,
     }
     updates = {k: str(v) for k, v in data.items() if k in allowed}
     if not updates:
         return jsonify({"error": "No valid fields"}), 400
     _write_env(updates)
+    _audit("config_update", ", ".join(f"{k}={updates[k]}" for k in updates.keys()))
     return jsonify({"ok": True, "updated": list(updates.keys())})
 
 
@@ -1859,6 +2155,142 @@ def api_deploy_hook():
     return jsonify(result)
 
 
+@app.route("/api/health")
+def api_health():
+    procs = [_proc_info(n) for n in PROCESSES]
+    overall = _overall_status(procs)
+    version = _dashboard_version()
+    body = {
+        "status": overall,
+        "healthy": overall in ("running", "partial"),
+        "version": version.get("full"),
+        "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    code = 200 if body["healthy"] else 503
+    return jsonify(body), code
+
+
+@app.route("/api/changelog")
+def api_changelog():
+    version = _dashboard_version()
+    return jsonify({"current": version, "history": version.get("history", [])})
+
+
+@app.route("/api/ops/config")
+@auth_required
+def api_ops_config_get():
+    return jsonify(_ops_config())
+
+
+@app.route("/api/ops/config", methods=["PATCH"])
+@auth_required
+def api_ops_config_patch():
+    data = request.get_json(silent=True) or {}
+    mapping = {
+        "alert_cpu_threshold": "ALERT_CPU_THRESHOLD",
+        "alert_ram_threshold": "ALERT_RAM_THRESHOLD",
+        "alert_disk_threshold": "ALERT_DISK_THRESHOLD",
+        "alert_telegram": "ALERT_TELEGRAM",
+        "webhook_discord_url": "WEBHOOK_DISCORD_URL",
+        "webhook_slack_url": "WEBHOOK_SLACK_URL",
+        "webhook_on_signal": "WEBHOOK_ON_SIGNAL",
+        "maintenance_enabled": "MAINTENANCE_ENABLED",
+        "maintenance_window": "MAINTENANCE_WINDOW",
+    }
+    updates: dict[str, str] = {}
+    for js_key, env_key in mapping.items():
+        if js_key in data:
+            val = data[js_key]
+            if js_key in ("alert_telegram", "webhook_on_signal", "maintenance_enabled"):
+                updates[env_key] = "1" if val else "0"
+            else:
+                updates[env_key] = str(val)
+    if not updates:
+        return jsonify({"error": "No valid fields"}), 400
+    _write_env(updates)
+    _audit("ops_config", ", ".join(updates.keys()))
+    return jsonify({"ok": True, "config": _ops_config()})
+
+
+@app.route("/api/ops/uptime")
+@auth_required
+def api_ops_uptime():
+    return jsonify(_pm2_restarts_24h())
+
+
+@app.route("/api/audit")
+@auth_required
+def api_audit():
+    limit = min(max(request.args.get("limit", 100, type=int), 1), 500)
+    return jsonify({"entries": _parse_audit_log(limit)})
+
+
+@app.route("/api/config/backup")
+@auth_required
+def api_config_backup():
+    env = _parse_env()
+    export = {k: env[k] for k in sorted(BACKUP_KEYS) if k in env}
+    for sk in SECRET_KEYS:
+        export.pop(sk, None)
+    _audit("config_backup", f"{len(export)} keys")
+    return jsonify(
+        {
+            "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "version": _dashboard_version().get("full"),
+            "config": export,
+        }
+    )
+
+
+@app.route("/api/config/restore", methods=["POST"])
+@auth_required
+def api_config_restore():
+    data = request.get_json(silent=True) or {}
+    cfg = data.get("config") if isinstance(data.get("config"), dict) else data
+    updates = {k: str(v) for k, v in cfg.items() if k in BACKUP_KEYS and k not in SECRET_KEYS}
+    if not updates:
+        return jsonify({"error": "No valid config keys"}), 400
+    _write_env(updates)
+    _audit("config_restore", ", ".join(updates.keys()))
+    return jsonify({"ok": True, "restored": list(updates.keys())})
+
+
+@app.route("/api/export/metrics.csv")
+@auth_required
+def export_metrics_csv():
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Timestamp", "CPU %", "RAM %", "Disk %", "Net Down KB/s", "Net Up KB/s"])
+    for row in METRICS_HISTORY:
+        writer.writerow([
+            row.get("ts", ""),
+            row.get("cpu", ""),
+            row.get("ram", ""),
+            row.get("disk", ""),
+            row.get("net_down", ""),
+            row.get("net_up", ""),
+        ])
+    out = io.BytesIO(buf.getvalue().encode("utf-8-sig"))
+    fname = f"metrics-{datetime.now().strftime('%Y%m%d-%H%M')}.csv"
+    return send_file(out, as_attachment=True, download_name=fname, mimetype="text/csv")
+
+
+@app.route("/api/telegram/webhook", methods=["POST"])
+def api_telegram_webhook():
+    data = request.get_json(silent=True) or {}
+    message = data.get("message") or data.get("edited_message") or {}
+    text = message.get("text") or ""
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id", ""))
+    env = _parse_env()
+    allowed_chat = env.get("TELEGRAM_CHAT_ID", "").strip()
+    if allowed_chat and chat_id and chat_id != allowed_chat:
+        return jsonify({"ok": True, "ignored": True})
+    if text.startswith("/"):
+        _handle_telegram_command(text, chat_id or allowed_chat)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/stream")
 @auth_required
 def api_stream():
@@ -1876,13 +2308,17 @@ def api_stream():
                 info["uptime_human"] = _uptime_str(info.get("uptime"))
                 info["controllable"] = name in PROCESSES
                 all_procs.append(info)
+            latest = _read_json(SIGNAL_QUEUE)
+            if _detect_new_signal(latest if isinstance(latest, dict) else None) and isinstance(latest, dict):
+                _notify_signal_webhooks(latest)
             payload = {
                 "overall": _overall_status(procs),
                 "processes": procs,
                 "all_processes": all_procs,
-                "system": _system_stats(),
+                "system": _system_stats_with_ops(),
                 "signal_stats": _live_signal_stats(),
-                "latest_signal": _read_json(SIGNAL_QUEUE),
+                "latest_signal": latest,
+                "uptime_history": _pm2_restarts_24h(),
                 "server_time": datetime.now().strftime("%H:%M:%S"),
             }
             yield f"data: {json.dumps(payload)}\n\n"

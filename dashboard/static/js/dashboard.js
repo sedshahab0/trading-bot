@@ -51,8 +51,13 @@
     ram: [],
     disk: [],
     net: [],
-    max: 30,
+    max: 120,
   };
+
+  let lastOverallStatus = null;
+  let lastSignalNotifKey = null;
+  let browserNotifEnabled = localStorage.getItem("tc:browser-notif") === "1";
+  const firedAlertKeys = new Set();
 
   const PAGE_META = {
     home: { title: "داشبورد", sub: "نمای کلی ربات" },
@@ -66,7 +71,7 @@
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  let dashboardVersion = { label: "v2.7", full: "2.7.0", major: 2, minor: 7, patch: 0 };
+  let dashboardVersion = { label: "v2.8", full: "2.8.0", major: 2, minor: 8, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -142,12 +147,12 @@
 
   const PAGE_NEEDS = {
     home: ["status", "report:7"],
-    monitor: ["status", "system"],
+    monitor: ["status", "system", "uptime"],
     control: ["status", "cooldowns"],
     signals: ["signals"],
     reports: ["analytics"],
     telegram: ["telegram"],
-    settings: ["status"],
+    settings: ["status", "ops", "audit"],
     logs: ["logs"],
   };
 
@@ -1193,6 +1198,189 @@
     return data;
   }
 
+  function renderUptimeHistory(payload) {
+    const el = $("#uptimeHistory");
+    if (!el) return;
+    const rows = payload?.processes || [];
+    if ($("#uptimeHistoryMeta") && payload?.generated_at) {
+      $("#uptimeHistoryMeta").textContent = payload.generated_at;
+    }
+    if (!rows.length) {
+      el.innerHTML = '<p class="panel-empty">داده PM2 در دسترس نیست</p>';
+      return;
+    }
+    el.innerHTML = rows
+      .map(
+        (p) => `<div class="uptime-row">
+          <div class="uptime-row-head">
+            <span class="uptime-name">${esc(p.name)}</span>
+            <span class="uptime-badge">${p.restarts_24h ?? 0} restart / 24h</span>
+          </div>
+          <div class="uptime-meta">Uptime: ${esc(p.uptime_human || "—")} · Total restarts: ${p.restarts_total ?? 0}</div>
+          ${p.events_24h?.length ? `<div class="uptime-events">${p.events_24h.map((e) => `<span>${esc(e)}</span>`).join("")}</div>` : ""}
+        </div>`
+      )
+      .join("");
+  }
+
+  async function fetchUptimeHistory({ force = false } = {}) {
+    const data = await DataCache.load("uptime", () => api("/api/ops/uptime"), CACHE_TTL.status, { force });
+    renderUptimeHistory(data);
+    return data;
+  }
+
+  function applyOpsConfig(cfg) {
+    if (!cfg) return;
+    if ($("#opsAlertCpu")) $("#opsAlertCpu").value = cfg.alert_cpu_threshold ?? 90;
+    if ($("#opsAlertRam")) $("#opsAlertRam").value = cfg.alert_ram_threshold ?? 90;
+    if ($("#opsAlertDisk")) $("#opsAlertDisk").value = cfg.alert_disk_threshold ?? 92;
+    if ($("#opsAlertTelegram")) $("#opsAlertTelegram").checked = !!cfg.alert_telegram;
+    if ($("#opsWebhookDiscord")) $("#opsWebhookDiscord").value = cfg.webhook_discord_url || "";
+    if ($("#opsWebhookSlack")) $("#opsWebhookSlack").value = cfg.webhook_slack_url || "";
+    if ($("#opsWebhookOnSignal")) $("#opsWebhookOnSignal").checked = !!cfg.webhook_on_signal;
+    if ($("#opsMaintenanceEnabled")) $("#opsMaintenanceEnabled").checked = !!cfg.maintenance_enabled;
+    if ($("#opsMaintenanceWindow")) $("#opsMaintenanceWindow").value = cfg.maintenance_window || "22:00-06:00";
+    if ($("#opsBrowserNotif")) $("#opsBrowserNotif").checked = browserNotifEnabled;
+  }
+
+  async function fetchOpsConfig({ force = false } = {}) {
+    const data = await DataCache.load("ops", () => api("/api/ops/config"), CACHE_TTL.bootstrap, { force });
+    applyOpsConfig(data);
+    return data;
+  }
+
+  async function saveOpsConfig() {
+    const payload = {
+      alert_cpu_threshold: Number($("#opsAlertCpu")?.value || 90),
+      alert_ram_threshold: Number($("#opsAlertRam")?.value || 90),
+      alert_disk_threshold: Number($("#opsAlertDisk")?.value || 92),
+      alert_telegram: $("#opsAlertTelegram")?.checked,
+      webhook_discord_url: $("#opsWebhookDiscord")?.value?.trim() || "",
+      webhook_slack_url: $("#opsWebhookSlack")?.value?.trim() || "",
+      webhook_on_signal: $("#opsWebhookOnSignal")?.checked,
+      maintenance_enabled: $("#opsMaintenanceEnabled")?.checked,
+      maintenance_window: $("#opsMaintenanceWindow")?.value?.trim() || "22:00-06:00",
+    };
+    browserNotifEnabled = !!$("#opsBrowserNotif")?.checked;
+    localStorage.setItem("tc:browser-notif", browserNotifEnabled ? "1" : "0");
+    if (browserNotifEnabled) await requestBrowserNotifPermission();
+    const data = await api("/api/ops/config", { method: "PATCH", body: JSON.stringify(payload) });
+    applyOpsConfig(data.config);
+    invalidateCache("ops", "status", "system");
+    toast("تنظیمات عملیات ذخیره شد");
+  }
+
+  function renderAuditLog(entries) {
+    const el = $("#auditLog");
+    if (!el) return;
+    if (!entries?.length) {
+      el.innerHTML = '<p class="panel-empty">هنوز رویدادی ثبت نشده</p>';
+      return;
+    }
+    el.innerHTML = entries
+      .map(
+        (e) => `<div class="audit-row">
+          <span class="audit-ts">${esc(e.ts || "")}</span>
+          <span class="audit-user">${esc(e.user || "—")}</span>
+          <span class="audit-action">${esc(e.action || "")}</span>
+          <span class="audit-detail">${esc(e.detail || "")}</span>
+        </div>`
+      )
+      .join("");
+  }
+
+  async function fetchAuditLog({ force = false } = {}) {
+    const data = await DataCache.load("audit", () => api("/api/audit?limit=80"), CACHE_TTL.logs, { force });
+    renderAuditLog(data.entries || []);
+    return data;
+  }
+
+  async function openChangelogModal() {
+    try {
+      const res = await fetch("/api/changelog");
+      const data = await res.json();
+      const current = data.current || {};
+      if ($("#changelogCurrent")) {
+        $("#changelogCurrent").textContent = `${current.label || ""} · ${current.released || ""}`;
+      }
+      const body = $("#changelogBody");
+      if (body) {
+        const history = data.history || [];
+        body.innerHTML = history.length
+          ? history
+              .map(
+                (h) => `<article class="changelog-item">
+                  <div class="changelog-head"><strong>${esc(h.label || h.version || "")}</strong><span>${esc(h.date || "")}</span></div>
+                  <p>${esc(h.title || "")}</p>
+                </article>`
+              )
+              .join("")
+          : '<p class="panel-empty">تاریخچه‌ای موجود نیست</p>';
+      }
+      $("#changelogModalOverlay")?.classList.add("open");
+      $("#changelogModalOverlay")?.setAttribute("aria-hidden", "false");
+    } catch {
+      toast("خطا در بارگذاری changelog", "error");
+    }
+  }
+
+  function closeChangelogModal() {
+    $("#changelogModalOverlay")?.classList.remove("open");
+    $("#changelogModalOverlay")?.setAttribute("aria-hidden", "true");
+  }
+
+  async function requestBrowserNotifPermission() {
+    if (!("Notification" in window)) {
+      toast("مرورگر از نوتیفیکیشن پشتیبانی نمی‌کند", "error");
+      return false;
+    }
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+    const perm = await Notification.requestPermission();
+    return perm === "granted";
+  }
+
+  function pushBrowserNotification(title, body, tag = "tradechi") {
+    if (!browserNotifEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
+    try {
+      new Notification(title, { body, tag, icon: "/static/favicon.ico" });
+    } catch {}
+  }
+
+  function handleResourceAlerts(sys) {
+    const alerts = sys?.alerts || [];
+    alerts.forEach((a) => {
+      const key = `${a.type}:${a.threshold}:${Math.floor(Date.now() / 300000)}`;
+      if (firedAlertKeys.has(key)) return;
+      firedAlertKeys.add(key);
+      toast(a.message, "error");
+      pushBrowserNotification("TradeChi Alert", a.message, `alert-${a.type}`);
+    });
+    if (firedAlertKeys.size > 50) firedAlertKeys.clear();
+  }
+
+  function handleLiveNotifications(data) {
+    if (!data) return;
+    if (data.overall !== lastOverallStatus) {
+      if (lastOverallStatus && data.overall === "stopped") {
+        toast("موتور ربات متوقف شد", "error");
+        pushBrowserNotification("TradeChi", "Engine stopped", "engine-down");
+      }
+      lastOverallStatus = data.overall;
+    }
+    const sig = data.latest_signal;
+    if (sig && typeof sig === "object") {
+      const key = `${sig.symbol}:${sig.timestamp}:${sig.direction}`;
+      if (lastSignalNotifKey && key !== lastSignalNotifKey) {
+        const dir = (sig.direction || "").toUpperCase();
+        const msg = `${dir} ${sig.symbol || "?"}`;
+        pushBrowserNotification("سیگنال جدید", msg, `signal-${key}`);
+      }
+      lastSignalNotifKey = key;
+    }
+    if (data.uptime_history) renderUptimeHistory(data.uptime_history);
+  }
+
   function applyReportData(data, days = 30) {
     if (!data) return;
     if (days === 7) {
@@ -1400,11 +1588,13 @@
       case "monitor": {
         const status = DataCache.get("status");
         const sys = DataCache.get("system");
+        const uptime = DataCache.get("uptime");
         if (sys) updateSystem(sys);
         if (status) {
           renderEngineState(status.engine_state);
           renderMonitorProcesses(status.processes);
         }
+        if (uptime) renderUptimeHistory(uptime);
         requestAnimationFrame(() => {
           refreshMonitorLiveCharts({ recreate: true });
           setTimeout(() => refreshMonitorLiveCharts(), 400);
@@ -1444,7 +1634,11 @@
       }
       case "settings": {
         const status = DataCache.get("status");
+        const ops = DataCache.get("ops");
+        const audit = DataCache.get("audit");
         if (status) applySettingsPage(status);
+        if (ops) applyOpsConfig(ops);
+        if (audit) renderAuditLog(audit.entries || []);
         break;
       }
       case "logs": {
@@ -1555,6 +1749,9 @@
     if (needs.includes("system")) tasks.push(fetchSystem({ force }));
     if (needs.includes("signals")) tasks.push(fetchSignals({ force }));
     if (needs.includes("cooldowns")) tasks.push(fetchCooldowns({ force }));
+    if (needs.includes("uptime")) tasks.push(fetchUptimeHistory({ force }));
+    if (needs.includes("ops")) tasks.push(fetchOpsConfig({ force }));
+    if (needs.includes("audit")) tasks.push(fetchAuditLog({ force }));
     if (needs.includes("report:7")) tasks.push(fetchReport(7, { force }));
     if (page === "reports") {
       const days = Number($("#reportDays")?.value || 30);
@@ -1976,6 +2173,8 @@
         resourceHistoryChart.data.labels = [...resourceHistory.labels];
         resourceHistoryChart.data.datasets[0].data = [...resourceHistory.cpu];
         resourceHistoryChart.data.datasets[1].data = [...resourceHistory.ram];
+        resourceHistoryChart.data.datasets[2].data = [...resourceHistory.disk];
+        resourceHistoryChart.data.datasets[3].data = [...resourceHistory.net];
         resourceHistoryChart.update("none");
         updateResourceChartEmptyState();
         return;
@@ -1993,8 +2192,8 @@
               backgroundColor: "rgba(91,156,246,0.08)",
               fill: true,
               tension: 0.35,
+              yAxisID: "y",
               pointRadius: resourceHistory.labels.length <= 2 ? 3 : 0,
-              pointHoverRadius: 4,
               borderWidth: 2,
             },
             {
@@ -2004,8 +2203,30 @@
               backgroundColor: "rgba(99,255,208,0.06)",
               fill: true,
               tension: 0.35,
+              yAxisID: "y",
               pointRadius: resourceHistory.labels.length <= 2 ? 3 : 0,
-              pointHoverRadius: 4,
+              borderWidth: 2,
+            },
+            {
+              label: "Disk",
+              data: [...resourceHistory.disk],
+              borderColor: "#fbbf24",
+              backgroundColor: "rgba(251,191,36,0.06)",
+              fill: false,
+              tension: 0.35,
+              yAxisID: "y",
+              pointRadius: 0,
+              borderWidth: 2,
+            },
+            {
+              label: "Net KB/s",
+              data: [...resourceHistory.net],
+              borderColor: "#a78bfa",
+              backgroundColor: "rgba(167,139,250,0.06)",
+              fill: false,
+              tension: 0.35,
+              yAxisID: "y1",
+              pointRadius: 0,
               borderWidth: 2,
             },
           ],
@@ -2020,10 +2241,19 @@
               grid: { color: "rgba(255,255,255,0.04)" },
             },
             y: {
+              type: "linear",
+              position: "right",
               beginAtZero: true,
               max: 100,
               ticks: { color: "#5a6478", callback: (v) => `${v}%`, font: CHART_FONT },
               grid: { color: "rgba(255,255,255,0.04)" },
+            },
+            y1: {
+              type: "linear",
+              position: "left",
+              beginAtZero: true,
+              ticks: { color: "#8b7fd6", font: CHART_FONT },
+              grid: { drawOnChartArea: false },
             },
           },
           plugins: {
@@ -2032,7 +2262,6 @@
               backgroundColor: "rgba(8,12,24,0.95)",
               titleFont: CHART_FONT,
               bodyFont: CHART_FONT,
-              callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%` },
             },
           },
         },
@@ -2119,6 +2348,8 @@
     if ($("#heroUptime")) $("#heroUptime").textContent = formatUptime(sys.uptime_secs);
 
     pushResourceHistory(sys);
+    handleResourceAlerts(sys);
+    if (sys.ops) applyOpsConfig(sys.ops);
     updateMonitorHero(sys, lastProcesses);
     if ($("#monitorSyncTime")) {
       $("#monitorSyncTime").textContent = `آخرین بروزرسانی: ${new Date().toLocaleTimeString("fa-IR")}`;
@@ -2808,6 +3039,49 @@
   $("#homeBtnPauseNotif")?.addEventListener("click", () => mgmt("pause_notifications", { confirmMsg: "ارسال نوتیفیکیشن متوقف شود؟" }));
   $("#homeBtnResumeNotif")?.addEventListener("click", () => mgmt("resume_notifications"));
 
+  $("#btnExportMetrics")?.addEventListener("click", () => downloadExport("/api/export/metrics.csv"));
+  $("#btnSaveOps")?.addEventListener("click", () => saveOpsConfig().catch((e) => toast(e.message, "error")));
+  $("#btnWhatsNew")?.addEventListener("click", openChangelogModal);
+  $("#sidebarVersionFull")?.addEventListener("click", openChangelogModal);
+  $("#changelogModalClose")?.addEventListener("click", closeChangelogModal);
+  $("#changelogModalOverlay")?.addEventListener("click", (e) => {
+    if (e.target === $("#changelogModalOverlay")) closeChangelogModal();
+  });
+  $("#btnRefreshAudit")?.addEventListener("click", () => fetchAuditLog({ force: true }));
+  $("#btnConfigBackup")?.addEventListener("click", async () => {
+    try {
+      const data = await api("/api/config/backup");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `tradechi-config-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("پشتیبان دانلود شد");
+      fetchAuditLog({ force: true }).catch(() => {});
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+  $("#configRestoreFile")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (!confirm("تنظیمات از فایل بازیابی شود؟")) return;
+      const data = await api("/api/config/restore", { method: "POST", body: JSON.stringify(payload) });
+      toast(`بازیابی شد: ${(data.restored || []).join(", ")}`);
+      invalidateCache("status", "bootstrap", "ops", "audit");
+      await fetchStatus({ force: true });
+      await fetchOpsConfig({ force: true });
+    } catch (err) {
+      toast(err.message || "فایل نامعتبر", "error");
+    } finally {
+      e.target.value = "";
+    }
+  });
+
   $("#telegramFeed")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-retry-symbol]");
     if (btn) retryTelegramSend(btn);
@@ -2873,10 +3147,12 @@
         renderHomeProcesses(data.processes);
         renderMonitorProcesses(data.processes);
         updateSystem(data.system);
+        handleLiveNotifications(data);
         if (data.server_time) $("#liveTime").textContent = data.server_time;
 
         if (data.signal_stats) {
-          renderStats(data.signal_stats);
+          const statusCached = DataCache.get("status");
+          renderStats(data.signal_stats, statusCached || { outcome_summary: {}, delivery_summary: {} });
         }
         if (data.latest_signal !== undefined) {
           renderLatestSignal(data.latest_signal);
