@@ -1,10 +1,17 @@
 {
   "major": 2,
-  "minor": 32,
+  "minor": 33,
   "patch": 0,
-  "label": "v2.32",
+  "label": "v2.33",
   "released": "2026-07-09",
   "history": [
+    {
+      "version": "2.33.0",
+      "label": "v2.33",
+      "date": "2026-07-09",
+      "title": "Automated dashboard update",
+      "level": "minor"
+    },
     {
       "version": "2.32.0",
       "label": "v2.32",
