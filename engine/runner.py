@@ -106,7 +106,7 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
     state = _load_state(cfg.state_file)
 
     if cfg.send_startup_message and not state.get("startup_sent") and not cfg.notifications_paused:
-        if send_telegram(cfg, startup_message(cfg)):
+        if send_telegram(cfg, startup_message(cfg), message_type="startup"):
             state["startup_sent"] = True
             _save_state(cfg.state_file, state)
 
@@ -146,7 +146,13 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                 cross_alert = engine.check_golden_cross(symbol, frames["D1"])
                 if cross_alert:
                     if last_cross.get(symbol) != cross_alert.cross:
-                        send_telegram(cfg, cross_alert.message_html)
+                        send_telegram(
+                            cfg,
+                            cross_alert.message_html,
+                            symbol=symbol,
+                            direction="ALERT",
+                            message_type="alert",
+                        )
                         last_cross[symbol] = cross_alert.cross
 
                 sig = engine.evaluate(symbol, frames=frames)
@@ -158,7 +164,14 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                 if time.time() - last_ts < cool_secs:
                     continue
 
-                if send_telegram(cfg, sig.message_html):
+                if send_telegram(
+                    cfg,
+                    sig.message_html,
+                    symbol=sig.symbol,
+                    direction=sig.direction,
+                    score=sig.score,
+                    entry=sig.entry,
+                ):
                     last_signal_at[symbol] = time.time()
                     simulation.register({
                         "timestamp": datetime.now(timezone.utc).isoformat(),

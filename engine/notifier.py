@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import requests
 
@@ -12,14 +14,44 @@ from engine.config import EngineConfig
 from engine.signal_logic import SignalResult
 
 logger = logging.getLogger(__name__)
+_BOT_ROOT = Path(__file__).resolve().parent.parent
 
 
-def send_telegram(cfg: EngineConfig, text: str) -> bool:
+def _log_telegram_delivery(**kwargs) -> None:
+    try:
+        if str(_BOT_ROOT) not in sys.path:
+            sys.path.insert(0, str(_BOT_ROOT))
+        from telegram_logger import log_telegram_delivery
+
+        log_telegram_delivery(**kwargs)
+    except Exception as exc:
+        logger.debug("Telegram delivery log skipped: %s", exc)
+
+
+def send_telegram(
+    cfg: EngineConfig,
+    text: str,
+    *,
+    symbol: str = "—",
+    direction: str = "",
+    message_type: str = "signal",
+    score: int | float | None = None,
+    entry: str | float | None = None,
+) -> bool:
     if cfg.notifications_paused:
         logger.info("Telegram skipped — NOTIFICATIONS_PAUSED=1")
         return False
     if not cfg.telegram_bot_token or not cfg.telegram_chat_id:
         logger.error("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
+        _log_telegram_delivery(
+            symbol=symbol,
+            direction=direction or "INFO",
+            ok=False,
+            error="TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set",
+            score=score,
+            entry=entry,
+            message_type=message_type,
+        )
         return False
     url = f"https://api.telegram.org/bot{cfg.telegram_bot_token}/sendMessage"
     data = urllib.parse.urlencode(
@@ -32,9 +64,29 @@ def send_telegram(cfg: EngineConfig, text: str) -> bool:
     req = urllib.request.Request(url, data=data)
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.status == 200
+            ok = resp.status == 200
+            _log_telegram_delivery(
+                symbol=symbol,
+                direction=direction or "INFO",
+                ok=ok,
+                error=None if ok else f"HTTP {resp.status}",
+                http_status=resp.status,
+                score=score,
+                entry=entry,
+                message_type=message_type,
+            )
+            return ok
     except Exception as e:
         logger.error("Telegram send failed: %s", e)
+        _log_telegram_delivery(
+            symbol=symbol,
+            direction=direction or "INFO",
+            ok=False,
+            error=str(e),
+            score=score,
+            entry=entry,
+            message_type=message_type,
+        )
         return False
 
 
