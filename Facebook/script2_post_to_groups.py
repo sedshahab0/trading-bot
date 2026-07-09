@@ -528,7 +528,13 @@ def main():
         try:
             loaded = load_session(driver)
             cookies = driver.get_cookies()
-            logged_in = loaded and any(cookie.get("name") == "c_user" for cookie in cookies)
+            login_fields = driver.find_elements(By.NAME, "email") or driver.find_elements(By.NAME, "pass")
+            logged_in = (
+                loaded
+                and any(cookie.get("name") == "c_user" for cookie in cookies)
+                and "login" not in driver.current_url.lower()
+                and not login_fields
+            )
             print(json.dumps({
                 "ok": logged_in,
                 "url": driver.current_url,
