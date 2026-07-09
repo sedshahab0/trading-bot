@@ -222,21 +222,21 @@
   }
 
   const PAGE_META = {
-    home: { title: "داشبورد", sub: "نمای کلی ربات", path: "/", routeLabel: "dashboard" },
-    monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم", path: "/monitor", routeLabel: "monitor" },
-    control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور", path: "/control", routeLabel: "control" },
-    signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال", path: "/signals", routeLabel: "signals" },
-    simulation: { title: "شبیه‌ساز", sub: "بازده فرضی سیگنال‌ها روی قیمت واقعی بازار", path: "/simulation", routeLabel: "simulation" },
-    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel", path: "/reports", routeLabel: "reports" },
-    telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام", path: "/telegram", routeLabel: "telegram" },
-    facebook: { title: "فیسبوک", sub: "مدیریت گروه‌ها، پیام‌ها و انتشار سیگنال", path: "/facebook", routeLabel: "facebook" },
-    settings: { title: "تنظیمات", sub: "سازماندهی نمادها، موتور و کانال‌های ارسال", path: "/settings", routeLabel: "settings" },
-    logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها", path: "/logs", routeLabel: "logs" },
+    home: { title: "داشبورد", sub: "نمای کلی ربات", path: "/", routeLabel: "dashboard", section: "overview" },
+    monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم", path: "/monitor", routeLabel: "monitor", section: "system" },
+    control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور", path: "/control", routeLabel: "control", section: "bot" },
+    signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال", path: "/signals", routeLabel: "signals", section: "bot" },
+    simulation: { title: "شبیه‌ساز", sub: "بازده فرضی سیگنال‌ها روی قیمت واقعی بازار", path: "/simulation", routeLabel: "simulation", section: "bot" },
+    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel", path: "/reports", routeLabel: "reports", section: "bot" },
+    telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام", path: "/telegram", routeLabel: "telegram", section: "bot" },
+    facebook: { title: "فیسبوک", sub: "مدیریت گروه‌ها، پیام‌ها و انتشار سیگنال", path: "/facebook", routeLabel: "facebook", section: "social" },
+    settings: { title: "تنظیمات", sub: "سازماندهی نمادها، موتور و کانال‌های ارسال", path: "/settings", routeLabel: "settings", section: "system" },
+    logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها", path: "/logs", routeLabel: "logs", section: "system" },
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = pageFromPathname() || normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.42", full: "2.42.0", major: 2, minor: 42, patch: 0 };
+  let dashboardVersion = { label: "v2.44", full: "2.44.0", major: 2, minor: 44, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -3008,10 +3008,20 @@
     const meta = PAGE_META[activePage] || PAGE_META.home;
     if ($("#pageTitle")) $("#pageTitle").textContent = meta.title;
     if ($("#pageSub")) $("#pageSub").textContent = meta.sub;
+    const sectionCrumb = $("#pageBreadcrumbSection");
+    if (sectionCrumb) {
+      const isHome = activePage === "home";
+      sectionCrumb.classList.toggle("hidden", isHome);
+      if (!isHome) {
+        sectionCrumb.textContent = meta.section || "dashboard";
+        sectionCrumb.title = meta.path || "/";
+      }
+    }
     if ($("#pageBreadcrumbRoute")) {
       $("#pageBreadcrumbRoute").textContent = meta.routeLabel || activePage;
       $("#pageBreadcrumbRoute").title = meta.path || "/";
     }
+    if ($("#pageRoutePill")) $("#pageRoutePill").textContent = meta.path || "/";
     document.title = `${meta.title} | agennews.store`;
     $$(".nav-item[data-page]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.page === activePage);
