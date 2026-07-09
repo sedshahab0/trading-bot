@@ -72,6 +72,7 @@ _enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "enriched": []}
 _cpu_primed = False
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
+ENGINE_OUT_LOG = PM2_LOG_DIR / "signal-engine-out.log"
 STATIC_DIR = Path(__file__).parent / "static"
 VERSION_FILE = Path(__file__).parent / "version.json"
 CLIENT_DIAGNOSTIC_LOG = Path(__file__).parent / "client-diagnostics.log"
@@ -192,7 +193,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 30, "patch": 0, "label": "v2.30", "released": "", "history": []}
+    default = {"major": 2, "minor": 31, "patch": 0, "label": "v2.31", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -1002,10 +1003,16 @@ def _parse_telegram_jsonl(days: int | None = None, limit: int = 500) -> list[dic
 
 
 def _parse_engine_telegram_logs(days: int | None = None, limit: int = 1000) -> list[dict]:
-    if not ENGINE_LOG.exists():
+    log_files = [ENGINE_LOG, ENGINE_OUT_LOG]
+    lines: list[str] = []
+    for log_file in log_files:
+        if not log_file.exists():
+            continue
+        lines.extend(log_file.read_text(encoding="utf-8", errors="replace").splitlines())
+    if not lines:
         return []
     entries: list[dict] = []
-    for line in reversed(ENGINE_LOG.read_text(encoding="utf-8", errors="replace").splitlines()):
+    for line in reversed(lines):
         m = _TELEGRAM_SENT_RE.search(line)
         if m:
             ts = m.group("ts")
@@ -1082,6 +1089,31 @@ def _parse_engine_telegram_logs(days: int | None = None, limit: int = 1000) -> l
     return entries
 
 
+def _parse_signal_log_telegram(days: int | None = None, limit: int = 500) -> list[dict]:
+    """Infer successful Telegram sends from signal_log (written after Telegram + bridge)."""
+    entries: list[dict] = []
+    for sig in _parse_all_signals(days=days):
+        entries.append(
+            {
+                "timestamp": sig.get("timestamp", ""),
+                "symbol": _normalize_symbol(str(sig.get("symbol", "?"))),
+                "direction": str(sig.get("direction", "")).upper(),
+                "status": "ok",
+                "ok": True,
+                "score": sig.get("score"),
+                "entry": sig.get("entry"),
+                "error": None,
+                "http_status": 200,
+                "message_type": "signal",
+                "source": "signal_log",
+                "detail": "بازسازی از signal_log",
+            }
+        )
+        if len(entries) >= limit:
+            break
+    return entries
+
+
 def _merge_telegram_entries(*sources: list[dict]) -> list[dict]:
     seen: set[str] = set()
     merged: list[dict] = []
@@ -1097,18 +1129,33 @@ def _merge_telegram_entries(*sources: list[dict]) -> list[dict]:
 
 
 def _parse_telegram_deliveries(days: int | None = 30, limit: int = 200) -> list[dict]:
-    mtime = TELEGRAM_DELIVERY_LOG.stat().st_mtime if TELEGRAM_DELIVERY_LOG.exists() else 0.0
+    tg_mtime = TELEGRAM_DELIVERY_LOG.stat().st_mtime if TELEGRAM_DELIVERY_LOG.exists() else 0.0
+    sig_mtime = SIGNAL_LOG.stat().st_mtime if SIGNAL_LOG.exists() else 0.0
+    eng_mtime = max(
+        ENGINE_LOG.stat().st_mtime if ENGINE_LOG.exists() else 0.0,
+        ENGINE_OUT_LOG.stat().st_mtime if ENGINE_OUT_LOG.exists() else 0.0,
+    )
+    cache_stamp = (tg_mtime, sig_mtime, eng_mtime)
     if (
         _telegram_cache["entries"]
-        and _telegram_cache["mtime"] == mtime
+        and _telegram_cache.get("cache_stamp") == cache_stamp
         and _telegram_cache["days"] == (days or 0)
         and _telegram_cache["limit"] >= limit
     ):
         return _telegram_cache["entries"][:limit]
     jsonl = _parse_telegram_jsonl(days=days, limit=limit)
     engine = _parse_engine_telegram_logs(days=days, limit=limit * 2)
-    merged = _merge_telegram_entries(jsonl, engine)[: max(limit, 500)]
-    _telegram_cache.update({"mtime": mtime, "days": days or 0, "limit": max(limit, 500), "entries": merged})
+    signal_log = _parse_signal_log_telegram(days=days, limit=limit * 2)
+    merged = _merge_telegram_entries(jsonl, engine, signal_log)[: max(limit, 500)]
+    _telegram_cache.update(
+        {
+            "cache_stamp": cache_stamp,
+            "mtime": tg_mtime,
+            "days": days or 0,
+            "limit": max(limit, 500),
+            "entries": merged,
+        }
+    )
     return merged[:limit]
 
 

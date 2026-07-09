@@ -189,6 +189,8 @@
     active: false,
     minScore: null,
     pollSeconds: null,
+    facebookEnable: null,
+    engineDebug: null,
   };
   let facebookPayload = null;
   let facebookPreviewSignalId = null;
@@ -226,7 +228,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.30", full: "2.30.0", major: 2, minor: 30, patch: 0 };
+  let dashboardVersion = { label: "v2.31", full: "2.31.0", major: 2, minor: 31, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -309,7 +311,8 @@
     simulation: 30000,
   };
 
-  const PERSIST_PREFIXES = ["status", "system", "signals:", "report:", "telegram:", "ops", "cooldowns", "uptime", "bootstrap", "analytics:"];
+  // status/bootstrap carry config — do not persist to sessionStorage (stale config on refresh).
+  const PERSIST_PREFIXES = ["system", "signals:", "report:", "telegram:", "ops", "cooldowns", "uptime", "analytics:"];
   const PERSIST_MAX_AGE_MS = 600000;
 
   let bootstrapInflight = null;
@@ -629,8 +632,16 @@
     stopStreams();
   }
 
+  function purgeLegacyConfigCache() {
+    try {
+      sessionStorage.removeItem("tc:status");
+      sessionStorage.removeItem("tc:bootstrap");
+    } catch {}
+  }
+
   function showDashboard() {
     document.body.classList.remove("auth-pending");
+    purgeLegacyConfigCache();
     DataCache.hydrate();
     applyAllCachedData();
     $("#loginOverlay").classList.add("hidden");
@@ -1003,18 +1014,103 @@
     };
   }
 
-  function markSettingsDraft() {
-    settingsDraft.active = true;
+  function getLiveConfigToggles() {
+    return {
+      facebook_enable: !!$("#cfgFacebook")?.checked,
+      engine_debug: !!$("#cfgDebug")?.checked,
+    };
+  }
+
+  function syncSettingsDraftFromDom() {
     const live = getLiveSettingsValue();
+    const toggles = getLiveConfigToggles();
+    settingsDraft.active = true;
     settingsDraft.minScore = live.min_score;
     settingsDraft.pollSeconds = live.poll_seconds;
+    settingsDraft.facebookEnable = toggles.facebook_enable;
+    settingsDraft.engineDebug = toggles.engine_debug;
     safeSessionStorageSet("tc:settings-draft", JSON.stringify(settingsDraft));
+    return { ...live, ...toggles };
+  }
+
+  function resolveSettingsFormValues(cfg = {}) {
+    const serverMin = String(cfg.min_score ?? "5");
+    const serverPoll = String(cfg.poll_seconds ?? "30");
+    const serverFacebook = !!cfg.facebook_enable;
+    const serverDebug = !!cfg.engine_debug;
+    const live = getLiveSettingsValue();
+    const toggles = getLiveConfigToggles();
+
+    const livePending =
+      live.min_score !== serverMin ||
+      live.poll_seconds !== serverPoll ||
+      toggles.facebook_enable !== serverFacebook ||
+      toggles.engine_debug !== serverDebug;
+    const draftMin = settingsDraft.minScore != null ? String(settingsDraft.minScore) : null;
+    const draftPoll = settingsDraft.pollSeconds != null ? String(settingsDraft.pollSeconds) : null;
+    const draftFacebook =
+      settingsDraft.facebookEnable != null ? !!settingsDraft.facebookEnable : null;
+    const draftDebug = settingsDraft.engineDebug != null ? !!settingsDraft.engineDebug : null;
+    const draftPending =
+      settingsDraft.active &&
+      ((draftMin != null && draftMin !== serverMin) ||
+        (draftPoll != null && draftPoll !== serverPoll) ||
+        (draftFacebook != null && draftFacebook !== serverFacebook) ||
+        (draftDebug != null && draftDebug !== serverDebug));
+
+    if (!livePending && !draftPending) {
+      if (settingsDraft.active) clearSettingsDraft();
+      return {
+        minScore: serverMin,
+        pollSeconds: serverPoll,
+        facebookEnable: serverFacebook,
+        engineDebug: serverDebug,
+        pending: false,
+      };
+    }
+
+    const minScore = live.min_score !== serverMin ? live.min_score : draftMin ?? serverMin;
+    const pollSeconds = live.poll_seconds !== serverPoll ? live.poll_seconds : draftPoll ?? serverPoll;
+    const facebookEnable =
+      toggles.facebook_enable !== serverFacebook
+        ? toggles.facebook_enable
+        : draftFacebook ?? serverFacebook;
+    const engineDebug =
+      toggles.engine_debug !== serverDebug ? toggles.engine_debug : draftDebug ?? serverDebug;
+
+    settingsDraft.active = true;
+    settingsDraft.minScore = minScore;
+    settingsDraft.pollSeconds = pollSeconds;
+    settingsDraft.facebookEnable = facebookEnable;
+    settingsDraft.engineDebug = engineDebug;
+    safeSessionStorageSet("tc:settings-draft", JSON.stringify(settingsDraft));
+    return { minScore, pollSeconds, facebookEnable, engineDebug, pending: true };
+  }
+
+  function applyResolvedSettingsFields(cfg, resolved = null) {
+    const values = resolved || resolveSettingsFormValues(cfg);
+    applySettingsFieldValue("#cfgMinScoreRange", "#cfgMinScore", "#settingsScoreDisplay", values.minScore);
+    applySettingsFieldValue("#cfgPollRange", "#cfgPoll", "#settingsPollDisplay", values.pollSeconds, "s");
+    if ($("#settingsMinScore")) $("#settingsMinScore").textContent = values.minScore;
+    if ($("#settingsPollVal")) $("#settingsPollVal").textContent = `${values.pollSeconds}s`;
+    if ($("#cfgFacebook")) $("#cfgFacebook").checked = !!values.facebookEnable;
+    if ($("#cfgDebug")) $("#cfgDebug").checked = !!values.engineDebug;
+    if ($("#debugStatus")) {
+      $("#debugStatus").textContent = values.engineDebug ? "روشن" : "خاموش";
+    }
+    return values;
+  }
+
+  function markSettingsDraft() {
+    syncSettingsDraftFromDom();
   }
 
   function clearSettingsDraft() {
     settingsDraft.active = false;
     settingsDraft.minScore = null;
     settingsDraft.pollSeconds = null;
+    settingsDraft.facebookEnable = null;
+    settingsDraft.engineDebug = null;
     try {
       sessionStorage.removeItem("tc:settings-draft");
     } catch {}
@@ -1029,6 +1125,8 @@
       settingsDraft.active = !!parsed.active;
       settingsDraft.minScore = parsed.minScore ?? null;
       settingsDraft.pollSeconds = parsed.pollSeconds ?? null;
+      settingsDraft.facebookEnable = parsed.facebookEnable ?? null;
+      settingsDraft.engineDebug = parsed.engineDebug ?? null;
     } catch {}
   }
 
@@ -1049,21 +1147,18 @@
     };
   }
 
-  function applyConfigToDashboard(configPatch, statusBase = null) {
+  function applyConfigToDashboard(configPatch, statusBase = null, { clearDraft = false } = {}) {
     const base = statusBase || DataCache.get("status") || {};
     const merged = {
       ...base,
       config: { ...(base.config || {}), ...configPatch },
     };
     DataCache.set("status", merged);
-    applySettingsPage(merged);
+    if (clearDraft) clearSettingsDraft();
     applyControlPage(merged);
     if ($("#cfgSymbols")) $("#cfgSymbols").value = merged.config.symbols || "";
-    if ($("#cfgFacebook")) $("#cfgFacebook").checked = !!merged.config.facebook_enable;
-    if ($("#cfgDebug")) $("#cfgDebug").checked = !!merged.config.engine_debug;
-    if ($("#debugStatus")) {
-      $("#debugStatus").textContent = merged.config.engine_debug ? "روشن" : "خاموش";
-    }
+    applyResolvedSettingsFields(merged.config);
+    if (activePage === "settings") applySettingsPageMeta(merged);
   }
 
   function applyStatusData(data) {
@@ -1084,17 +1179,12 @@
 
     const cfg = data.config || {};
     if ($("#cfgSymbols")) $("#cfgSymbols").value = cfg.symbols || "";
-    if (!settingsDraft.active) {
-      if ($("#cfgMinScore")) $("#cfgMinScore").value = cfg.min_score || "5";
-      if ($("#cfgPoll")) $("#cfgPoll").value = cfg.poll_seconds || "30";
-    }
-    if ($("#cfgFacebook")) $("#cfgFacebook").checked = cfg.facebook_enable;
-    if ($("#cfgDebug")) $("#cfgDebug").checked = cfg.engine_debug;
-    if ($("#debugStatus")) $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
-    applySettingsPage(data);
+    applyResolvedSettingsFields(cfg);
+    if (!settingsDraft.active) clearSettingsDraft();
+    if (activePage === "settings") applySettingsPageMeta(data);
   }
 
-  function applySettingsPage(data) {
+  function applySettingsPageMeta(data) {
     if (!data) return;
     const cfg = data.config || {};
     const symbols = parseSymbolsString(cfg.symbols || "");
@@ -1106,19 +1196,6 @@
       $("#settingsUpdated").textContent = data.server_time ? `بروزرسانی ${data.server_time}` : "—";
     }
     if ($("#settingsSymCount")) $("#settingsSymCount").textContent = symbols.length;
-    if ($("#settingsMinScore")) $("#settingsMinScore").textContent = cfg.min_score || "5";
-    if ($("#settingsPollVal")) $("#settingsPollVal").textContent = `${cfg.poll_seconds || "30"}s`;
-
-    const minScore = cfg.min_score || "5";
-    const poll = cfg.poll_seconds || "30";
-
-    const keepDraft = settingsDraft.active;
-    const scoreValue = keepDraft && settingsDraft.minScore != null ? settingsDraft.minScore : minScore;
-    const pollValue = keepDraft && settingsDraft.pollSeconds != null ? settingsDraft.pollSeconds : poll;
-
-    applySettingsFieldValue("#cfgMinScoreRange", "#cfgMinScore", "#settingsScoreDisplay", scoreValue);
-    applySettingsFieldValue("#cfgPollRange", "#cfgPoll", "#settingsPollDisplay", pollValue, "s");
-    if (!keepDraft) clearSettingsDraft();
     if ($("#settingsProvider")) $("#settingsProvider").textContent = cfg.data_provider || "—";
 
     if ($("#settingsTelegramBadge")) {
@@ -2232,7 +2309,10 @@
         const status = DataCache.get("status");
         const ops = DataCache.get("ops");
         const audit = DataCache.get("audit");
-        if (status) applySettingsPage(status);
+        if (status) {
+          applyResolvedSettingsFields(status.config || {});
+          applySettingsPageMeta(status);
+        }
         if (ops) applyOpsConfig(ops);
         if (audit) renderAuditLog(audit.entries || []);
         fetchStrategy().catch(() => {});
@@ -4302,23 +4382,26 @@
     } catch {}
   }
 
-  $("#cfgMinScoreRange")?.addEventListener("pointerdown", markSettingsDraft);
-  $("#cfgMinScoreRange")?.addEventListener("focus", markSettingsDraft);
-  $("#cfgMinScoreRange")?.addEventListener("input", (e) => {
-    const v = e.target.value;
+  function onMinScoreRangeChange(v) {
     applySettingsFieldValue("#cfgMinScoreRange", "#cfgMinScore", "#settingsScoreDisplay", v);
     if ($("#settingsMinScore")) $("#settingsMinScore").textContent = v;
     markSettingsDraft();
-  });
+  }
 
-  $("#cfgPollRange")?.addEventListener("pointerdown", markSettingsDraft);
-  $("#cfgPollRange")?.addEventListener("focus", markSettingsDraft);
-  $("#cfgPollRange")?.addEventListener("input", (e) => {
-    const v = e.target.value;
+  function onPollRangeChange(v) {
     applySettingsFieldValue("#cfgPollRange", "#cfgPoll", "#settingsPollDisplay", v, "s");
     if ($("#settingsPollVal")) $("#settingsPollVal").textContent = `${v}s`;
     markSettingsDraft();
-  });
+  }
+
+  $("#cfgMinScoreRange")?.addEventListener("input", (e) => onMinScoreRangeChange(e.target.value));
+  $("#cfgMinScoreRange")?.addEventListener("change", (e) => onMinScoreRangeChange(e.target.value));
+
+  $("#cfgPollRange")?.addEventListener("input", (e) => onPollRangeChange(e.target.value));
+  $("#cfgPollRange")?.addEventListener("change", (e) => onPollRangeChange(e.target.value));
+
+  $("#cfgFacebook")?.addEventListener("change", markSettingsDraft);
+  $("#cfgDebug")?.addEventListener("change", markSettingsDraft);
 
   async function fetchStrategy({ force = false } = {}) {
     const data = await DataCache.load(
@@ -5150,8 +5233,11 @@
       clearSettingsDraft();
       lastStatusFingerprint = null;
       invalidateCache("status", "bootstrap");
-      applyConfigToDashboard(savedCfg);
-      await fetchStatus({ force: true });
+      applyConfigToDashboard(savedCfg, null, { clearDraft: true });
+      await Promise.all([
+        fetchStatus({ force: true }),
+        fetchBootstrap({ force: true }),
+      ]);
       const restart = result.engine_restart || {};
       if (restart.skipped) {
         toast("تنظیمات ذخیره شد و هنگام ادامه نوتیفیکیشن اعمال می‌شود");
