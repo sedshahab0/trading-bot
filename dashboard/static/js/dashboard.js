@@ -194,6 +194,7 @@
   let facebookPreviewSignalId = null;
   let facebookPreviewTemplates = null;
   let facebookPublishPollTimer = null;
+  const facebookPreviewCache = new Map();
   let fbJobsPage = 1;
   let fbHistoryPage = 1;
   const FB_JOBS_PER_PAGE = 8;
@@ -4956,6 +4957,30 @@
     }
   });
 
+  function setFacebookPreviewLoading(isLoading) {
+    $("#fbMessagePreview")?.classList.toggle("is-loading", isLoading);
+  }
+
+  function renderFacebookPreviewPayload(data) {
+    facebookPreviewTemplates = data.templates;
+    if ($("#fbPreviewSignal")) {
+      $("#fbPreviewSignal").textContent = `${data.signal.symbol} ${data.signal.direction} · ${data.signal.entry}`;
+    }
+    const tabs = buildFacebookPreviewTabs(data.templates);
+    renderFacebookPreviewTabButtons(tabs, tabs[0]?.tabKey);
+    setFacebookPreviewLoading(false);
+    showFacebookPreviewTemplate(tabs[0]?.tabKey);
+  }
+
+  async function fetchFacebookPreview(signalId) {
+    if (facebookPreviewCache.has(signalId)) {
+      return facebookPreviewCache.get(signalId);
+    }
+    const data = await api(`/api/facebook/jobs/${signalId}/preview`);
+    facebookPreviewCache.set(signalId, data);
+    return data;
+  }
+
   function showFacebookPreviewTemplate(key) {
     if (!facebookPreviewTemplates) return;
     const [language, template] = key.split(":");
@@ -4981,11 +5006,17 @@
     const button = event.target.closest("[data-fb-preview]");
     if (!button) return;
     const signalId = button.dataset.fbPreview;
+    const queuedJob = (facebookPayload?.jobs || []).find((job) => job.signal_id === signalId);
     facebookPreviewSignalId = signalId;
     const previewTabs = buildFacebookPreviewTabs(null);
     renderFacebookPreviewTabButtons(previewTabs, previewTabs[0]?.tabKey);
-    if ($("#fbPreviewSignal")) $("#fbPreviewSignal").textContent = "در حال بارگذاری پیش‌نمایش...";
-    if ($("#fbMessagePreview")) $("#fbMessagePreview").textContent = "در حال ساخت متن پیام برای سه زبان...";
+    if ($("#fbPreviewSignal")) {
+      $("#fbPreviewSignal").textContent = queuedJob
+        ? `${queuedJob.symbol} ${queuedJob.direction} · ${queuedJob.entry}`
+        : "در حال بارگذاری پیش‌نمایش...";
+    }
+    setFacebookPreviewLoading(true);
+    if ($("#fbMessagePreview")) $("#fbMessagePreview").textContent = "";
     clearTimeout(facebookPublishPollTimer);
     facebookPublishPollTimer = null;
     $("#fbPublishProgress")?.classList.add("hidden");
@@ -4998,12 +5029,8 @@
     $("#fbPreviewModal")?.setAttribute("aria-hidden", "false");
     try {
       button.classList.add("loading");
-      const data = await api(`/api/facebook/jobs/${signalId}/preview`);
-      facebookPreviewTemplates = data.templates;
-      if ($("#fbPreviewSignal")) $("#fbPreviewSignal").textContent = `${data.signal.symbol} ${data.signal.direction} · ${data.signal.entry}`;
-      const tabs = buildFacebookPreviewTabs(data.templates);
-      renderFacebookPreviewTabButtons(tabs, tabs[0]?.tabKey);
-      showFacebookPreviewTemplate(tabs[0]?.tabKey);
+      const data = await fetchFacebookPreview(signalId);
+      renderFacebookPreviewPayload(data);
     } catch (error) {
       closeFacebookPreviewModal();
       toast(error.message, "error");

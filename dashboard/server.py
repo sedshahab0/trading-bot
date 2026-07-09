@@ -2280,18 +2280,12 @@ def _write_facebook_publish_status(signal_id: str, value: dict) -> dict:
 
 
 def _facebook_preview(job_file: Path) -> dict:
-    proc = subprocess.run(
-        [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--signal-file", str(job_file), "--preview"],
-        cwd=str(FACEBOOK_POSTER.parent),
-        env=_facebook_env(),
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or "Could not build Facebook preview")
-    lines = [line for line in proc.stdout.splitlines() if line.strip()]
-    return json.loads(lines[-1])
+    facebook_dir = str(FACEBOOK_POSTER.parent)
+    if facebook_dir not in sys.path:
+        sys.path.insert(0, facebook_dir)
+    from facebook_templates import build_templates, load_signal_data
+
+    return build_templates(load_signal_data(job_file))
 
 
 def _simulation_payload(
