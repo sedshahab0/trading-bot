@@ -56,7 +56,7 @@ def send_facebook_bridge(cfg: EngineConfig, sig: SignalResult) -> bool:
     }
     try:
         r = requests.post(cfg.facebook_url, data=payload, timeout=10)
-        return r.status_code == 200
+        return r.status_code in (200, 202)
     except Exception as e:
         logger.error("Facebook bridge failed: %s", e)
         return False

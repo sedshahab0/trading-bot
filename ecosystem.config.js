@@ -6,6 +6,7 @@ module.exports = {
       script: "/opt/trading-bot/deploy/runtime/python3.sh",
       args: "signal_server.py",
       interpreter: "none",
+      env_file: "/opt/trading-bot/.env",
       env: {
         BEHIND_PROXY: "1",
         VENV_PYTHON: "/opt/trading-bot/venv/bin/python3",

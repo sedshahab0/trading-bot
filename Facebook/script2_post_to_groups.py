@@ -338,6 +338,8 @@ def load_groups_from_excel():
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row[2]:
             continue
+        if len(row) > 5 and row[5] is False:
+            continue
         num, name, url, language, template_num = row[0], row[1], row[2], row[3], row[4]
         if not url or not str(url).startswith("http"):
             continue
@@ -493,6 +495,7 @@ def parse_args():
     parser.add_argument("--signal-file", default=None)
     parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--preview", action="store_true")
     return parser.parse_args()
 
 
@@ -515,6 +518,11 @@ def preflight():
 
 def main():
     args = parse_args()
+    if args.preview:
+        sig = load_signal(args.signal_file)
+        templates = build_templates(sig)
+        print(json.dumps(templates, ensure_ascii=False))
+        return 0
     checks = preflight()
     if args.preflight:
         return 0 if checks["ready"] else 2

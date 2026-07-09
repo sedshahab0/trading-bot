@@ -32,7 +32,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
 try:
-    from openpyxl import Workbook
+    from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
     HAS_OPENPYXL = True
@@ -74,6 +74,13 @@ STATIC_DIR = Path(__file__).parent / "static"
 VERSION_FILE = Path(__file__).parent / "version.json"
 CLIENT_DIAGNOSTIC_LOG = Path(__file__).parent / "client-diagnostics.log"
 CACHE_DB = Path(os.environ.get("DASHBOARD_CACHE_DB", str(BOT_ROOT / ".cache" / "dashboard-cache.sqlite3")))
+FACEBOOK_DIR = DATA_ROOT / "facebook"
+FACEBOOK_GROUPS_FILE = FACEBOOK_DIR / "fb_my_groups.xlsx"
+FACEBOOK_SESSION_FILE = FACEBOOK_DIR / "fb_session.json"
+FACEBOOK_POST_LOG = FACEBOOK_DIR / "post_log.xlsx"
+FACEBOOK_JOBS_DIR = DATA_ROOT / "facebook-jobs"
+FACEBOOK_POSTER = BOT_ROOT / "Facebook" / "script2_post_to_groups.py"
+VENV_PYTHON = BOT_ROOT / "venv" / "bin" / "python3"
 
 PROCESSES = ("signal-engine", "signal-server")
 DISPLAY_PROCESSES = ("signal-engine", "signal-server", "dashboard")
@@ -103,6 +110,7 @@ BACKUP_KEYS = {
     "MIN_SCORE",
     "POLL_SECONDS",
     "FACEBOOK_ENABLE",
+    "FACEBOOK_AUTO_POST",
     "DATA_PROVIDER",
     "ENGINE_DEBUG",
     "SEND_STARTUP_MESSAGE",
@@ -179,7 +187,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 19, "patch": 0, "label": "v2.19", "released": "", "history": []}
+    default = {"major": 2, "minor": 20, "patch": 0, "label": "v2.20", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2093,6 +2101,102 @@ def _overall_status(procs: list[dict]) -> str:
     return "unknown"
 
 
+def _facebook_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.update({
+        "FACEBOOK_GROUPS_FILE": str(FACEBOOK_GROUPS_FILE),
+        "FACEBOOK_SESSION_FILE": str(FACEBOOK_SESSION_FILE),
+        "FACEBOOK_POST_LOG": str(FACEBOOK_POST_LOG),
+        "SIGNAL_QUEUE_FILE": str(SIGNAL_QUEUE),
+        "FACEBOOK_HEADLESS": "1",
+    })
+    return env
+
+
+def _facebook_preflight() -> dict:
+    try:
+        proc = subprocess.run(
+            [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--preflight"],
+            cwd=str(FACEBOOK_POSTER.parent),
+            env=_facebook_env(),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        lines = [line for line in proc.stdout.splitlines() if line.strip()]
+        result = json.loads(lines[-1]) if lines else {}
+        result["ready"] = proc.returncode == 0 and bool(result.get("ready"))
+        return result
+    except Exception as exc:
+        return {"ready": False, "error": str(exc)}
+
+
+def _facebook_groups() -> list[dict]:
+    if not HAS_OPENPYXL or not FACEBOOK_GROUPS_FILE.exists():
+        return []
+    wb = load_workbook(FACEBOOK_GROUPS_FILE)
+    ws = wb.active
+    groups = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or len(row) < 3 or not row[2]:
+            continue
+        groups.append({
+            "id": str(row[0] or ""),
+            "name": str(row[1] or ""),
+            "url": str(row[2] or ""),
+            "language": str(row[3] or "English"),
+            "template": str(row[4] or "1"),
+            "enabled": row[5] is not False if len(row) > 5 else True,
+        })
+    return groups
+
+
+def _save_facebook_groups(groups: list[dict]) -> None:
+    if not HAS_OPENPYXL:
+        raise RuntimeError("openpyxl is not installed")
+    FACEBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Facebook Groups"
+    ws.append(["ID", "Name", "URL", "Language", "Template", "Enabled"])
+    for group in groups:
+        ws.append([
+            group["id"], group["name"], group["url"], group["language"],
+            group["template"], bool(group.get("enabled", True)),
+        ])
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 58
+    ws.column_dimensions["D"].width = 14
+    wb.save(FACEBOOK_GROUPS_FILE)
+
+
+def _facebook_jobs(limit: int = 30) -> list[dict]:
+    FACEBOOK_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    rows = []
+    paths = sorted(FACEBOOK_JOBS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for path in paths[:limit]:
+        data = _read_json(path)
+        if isinstance(data, dict):
+            data["job_file"] = path.name
+            rows.append(data)
+    return rows
+
+
+def _facebook_preview(job_file: Path) -> dict:
+    proc = subprocess.run(
+        [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--signal-file", str(job_file), "--preview"],
+        cwd=str(FACEBOOK_POSTER.parent),
+        env=_facebook_env(),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "Could not build Facebook preview")
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    return json.loads(lines[-1])
+
+
 # ── Routes ────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -2388,6 +2492,7 @@ def api_config_patch():
         "MIN_SCORE",
         "POLL_SECONDS",
         "FACEBOOK_ENABLE",
+        "FACEBOOK_AUTO_POST",
         "DATA_PROVIDER",
         "ENGINE_DEBUG",
         "SEND_STARTUP_MESSAGE",
@@ -2417,6 +2522,147 @@ def api_config_patch():
             "message": restart_note,
         },
     })
+
+
+@app.route("/api/facebook")
+@auth_required
+def api_facebook():
+    env = _parse_env()
+    return jsonify({
+        "status": _facebook_preflight(),
+        "groups": _facebook_groups(),
+        "jobs": _facebook_jobs(),
+        "auto_post": env.get("FACEBOOK_AUTO_POST", "0") == "1",
+        "session_updated": (
+            datetime.fromtimestamp(FACEBOOK_SESSION_FILE.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            if FACEBOOK_SESSION_FILE.exists() else None
+        ),
+    })
+
+
+@app.route("/api/facebook/groups", methods=["POST"])
+@auth_required
+def api_facebook_group_create():
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    url = str(data.get("url", "")).strip().rstrip("/")
+    language = str(data.get("language", "English"))
+    template = str(data.get("template", "1"))
+    if not name or not re.match(r"^https://(?:www\.)?facebook\.com/groups/[^/?#]+", url, re.I):
+        return jsonify({"error": "نام و لینک معتبر گروه فیسبوک الزامی است"}), 400
+    if language not in ("English", "Persian", "Russian") or template not in ("1", "2", "3"):
+        return jsonify({"error": "زبان یا قالب نامعتبر است"}), 400
+    groups = _facebook_groups()
+    if any(group["url"].lower() == url.lower() for group in groups):
+        return jsonify({"error": "این گروه قبلاً اضافه شده است"}), 409
+    group = {
+        "id": secrets.token_hex(6),
+        "name": name,
+        "url": url,
+        "language": language,
+        "template": template,
+        "enabled": bool(data.get("enabled", True)),
+    }
+    groups.append(group)
+    _save_facebook_groups(groups)
+    _audit("facebook_group_add", f"{name} {url}")
+    return jsonify({"ok": True, "group": group, "status": _facebook_preflight()})
+
+
+@app.route("/api/facebook/groups/<group_id>", methods=["PATCH", "DELETE"])
+@auth_required
+def api_facebook_group_update(group_id: str):
+    groups = _facebook_groups()
+    index = next((i for i, group in enumerate(groups) if group["id"] == group_id), None)
+    if index is None:
+        return jsonify({"error": "گروه پیدا نشد"}), 404
+    if request.method == "DELETE":
+        removed = groups.pop(index)
+        _save_facebook_groups(groups)
+        _audit("facebook_group_delete", removed["name"])
+        return jsonify({"ok": True})
+    data = request.get_json(silent=True) or {}
+    group = groups[index]
+    for key in ("name", "language", "template"):
+        if key in data:
+            group[key] = str(data[key]).strip()
+    if "enabled" in data:
+        group["enabled"] = bool(data["enabled"])
+    if group["language"] not in ("English", "Persian", "Russian") or group["template"] not in ("1", "2", "3"):
+        return jsonify({"error": "زبان یا قالب نامعتبر است"}), 400
+    _save_facebook_groups(groups)
+    _audit("facebook_group_update", group["name"])
+    return jsonify({"ok": True, "group": group})
+
+
+@app.route("/api/facebook/session", methods=["POST"])
+@auth_required
+def api_facebook_session_upload():
+    upload = request.files.get("file")
+    if not upload:
+        return jsonify({"error": "فایل JSON سشن انتخاب نشده است"}), 400
+    if len(upload.read()) > 2 * 1024 * 1024:
+        return jsonify({"error": "حجم فایل سشن بیش از حد مجاز است"}), 400
+    upload.seek(0)
+    try:
+        cookies = json.load(upload.stream)
+    except Exception:
+        return jsonify({"error": "فایل JSON معتبر نیست"}), 400
+    if not isinstance(cookies, list) or not cookies or not all(
+        isinstance(cookie, dict) and cookie.get("name") and "value" in cookie for cookie in cookies
+    ):
+        return jsonify({"error": "فرمت کوکی‌های فیسبوک معتبر نیست"}), 400
+    FACEBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    FACEBOOK_SESSION_FILE.write_text(json.dumps(cookies, ensure_ascii=False), encoding="utf-8")
+    os.chmod(FACEBOOK_SESSION_FILE, 0o600)
+    _audit("facebook_session_upload", f"{len(cookies)} cookies")
+    return jsonify({"ok": True, "cookies": len(cookies), "status": _facebook_preflight()})
+
+
+@app.route("/api/facebook/jobs/<signal_id>/preview")
+@auth_required
+def api_facebook_job_preview(signal_id: str):
+    job = FACEBOOK_JOBS_DIR / f"{secure_filename(signal_id)}.json"
+    if not job.exists():
+        return jsonify({"error": "سیگنال پیدا نشد"}), 404
+    return jsonify({"signal": _read_json(job), "templates": _facebook_preview(job)})
+
+
+@app.route("/api/facebook/jobs/<signal_id>/send", methods=["POST"])
+@auth_required
+def api_facebook_job_send(signal_id: str):
+    job = FACEBOOK_JOBS_DIR / f"{secure_filename(signal_id)}.json"
+    if not job.exists():
+        return jsonify({"error": "سیگنال پیدا نشد"}), 404
+    readiness = _facebook_preflight()
+    if not readiness.get("ready"):
+        return jsonify({"error": "فیسبوک هنوز آماده ارسال نیست", "status": readiness}), 409
+    stdout_path = FACEBOOK_DIR / "poster_stdout.log"
+    stderr_path = FACEBOOK_DIR / "poster_stderr.log"
+    with stdout_path.open("a", encoding="utf-8") as stdout, stderr_path.open("a", encoding="utf-8") as stderr:
+        subprocess.Popen(
+            [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--signal-file", str(job)],
+            cwd=str(FACEBOOK_POSTER.parent),
+            env=_facebook_env(),
+            stdout=stdout,
+            stderr=stderr,
+            start_new_session=True,
+        )
+    _audit("facebook_send", signal_id)
+    return jsonify({"ok": True, "signal_id": signal_id})
+
+
+@app.route("/api/facebook/mode", methods=["PATCH"])
+@auth_required
+def api_facebook_mode():
+    enabled = bool((request.get_json(silent=True) or {}).get("auto_post"))
+    _write_env({"FACEBOOK_AUTO_POST": "1" if enabled else "0"})
+    code, out, err = _run(["pm2", "restart", "signal-server", "--update-env"])
+    _run(["pm2", "save"])
+    if code != 0:
+        return jsonify({"error": err or out or "restart failed"}), 500
+    _audit("facebook_mode", "auto" if enabled else "approval")
+    return jsonify({"ok": True, "auto_post": enabled})
 
 
 @app.route("/api/control", methods=["POST"])

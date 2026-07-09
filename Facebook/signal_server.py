@@ -152,6 +152,13 @@ def receive_signal():
                 "message": "Signal saved, but Facebook poster is not configured.",
                 "facebook": readiness,
             }), 503
+        if os.environ.get("FACEBOOK_AUTO_POST", "0") != "1":
+            log(f"Facebook job queued for dashboard approval: {data['signal_id']}")
+            return jsonify({
+                "status": "pending",
+                "signal_id": data["signal_id"],
+                "message": "Signal saved and waiting for Facebook approval.",
+            }), 202
         threading.Thread(target=run_script2, args=(job_file,), daemon=True).start()
         return jsonify({
             "status": "ok",
