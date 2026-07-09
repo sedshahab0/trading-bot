@@ -128,6 +128,12 @@ def main() -> int:
         rf"\g<1>{full}\g<2>",
         path=index_html,
     )
+    index_text = replace_once(
+        index_text,
+        r'(<script src="/static/js/dashboard\.js\?v=)[^"]+("></script>)',
+        rf"\g<1>{full}\g<2>",
+        path=index_html,
+    )
     index_html.write_text(index_text, encoding="utf-8")
 
     dashboard_js = ROOT / "dashboard" / "static" / "js" / "dashboard.js"

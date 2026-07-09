@@ -208,7 +208,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.17", full: "2.17.0", major: 2, minor: 17, patch: 0 };
+  let dashboardVersion = { label: "v2.18", full: "2.18.0", major: 2, minor: 18, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -3915,6 +3915,8 @@
     } catch {}
   }
 
+  $("#cfgMinScoreRange")?.addEventListener("pointerdown", markSettingsDraft);
+  $("#cfgMinScoreRange")?.addEventListener("focus", markSettingsDraft);
   $("#cfgMinScoreRange")?.addEventListener("input", (e) => {
     const v = e.target.value;
     applySettingsFieldValue("#cfgMinScoreRange", "#cfgMinScore", "#settingsScoreDisplay", v);
@@ -3922,6 +3924,8 @@
     markSettingsDraft();
   });
 
+  $("#cfgPollRange")?.addEventListener("pointerdown", markSettingsDraft);
+  $("#cfgPollRange")?.addEventListener("focus", markSettingsDraft);
   $("#cfgPollRange")?.addEventListener("input", (e) => {
     const v = e.target.value;
     applySettingsFieldValue("#cfgPollRange", "#cfgPoll", "#settingsPollDisplay", v, "s");
