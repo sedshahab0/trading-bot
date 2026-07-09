@@ -1,0 +1,13 @@
+{
+  "symbol": "USDJPY",
+  "direction": "BUY",
+  "entry": "162.50171",
+  "sl": "162.44988",
+  "tp1": "162.55354",
+  "tp2": "162.60536",
+  "tp3": "--",
+  "rr": "1:2",
+  "basis": "SMC Structure + Liquidity Grab + Daily Bias",
+  "received_at": "2026-07-09T10:58:17",
+  "signal_id": "74943ae646ef56bf"
+}

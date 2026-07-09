@@ -1,0 +1,541 @@
+[2026-07-08 11:39:00] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14004', 'sl': '1.14109', 'tp1': '1.13899', 'tp2': '1.13794', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 11:39:53] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33335', 'sl': '1.33469', 'tp1': '1.33201', 'tp2': '1.33067', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 11:40:45] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4042.68371', 'sl': '4058.51005', 'tp1': '4026.85737', 'tp2': '4011.03104', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 11:51:19] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14001', 'sl': '1.14106', 'tp1': '1.13896', 'tp2': '1.13791', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 11:51:20] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33406', 'sl': '1.33540', 'tp1': '1.33272', 'tp2': '1.33138', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 11:51:28] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4062.16837', 'sl': '4077.99471', 'tp1': '4046.34203', 'tp2': '4030.51570', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:04:12] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14004', 'sl': '1.14119', 'tp1': '1.13889', 'tp2': '1.13774', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:04:22] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33409', 'sl': '1.33551', 'tp1': '1.33267', 'tp2': '1.33126', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:04:29] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4063.33059', 'sl': '4080.36002', 'tp1': '4046.30116', 'tp2': '4029.27174', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:16:56] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14033', 'sl': '1.14133', 'tp1': '1.13933', 'tp2': '1.13832', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:17:14] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33498', 'sl': '1.33627', 'tp1': '1.33369', 'tp2': '1.33241', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:17:30] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4071.01831', 'sl': '4085.07431', 'tp1': '4056.96231', 'tp2': '4042.90632', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:30:05] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14033', 'sl': '1.14133', 'tp1': '1.13933', 'tp2': '1.13832', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:30:06] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33518', 'sl': '1.33647', 'tp1': '1.33389', 'tp2': '1.33261', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:30:15] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4071.68980', 'sl': '4085.74580', 'tp1': '4057.63380', 'tp2': '4043.57781', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:43:07] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14044', 'sl': '1.14140', 'tp1': '1.13948', 'tp2': '1.13853', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:43:24] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33518', 'sl': '1.33640', 'tp1': '1.33396', 'tp2': '1.33274', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:43:41] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4073.24715', 'sl': '4086.08817', 'tp1': '4060.40613', 'tp2': '4047.56512', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:56:08] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14044', 'sl': '1.14129', 'tp1': '1.13959', 'tp2': '1.13873', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:56:25] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33557', 'sl': '1.33670', 'tp1': '1.33444', 'tp2': '1.33332', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 12:56:57] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4083.52458', 'sl': '4096.80719', 'tp1': '4070.24197', 'tp2': '4056.95937', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:09:15] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.13990', 'sl': '1.14075', 'tp1': '1.13905', 'tp2': '1.13819', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:09:24] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33453', 'sl': '1.33566', 'tp1': '1.33340', 'tp2': '1.33228', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:09:32] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4075.55454', 'sl': '4088.83715', 'tp1': '4062.27193', 'tp2': '4048.98933', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:19:30] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14014', 'sl': '1.14098', 'tp1': '1.13930', 'tp2': '1.13846', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:24:37] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14003', 'sl': '1.14087', 'tp1': '1.13919', 'tp2': '1.13835', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:26:22] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4070.88578', 'sl': '4084.22154', 'tp1': '4057.55002', 'tp2': '4044.21427', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 13:33:19] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.33661', 'sl': '1.33774', 'tp1': '1.33548', 'tp2': '1.33435', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 18:36:48] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14254', 'sl': '1.14337', 'tp1': '1.14171', 'tp2': '1.14088', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 18:37:41] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.34003', 'sl': '1.34128', 'tp1': '1.33878', 'tp2': '1.33754', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 18:38:33] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4071.27847', 'sl': '4082.57097', 'tp1': '4059.98597', 'tp2': '4048.69347', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 18:48:52] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14293', 'sl': '1.14376', 'tp1': '1.14210', 'tp2': '1.14127', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 18:49:00] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.34057', 'sl': '1.34128', 'tp1': '1.33986', 'tp2': '1.33916', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-08 18:49:24] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4086.75424', 'sl': '4098.04674', 'tp1': '4075.46174', 'tp2': '4064.16924', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 08:53:06] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14291', 'sl': '1.14358', 'tp1': '1.14224', 'tp2': '1.14157', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 08:53:58] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.34134', 'sl': '1.34323', 'tp1': '1.33945', 'tp2': '1.33755', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 08:54:51] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4110.00138', 'sl': '4121.27103', 'tp1': '4098.73173', 'tp2': '4087.46208', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 09:10:02] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:10:02] ====================================================
+[2026-07-09 09:10:02] Signal Server started → https://agennews.store
+[2026-07-09 09:10:02] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:10:02] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:10:02] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:10:02] ====================================================
+[2026-07-09 09:10:02] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:10:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:10:04] ====================================================
+[2026-07-09 09:10:04] Signal Server started → https://agennews.store
+[2026-07-09 09:10:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:10:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:10:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:10:04] ====================================================
+[2026-07-09 09:10:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:10:39] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14263', 'sl': '1.14333', 'tp1': '1.14193', 'tp2': '1.14122', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 09:10:39] Launching script2_post_to_groups.py ...
+[2026-07-09 09:11:31] Signal saved → {'symbol': 'GBPUSD', 'direction': 'SELL', 'entry': '1.34129', 'sl': '1.34324', 'tp1': '1.33934', 'tp2': '1.33739', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 09:11:31] Launching script2_post_to_groups.py ...
+[2026-07-09 09:12:24] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4107.07828', 'sl': '4118.19714', 'tp1': '4095.95942', 'tp2': '4084.84055', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 09:12:24] Launching script2_post_to_groups.py ...
+[2026-07-09 09:13:01] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:13:01] ====================================================
+[2026-07-09 09:13:01] Signal Server started → https://agennews.store
+[2026-07-09 09:13:01] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:13:01] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:13:01] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:13:01] ====================================================
+[2026-07-09 09:13:01] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:15:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:15:04] ====================================================
+[2026-07-09 09:15:04] Signal Server started → https://agennews.store
+[2026-07-09 09:15:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:15:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:15:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:15:04] ====================================================
+[2026-07-09 09:15:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:20:02] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:20:02] ====================================================
+[2026-07-09 09:20:02] Signal Server started → https://agennews.store
+[2026-07-09 09:20:02] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:20:02] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:20:02] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:20:02] ====================================================
+[2026-07-09 09:20:02] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:20:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:20:04] ====================================================
+[2026-07-09 09:20:04] Signal Server started → https://agennews.store
+[2026-07-09 09:20:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:20:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:20:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:20:04] ====================================================
+[2026-07-09 09:20:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:21:48] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14274', 'sl': '1.14345', 'tp1': '1.14203', 'tp2': '1.14132', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias'}
+[2026-07-09 09:21:48] Launching script2_post_to_groups.py ...
+[2026-07-09 09:25:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:25:04] ====================================================
+[2026-07-09 09:25:04] Signal Server started → https://agennews.store
+[2026-07-09 09:25:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:25:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:25:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:25:04] ====================================================
+[2026-07-09 09:25:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:26:49] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:26:49] ====================================================
+[2026-07-09 09:26:49] Signal Server started → https://agennews.store
+[2026-07-09 09:26:49] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:26:49] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:26:49] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:26:49] ====================================================
+[2026-07-09 09:26:49] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:30:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:30:05] ====================================================
+[2026-07-09 09:30:05] Signal Server started → https://agennews.store
+[2026-07-09 09:30:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:30:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:30:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:30:05] ====================================================
+[2026-07-09 09:30:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:35:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:35:04] ====================================================
+[2026-07-09 09:35:04] Signal Server started → https://agennews.store
+[2026-07-09 09:35:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:35:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:35:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:35:04] ====================================================
+[2026-07-09 09:35:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:35:40] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14257', 'sl': '1.14327', 'tp1': '1.14187', 'tp2': '1.14117', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T09:35:40', 'signal_id': '72a4c508a067a742'}
+[2026-07-09 09:35:40] Facebook poster not ready: {'selenium': True, 'groups_file': False, 'session_file': False, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 09:40:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:40:05] ====================================================
+[2026-07-09 09:40:05] Signal Server started → https://agennews.store
+[2026-07-09 09:40:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:40:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:40:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:40:05] ====================================================
+[2026-07-09 09:40:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:45:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:45:04] ====================================================
+[2026-07-09 09:45:04] Signal Server started → https://agennews.store
+[2026-07-09 09:45:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:45:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:45:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:45:04] ====================================================
+[2026-07-09 09:45:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:46:08] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:46:08] ====================================================
+[2026-07-09 09:46:08] Signal Server started → https://agennews.store
+[2026-07-09 09:46:08] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:46:08] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:46:08] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:46:08] ====================================================
+[2026-07-09 09:46:08] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:48:28] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4104.24559', 'sl': '4112.61085', 'tp1': '4095.88033', 'tp2': '4087.51508', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T09:48:28', 'signal_id': '869d5ba8978a1778'}
+[2026-07-09 09:48:29] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': False, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 09:50:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:50:05] ====================================================
+[2026-07-09 09:50:05] Signal Server started → https://agennews.store
+[2026-07-09 09:50:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:50:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:50:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:50:05] ====================================================
+[2026-07-09 09:50:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:54:50] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:54:50] ====================================================
+[2026-07-09 09:54:50] Signal Server started → https://agennews.store
+[2026-07-09 09:54:50] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:54:50] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:54:50] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:54:50] ====================================================
+[2026-07-09 09:54:50] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 09:55:03] Running behind nginx -> skipping local certificate generation
+[2026-07-09 09:55:03] ====================================================
+[2026-07-09 09:55:03] Signal Server started → https://agennews.store
+[2026-07-09 09:55:03] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 09:55:03] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 09:55:03] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 09:55:03] ====================================================
+[2026-07-09 09:55:03] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:00:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:00:04] ====================================================
+[2026-07-09 10:00:04] Signal Server started → https://agennews.store
+[2026-07-09 10:00:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:00:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:00:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:00:04] ====================================================
+[2026-07-09 10:00:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:02:31] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:02:31] ====================================================
+[2026-07-09 10:02:31] Signal Server started → https://agennews.store
+[2026-07-09 10:02:31] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:02:31] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:02:31] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:02:31] ====================================================
+[2026-07-09 10:02:31] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:04:53] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4105.67862', 'sl': '4113.47438', 'tp1': '4097.88286', 'tp2': '4090.08710', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T10:04:53', 'signal_id': '545255fb7aff57ca'}
+[2026-07-09 10:04:54] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': False, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 10:05:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:05:05] ====================================================
+[2026-07-09 10:05:05] Signal Server started → https://agennews.store
+[2026-07-09 10:05:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:05:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:05:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:05:05] ====================================================
+[2026-07-09 10:05:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:10:03] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:10:03] ====================================================
+[2026-07-09 10:10:03] Signal Server started → https://agennews.store
+[2026-07-09 10:10:03] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:10:03] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:10:03] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:10:03] ====================================================
+[2026-07-09 10:10:03] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:10:22] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:10:22] ====================================================
+[2026-07-09 10:10:22] Signal Server started → https://agennews.store
+[2026-07-09 10:10:22] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:10:22] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:10:22] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:10:22] ====================================================
+[2026-07-09 10:10:22] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:15:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:15:04] ====================================================
+[2026-07-09 10:15:04] Signal Server started → https://agennews.store
+[2026-07-09 10:15:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:15:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:15:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:15:04] ====================================================
+[2026-07-09 10:15:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:16:58] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:16:58] ====================================================
+[2026-07-09 10:16:58] Signal Server started → https://agennews.store
+[2026-07-09 10:16:58] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:16:58] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:16:58] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:16:58] ====================================================
+[2026-07-09 10:16:58] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:19:21] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4106.18989', 'sl': '4113.48610', 'tp1': '4098.89368', 'tp2': '4091.59747', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T10:19:21', 'signal_id': '38a7cb56bde07b28'}
+[2026-07-09 10:19:21] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': False, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 10:20:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:20:04] ====================================================
+[2026-07-09 10:20:04] Signal Server started → https://agennews.store
+[2026-07-09 10:20:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:20:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:20:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:20:04] ====================================================
+[2026-07-09 10:20:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:25:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:25:04] ====================================================
+[2026-07-09 10:25:04] Signal Server started → https://agennews.store
+[2026-07-09 10:25:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:25:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:25:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:25:04] ====================================================
+[2026-07-09 10:25:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:30:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:30:04] ====================================================
+[2026-07-09 10:30:04] Signal Server started → https://agennews.store
+[2026-07-09 10:30:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:30:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:30:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:30:04] ====================================================
+[2026-07-09 10:30:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:32:25] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4104.42302', 'sl': '4111.27734', 'tp1': '4097.56870', 'tp2': '4090.71438', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T10:32:25', 'signal_id': '3bed80ce4916a329'}
+[2026-07-09 10:32:25] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': False, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 10:35:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:35:05] ====================================================
+[2026-07-09 10:35:05] Signal Server started → https://agennews.store
+[2026-07-09 10:35:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:35:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:35:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:35:05] ====================================================
+[2026-07-09 10:35:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:35:26] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:35:26] ====================================================
+[2026-07-09 10:35:26] Signal Server started → https://agennews.store
+[2026-07-09 10:35:26] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:35:26] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:35:26] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:35:26] ====================================================
+[2026-07-09 10:35:26] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:40:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:40:04] ====================================================
+[2026-07-09 10:40:04] Signal Server started → https://agennews.store
+[2026-07-09 10:40:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:40:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:40:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:40:04] ====================================================
+[2026-07-09 10:40:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:45:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:45:05] ====================================================
+[2026-07-09 10:45:05] Signal Server started → https://agennews.store
+[2026-07-09 10:45:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:45:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:45:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:45:05] ====================================================
+[2026-07-09 10:45:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:47:25] Signal saved → {'symbol': 'XAUUSD', 'direction': 'SELL', 'entry': '4104.05225', 'sl': '4110.66369', 'tp1': '4097.44081', 'tp2': '4090.82937', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T10:47:25', 'signal_id': 'e431b37f9d6f06da'}
+[2026-07-09 10:47:25] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': True, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 10:49:20] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:49:20] ====================================================
+[2026-07-09 10:49:20] Signal Server started → https://agennews.store
+[2026-07-09 10:49:20] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:49:20] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:49:20] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:49:20] ====================================================
+[2026-07-09 10:49:20] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:49:24] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:49:24] ====================================================
+[2026-07-09 10:49:24] Signal Server started → https://agennews.store
+[2026-07-09 10:49:24] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:49:24] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:49:24] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:49:24] ====================================================
+[2026-07-09 10:49:24] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:50:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:50:04] ====================================================
+[2026-07-09 10:50:04] Signal Server started → https://agennews.store
+[2026-07-09 10:50:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:50:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:50:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:50:04] ====================================================
+[2026-07-09 10:50:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:53:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.45994', 'sl': '162.40811', 'tp1': '162.51177', 'tp2': '162.56359', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T10:53:17', 'signal_id': '6b9f8d23d64009d8'}
+[2026-07-09 10:53:18] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': True, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 10:55:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 10:55:04] ====================================================
+[2026-07-09 10:55:04] Signal Server started → https://agennews.store
+[2026-07-09 10:55:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 10:55:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 10:55:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 10:55:04] ====================================================
+[2026-07-09 10:55:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 10:58:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.50171', 'sl': '162.44988', 'tp1': '162.55354', 'tp2': '162.60536', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T10:58:17', 'signal_id': '74943ae646ef56bf'}
+[2026-07-09 10:58:18] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': True, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 11:00:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:00:04] ====================================================
+[2026-07-09 11:00:04] Signal Server started → https://agennews.store
+[2026-07-09 11:00:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:00:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:00:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:00:04] ====================================================
+[2026-07-09 11:00:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:03:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.48830', 'sl': '162.43420', 'tp1': '162.54240', 'tp2': '162.59649', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:03:17', 'signal_id': 'bd8bb80e35ad210c'}
+[2026-07-09 11:03:17] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': True, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 11:05:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:05:04] ====================================================
+[2026-07-09 11:05:04] Signal Server started → https://agennews.store
+[2026-07-09 11:05:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:05:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:05:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:05:04] ====================================================
+[2026-07-09 11:05:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:05:40] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14244', 'sl': '1.14301', 'tp1': '1.14187', 'tp2': '1.14129', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:05:40', 'signal_id': 'f67dcdb0fd6429f4'}
+[2026-07-09 11:05:40] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': True, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 11:06:43] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14244', 'sl': '1.14301', 'tp1': '1.14187', 'tp2': '1.14129', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:06:43', 'signal_id': '18e30450acc09a30'}
+[2026-07-09 11:06:43] Facebook poster not ready: {'selenium': True, 'groups_file': True, 'session_file': True, 'chrome': True, 'groups_count': 0, 'ready': False}
+[2026-07-09 11:09:17] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14240', 'sl': '1.14297', 'tp1': '1.14183', 'tp2': '1.14125', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:09:17', 'signal_id': '2e648e23b20cfd11'}
+[2026-07-09 11:09:18] Facebook job queued for dashboard approval: 2e648e23b20cfd11
+[2026-07-09 11:10:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:10:05] ====================================================
+[2026-07-09 11:10:05] Signal Server started → https://agennews.store
+[2026-07-09 11:10:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:10:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:10:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:10:05] ====================================================
+[2026-07-09 11:10:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:10:40] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14225', 'sl': '1.14282', 'tp1': '1.14168', 'tp2': '1.14110', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:10:40', 'signal_id': '6017647a15a07ec8'}
+[2026-07-09 11:10:41] Facebook job queued for dashboard approval: 6017647a15a07ec8
+[2026-07-09 11:12:22] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14240', 'sl': '1.14297', 'tp1': '1.14183', 'tp2': '1.14125', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:12:22', 'signal_id': 'd384254b1c698c7f'}
+[2026-07-09 11:12:24] Facebook job queued for dashboard approval: d384254b1c698c7f
+[2026-07-09 11:13:46] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:13:46] ====================================================
+[2026-07-09 11:13:46] Signal Server started → https://agennews.store
+[2026-07-09 11:13:46] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:13:46] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:13:46] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:13:46] ====================================================
+[2026-07-09 11:13:46] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:13:50] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:13:50] ====================================================
+[2026-07-09 11:13:50] Signal Server started → https://agennews.store
+[2026-07-09 11:13:50] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:13:50] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:13:50] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:13:50] ====================================================
+[2026-07-09 11:13:50] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:13:51] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:13:51] ====================================================
+[2026-07-09 11:13:51] Signal Server started → https://agennews.store
+[2026-07-09 11:13:51] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:13:51] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:13:51] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:13:51] ====================================================
+[2026-07-09 11:13:51] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:14:21] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:14:21] ====================================================
+[2026-07-09 11:14:21] Signal Server started → https://agennews.store
+[2026-07-09 11:14:21] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:14:21] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:14:21] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:14:21] ====================================================
+[2026-07-09 11:14:21] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:15:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:15:04] ====================================================
+[2026-07-09 11:15:04] Signal Server started → https://agennews.store
+[2026-07-09 11:15:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:15:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:15:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:15:04] ====================================================
+[2026-07-09 11:15:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:16:13] Signal saved → {'symbol': 'EURUSD', 'direction': 'SELL', 'entry': '1.14255', 'sl': '1.14312', 'tp1': '1.14198', 'tp2': '1.14140', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:16:13', 'signal_id': '8a48ec2bd1d3b338'}
+[2026-07-09 11:16:14] Facebook job queued for dashboard approval: 8a48ec2bd1d3b338
+[2026-07-09 11:19:51] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.49733', 'sl': '162.44326', 'tp1': '162.55140', 'tp2': '162.60547', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:19:51', 'signal_id': 'aae8d7c76fa3b5da'}
+[2026-07-09 11:19:51] Facebook job queued for dashboard approval: aae8d7c76fa3b5da
+[2026-07-09 11:20:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:20:04] ====================================================
+[2026-07-09 11:20:04] Signal Server started → https://agennews.store
+[2026-07-09 11:20:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:20:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:20:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:20:04] ====================================================
+[2026-07-09 11:20:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:24:13] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.47227', 'sl': '162.41820', 'tp1': '162.52634', 'tp2': '162.58041', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:24:13', 'signal_id': '5361369307e9b6ee'}
+[2026-07-09 11:24:13] Facebook job queued for dashboard approval: 5361369307e9b6ee
+[2026-07-09 11:25:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:25:04] ====================================================
+[2026-07-09 11:25:04] Signal Server started → https://agennews.store
+[2026-07-09 11:25:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:25:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:25:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:25:04] ====================================================
+[2026-07-09 11:25:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:28:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.49364', 'sl': '162.43957', 'tp1': '162.54771', 'tp2': '162.60178', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:28:17', 'signal_id': '2f7389eca2c4e738'}
+[2026-07-09 11:28:18] Facebook job queued for dashboard approval: 2f7389eca2c4e738
+[2026-07-09 11:30:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:30:05] ====================================================
+[2026-07-09 11:30:05] Signal Server started → https://agennews.store
+[2026-07-09 11:30:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:30:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:30:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:30:05] ====================================================
+[2026-07-09 11:30:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:33:18] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.50358', 'sl': '162.45083', 'tp1': '162.55633', 'tp2': '162.60908', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:33:18', 'signal_id': 'b4cb2e8e44fbb531'}
+[2026-07-09 11:33:19] Facebook job queued for dashboard approval: b4cb2e8e44fbb531
+[2026-07-09 11:35:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:35:04] ====================================================
+[2026-07-09 11:35:04] Signal Server started → https://agennews.store
+[2026-07-09 11:35:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:35:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:35:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:35:04] ====================================================
+[2026-07-09 11:35:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:38:33] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.49461', 'sl': '162.44186', 'tp1': '162.54736', 'tp2': '162.60011', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:38:33', 'signal_id': '89cb76f79f42290a'}
+[2026-07-09 11:38:33] Facebook job queued for dashboard approval: 89cb76f79f42290a
+[2026-07-09 11:40:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:40:04] ====================================================
+[2026-07-09 11:40:04] Signal Server started → https://agennews.store
+[2026-07-09 11:40:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:40:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:40:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:40:04] ====================================================
+[2026-07-09 11:40:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:43:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.47353', 'sl': '162.42078', 'tp1': '162.52628', 'tp2': '162.57903', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:43:17', 'signal_id': '90904097c0aeebde'}
+[2026-07-09 11:43:18] Facebook job queued for dashboard approval: 90904097c0aeebde
+[2026-07-09 11:45:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:45:04] ====================================================
+[2026-07-09 11:45:04] Signal Server started → https://agennews.store
+[2026-07-09 11:45:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:45:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:45:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:45:04] ====================================================
+[2026-07-09 11:45:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:48:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.47757', 'sl': '162.42661', 'tp1': '162.52853', 'tp2': '162.57948', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:48:17', 'signal_id': 'ddc35ecc2b862941'}
+[2026-07-09 11:48:18] Facebook job queued for dashboard approval: ddc35ecc2b862941
+[2026-07-09 11:50:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:50:05] ====================================================
+[2026-07-09 11:50:05] Signal Server started → https://agennews.store
+[2026-07-09 11:50:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:50:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:50:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:50:05] ====================================================
+[2026-07-09 11:50:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:53:18] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.48378', 'sl': '162.43282', 'tp1': '162.53474', 'tp2': '162.58569', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:53:18', 'signal_id': '0dbf46c5edd2cf6b'}
+[2026-07-09 11:53:19] Facebook job queued for dashboard approval: 0dbf46c5edd2cf6b
+[2026-07-09 11:55:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 11:55:05] ====================================================
+[2026-07-09 11:55:05] Signal Server started → https://agennews.store
+[2026-07-09 11:55:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 11:55:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 11:55:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 11:55:05] ====================================================
+[2026-07-09 11:55:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 11:58:33] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.46075', 'sl': '162.40979', 'tp1': '162.51171', 'tp2': '162.56266', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T11:58:33', 'signal_id': '388264848e078e87'}
+[2026-07-09 11:58:34] Facebook job queued for dashboard approval: 388264848e078e87
+[2026-07-09 12:00:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 12:00:05] ====================================================
+[2026-07-09 12:00:05] Signal Server started → https://agennews.store
+[2026-07-09 12:00:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 12:00:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 12:00:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 12:00:05] ====================================================
+[2026-07-09 12:00:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 12:03:33] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.46475', 'sl': '162.41390', 'tp1': '162.51560', 'tp2': '162.56646', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T12:03:33', 'signal_id': '6ca27b94953f3c69'}
+[2026-07-09 12:03:34] Facebook job queued for dashboard approval: 6ca27b94953f3c69
+[2026-07-09 12:05:05] Running behind nginx -> skipping local certificate generation
+[2026-07-09 12:05:05] ====================================================
+[2026-07-09 12:05:05] Signal Server started → https://agennews.store
+[2026-07-09 12:05:05] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 12:05:05] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 12:05:05] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 12:05:05] ====================================================
+[2026-07-09 12:05:05] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 12:08:18] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.44258', 'sl': '162.39173', 'tp1': '162.49343', 'tp2': '162.54429', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T12:08:18', 'signal_id': '3afc3a05336448cf'}
+[2026-07-09 12:08:19] Facebook job queued for dashboard approval: 3afc3a05336448cf
+[2026-07-09 12:10:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 12:10:04] ====================================================
+[2026-07-09 12:10:04] Signal Server started → https://agennews.store
+[2026-07-09 12:10:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 12:10:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 12:10:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 12:10:04] ====================================================
+[2026-07-09 12:10:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 12:13:16] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.40932', 'sl': '162.35847', 'tp1': '162.46017', 'tp2': '162.51103', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T12:13:16', 'signal_id': '37bbe40d05bc7625'}
+[2026-07-09 12:13:17] Facebook job queued for dashboard approval: 37bbe40d05bc7625
+[2026-07-09 12:15:04] Running behind nginx -> skipping local certificate generation
+[2026-07-09 12:15:04] ====================================================
+[2026-07-09 12:15:04] Signal Server started → https://agennews.store
+[2026-07-09 12:15:04] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 12:15:04] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 12:15:04] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 12:15:04] ====================================================
+[2026-07-09 12:15:04] Running behind nginx → HTTP on 127.0.0.1:5005
+[2026-07-09 12:18:17] Signal saved → {'symbol': 'USDJPY', 'direction': 'BUY', 'entry': '162.41156', 'sl': '162.35739', 'tp1': '162.46573', 'tp2': '162.51991', 'tp3': '--', 'rr': '1:2', 'basis': 'SMC Structure + Liquidity Grab + Daily Bias', 'received_at': '2026-07-09T12:18:17', 'signal_id': '0941b362132c30d4'}
+[2026-07-09 12:18:18] Facebook job queued for dashboard approval: 0941b362132c30d4
+[2026-07-09 12:20:03] Running behind nginx -> skipping local certificate generation
+[2026-07-09 12:20:03] ====================================================
+[2026-07-09 12:20:03] Signal Server started → https://agennews.store
+[2026-07-09 12:20:03] MT5 whitelist URL   → https://agennews.store
+[2026-07-09 12:20:03] EA InpFacebookURL   → https://agennews.store/signal
+[2026-07-09 12:20:03] Waiting for signals from MT4/MT5 EA...
+[2026-07-09 12:20:03] ====================================================
+[2026-07-09 12:20:03] Running behind nginx → HTTP on 127.0.0.1:5005

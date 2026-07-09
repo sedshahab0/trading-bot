@@ -1,0 +1,13 @@
+{
+  "symbol": "XAUUSD",
+  "direction": "SELL",
+  "entry": "4106.18989",
+  "sl": "4113.48610",
+  "tp1": "4098.89368",
+  "tp2": "4091.59747",
+  "tp3": "--",
+  "rr": "1:2",
+  "basis": "SMC Structure + Liquidity Grab + Daily Bias",
+  "received_at": "2026-07-09T10:19:21",
+  "signal_id": "38a7cb56bde07b28"
+}

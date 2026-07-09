@@ -1,0 +1,13 @@
+{
+  "symbol": "EURUSD",
+  "direction": "SELL",
+  "entry": "1.14225",
+  "sl": "1.14282",
+  "tp1": "1.14168",
+  "tp2": "1.14110",
+  "tp3": "--",
+  "rr": "1:2",
+  "basis": "SMC Structure + Liquidity Grab + Daily Bias",
+  "received_at": "2026-07-09T11:10:40",
+  "signal_id": "6017647a15a07ec8"
+}

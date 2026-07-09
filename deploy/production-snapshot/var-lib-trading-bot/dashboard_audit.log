@@ -1,0 +1,39 @@
+{"ts": "2026-07-09 09:16:27 UTC", "user": "admin", "action": "config_update", "detail": "SYMBOLS=EUR/USD,GBP/USD,XAU/USD, MIN_SCORE=10, POLL_SECONDS=120, FACEBOOK_ENABLE=1, ENGINE_DEBUG=0"}
+{"ts": "2026-07-09 09:20:30 UTC", "user": "admin", "action": "config_update", "detail": "MIN_SCORE=10, POLL_SECONDS=120"}
+{"ts": "2026-07-09 09:20:31 UTC", "user": "admin", "action": "config_apply", "detail": "signal-engine restart ok"}
+{"ts": "2026-07-09 09:21:11 UTC", "user": "admin", "action": "config_update", "detail": "SYMBOLS=EUR/USD,GBP/USD,XAU/USD, MIN_SCORE=9, POLL_SECONDS=120, FACEBOOK_ENABLE=1, ENGINE_DEBUG=0"}
+{"ts": "2026-07-09 09:21:11 UTC", "user": "admin", "action": "config_apply", "detail": "signal-engine restart ok"}
+{"ts": "2026-07-09 09:46:12 UTC", "user": "admin", "action": "facebook_group_add", "detail": "Dashboard API Test https://www.facebook.com/groups/dashboard-api-test"}
+{"ts": "2026-07-09 09:46:12 UTC", "user": "admin", "action": "facebook_group_update", "detail": "Dashboard API Test"}
+{"ts": "2026-07-09 09:46:14 UTC", "user": "admin", "action": "facebook_group_delete", "detail": "Dashboard API Test"}
+{"ts": "2026-07-09 09:47:16 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 09:54:49 UTC", "user": "admin", "action": "facebook_mode", "detail": "auto"}
+{"ts": "2026-07-09 09:54:50 UTC", "user": "admin", "action": "facebook_mode", "detail": "approval"}
+{"ts": "2026-07-09 10:10:32 UTC", "user": "admin", "action": "ops_config", "detail": "ALERT_CPU_THRESHOLD, ALERT_RAM_THRESHOLD, ALERT_DISK_THRESHOLD, WEBHOOK_DISCORD_URL, WEBHOOK_SLACK_URL, WEBHOOK_ON_SIGNAL, MAINTENANCE_ENABLED, MAINTENANCE_WINDOW"}
+{"ts": "2026-07-09 10:29:31 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 10:30:08 UTC", "user": "admin", "action": "ops_config", "detail": "ALERT_CPU_THRESHOLD, ALERT_RAM_THRESHOLD, ALERT_DISK_THRESHOLD, WEBHOOK_DISCORD_URL, WEBHOOK_SLACK_URL, WEBHOOK_ON_SIGNAL, MAINTENANCE_ENABLED, MAINTENANCE_WINDOW"}
+{"ts": "2026-07-09 10:36:03 UTC", "user": "admin", "action": "facebook_session_upload", "detail": "7 cookies"}
+{"ts": "2026-07-09 10:46:54 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 10:47:38 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 10:47:55 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 10:49:04 UTC", "user": "admin", "action": "config_update", "detail": "SYMBOLS=EUR/USD,GBP/USD,XAU/USD,USD/JPY,XAG/USD"}
+{"ts": "2026-07-09 10:49:04 UTC", "user": "admin", "action": "config_apply", "detail": "signal-engine restart ok"}
+{"ts": "2026-07-09 11:08:54 UTC", "user": "admin", "action": "facebook_group_add", "detail": "ForexTradeChi https://www.facebook.com/groups/1009705208203191"}
+{"ts": "2026-07-09 11:12:08 UTC", "user": "admin", "action": "facebook_send", "detail": "6017647a15a07ec8"}
+{"ts": "2026-07-09 11:13:17 UTC", "user": "admin", "action": "facebook_dry_run", "detail": "d384254b1c698c7f"}
+{"ts": "2026-07-09 11:13:26 UTC", "user": "admin", "action": "facebook_send", "detail": "d384254b1c698c7f"}
+{"ts": "2026-07-09 11:13:46 UTC", "user": "admin", "action": "facebook_mode", "detail": "auto"}
+{"ts": "2026-07-09 11:13:49 UTC", "user": "admin", "action": "facebook_mode", "detail": "approval"}
+{"ts": "2026-07-09 11:13:51 UTC", "user": "admin", "action": "facebook_mode", "detail": "auto"}
+{"ts": "2026-07-09 11:14:20 UTC", "user": "admin", "action": "facebook_mode", "detail": "approval"}
+{"ts": "2026-07-09 11:16:59 UTC", "user": "admin", "action": "facebook_send", "detail": "8a48ec2bd1d3b338"}
+{"ts": "2026-07-09 11:17:33 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 11:17:58 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 11:18:36 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 11:18:36 UTC", "user": "admin", "action": "login", "detail": "user admin"}
+{"ts": "2026-07-09 11:20:32 UTC", "user": "admin", "action": "facebook_send", "detail": "aae8d7c76fa3b5da"}
+{"ts": "2026-07-09 11:25:34 UTC", "user": "admin", "action": "facebook_send", "detail": "5361369307e9b6ee"}
+{"ts": "2026-07-09 11:30:30 UTC", "user": "admin", "action": "facebook_send", "detail": "2f7389eca2c4e738"}
+{"ts": "2026-07-09 11:43:57 UTC", "user": "admin", "action": "ops_config", "detail": "ALERT_CPU_THRESHOLD, ALERT_RAM_THRESHOLD, ALERT_DISK_THRESHOLD, WEBHOOK_DISCORD_URL, WEBHOOK_SLACK_URL, WEBHOOK_ON_SIGNAL, MAINTENANCE_ENABLED, MAINTENANCE_WINDOW"}
+{"ts": "2026-07-09 11:44:03 UTC", "user": "admin", "action": "ops_config", "detail": "ALERT_CPU_THRESHOLD, ALERT_RAM_THRESHOLD, ALERT_DISK_THRESHOLD, WEBHOOK_DISCORD_URL, WEBHOOK_SLACK_URL, WEBHOOK_ON_SIGNAL, MAINTENANCE_ENABLED, MAINTENANCE_WINDOW"}
+{"ts": "2026-07-09 11:52:30 UTC", "user": "admin", "action": "login", "detail": "user admin"}
