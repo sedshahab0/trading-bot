@@ -24,6 +24,7 @@
   let logInterval = null;
   let statusInterval = null;
   let monitorInterval = null;
+  let facebookInterval = null;
   let isAuthenticated = false;
   let mgmtBusy = false;
   let sseReconnectTimer = null;
@@ -212,7 +213,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.21", full: "2.21.0", major: 2, minor: 21, patch: 0 };
+  let dashboardVersion = { label: "v2.22", full: "2.22.0", major: 2, minor: 22, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2468,7 +2469,7 @@
       tasks.push(fetchReportAnalytics(days, { force }));
     }
     if (page === "telegram" || needs.includes("telegram")) tasks.push(fetchTelegram({ force }));
-    if (needs.includes("facebook")) tasks.push(fetchFacebook({ force }));
+    if (needs.includes("facebook")) tasks.push(fetchFacebook({ force: page === "facebook" ? true : force }));
     if (needs.includes("logs")) tasks.push(fetchLogs({ force }));
 
     await Promise.allSettled(tasks);
@@ -2679,6 +2680,7 @@
     if (revalidate) ensurePageData(activePage).catch(() => {});
     syncLogPolling();
     syncMonitorPolling();
+    syncFacebookPolling();
   }
 
   function syncMonitorPolling() {
@@ -2687,6 +2689,14 @@
     if (activePage === "monitor" && isAuthenticated) {
       fetchSystem().catch(() => {});
       monitorInterval = setInterval(() => fetchSystem().catch(() => {}), sseConnected ? 10000 : 5000);
+    }
+  }
+
+  function syncFacebookPolling() {
+    clearInterval(facebookInterval);
+    facebookInterval = null;
+    if (activePage === "facebook" && isAuthenticated) {
+      facebookInterval = setInterval(() => fetchFacebook({ force: true }).catch(() => {}), 15000);
     }
   }
 
@@ -4819,8 +4829,10 @@
     clearInterval(statusInterval);
     clearInterval(logInterval);
     clearInterval(monitorInterval);
+    clearInterval(facebookInterval);
     logInterval = null;
     monitorInterval = null;
+    facebookInterval = null;
   }
 
   // Background cache refresh hooks

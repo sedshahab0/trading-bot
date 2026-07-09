@@ -4665,7 +4665,8 @@ body.auth-pending .app-shell {
 .fb-ready-icon svg,
 .facebook-session-panel svg,
 .facebook-panel-head .btn svg,
-.facebook-group-actions svg {
+.facebook-group-actions svg,
+.facebook-job-actions svg {
   width: 21px;
   height: 21px;
   fill: none;
@@ -4722,7 +4723,21 @@ body.auth-pending .app-shell {
   width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--border);
   border-radius: 12px; color: var(--text-muted); background: rgba(255,255,255,.03); cursor: pointer;
 }
-.icon-btn.danger:hover { color: var(--red); border-color: rgba(248,113,113,.3); }
+.icon-btn.danger {
+  color: #ff8791;
+  border-color: rgba(248,113,113,.32);
+  background: linear-gradient(145deg, rgba(248,113,113,.16), rgba(248,113,113,.07));
+  box-shadow: inset 0 1px rgba(255,255,255,.04);
+}
+.icon-btn.danger svg { fill: none; stroke: currentColor; }
+.icon-btn.danger:hover,
+.icon-btn.danger:focus-visible {
+  color: #ffd0d4;
+  border-color: rgba(248,113,113,.58);
+  background: rgba(248,113,113,.22);
+  outline: 2px solid rgba(248,113,113,.2);
+  outline-offset: 2px;
+}
 .facebook-session-panel { text-align: center; }
 .fb-session-mark {
   width: 64px; height: 64px; display: grid; place-items: center; margin: 0 auto 1rem;
