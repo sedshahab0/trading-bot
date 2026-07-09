@@ -209,26 +209,34 @@
     return PAGE_META[page] ? page : "home";
   }
 
+  function pageFromPathname(pathname = window.location.pathname) {
+    const clean = (pathname || "/").replace(/\/+$/, "") || "/";
+    for (const [page, meta] of Object.entries(PAGE_META)) {
+      if ((meta.path || "/") === clean) return page;
+    }
+    return null;
+  }
+
   function resetTelegramPage() {
     telegramPage = 1;
   }
 
   const PAGE_META = {
-    home: { title: "داشبورد", sub: "نمای کلی ربات" },
-    monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم" },
-    control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور" },
-    signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال" },
-    simulation: { title: "شبیه‌ساز", sub: "بازده فرضی سیگنال‌ها روی قیمت واقعی بازار" },
-    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel" },
-    telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام" },
-    facebook: { title: "فیسبوک", sub: "مدیریت گروه‌ها، پیام‌ها و انتشار سیگنال" },
-    settings: { title: "تنظیمات", sub: "سازماندهی نمادها، موتور و کانال‌های ارسال" },
-    logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها" },
+    home: { title: "داشبورد", sub: "نمای کلی ربات", path: "/", routeLabel: "dashboard" },
+    monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم", path: "/monitor", routeLabel: "monitor" },
+    control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور", path: "/control", routeLabel: "control" },
+    signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال", path: "/signals", routeLabel: "signals" },
+    simulation: { title: "شبیه‌ساز", sub: "بازده فرضی سیگنال‌ها روی قیمت واقعی بازار", path: "/simulation", routeLabel: "simulation" },
+    reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel", path: "/reports", routeLabel: "reports" },
+    telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام", path: "/telegram", routeLabel: "telegram" },
+    facebook: { title: "فیسبوک", sub: "مدیریت گروه‌ها، پیام‌ها و انتشار سیگنال", path: "/facebook", routeLabel: "facebook" },
+    settings: { title: "تنظیمات", sub: "سازماندهی نمادها، موتور و کانال‌های ارسال", path: "/settings", routeLabel: "settings" },
+    logs: { title: "لاگ‌ها", sub: "مشاهده زنده لاگ‌ها", path: "/logs", routeLabel: "logs" },
   };
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
-  activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.40", full: "2.40.0", major: 2, minor: 40, patch: 0 };
+  activePage = pageFromPathname() || normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
+  let dashboardVersion = { label: "v2.42", full: "2.42.0", major: 2, minor: 42, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2969,6 +2977,18 @@
     safeLocalStorageSet("tc:sidebar-collapsed", collapsed ? "1" : "0");
   }
 
+  function syncRoute(page, { replace = false } = {}) {
+    const meta = PAGE_META[page] || PAGE_META.home;
+    const nextPath = meta.path || "/";
+    if (window.location.pathname === nextPath) return;
+    const state = { page };
+    if (replace) {
+      window.history.replaceState(state, "", nextPath);
+    } else {
+      window.history.pushState(state, "", nextPath);
+    }
+  }
+
   function initSidebarCollapse() {
     const btn = $("#sidebarCollapseBtn");
     if (!btn) return;
@@ -2982,16 +3002,22 @@
   }
 
   // ── Page Navigation ──
-  function switchPage(page, { revalidate = true } = {}) {
+  function switchPage(page, { revalidate = true, syncHistory = true } = {}) {
     activePage = normalizePage(page);
     safeSessionStorageSet(ACTIVE_PAGE_KEY, activePage);
     const meta = PAGE_META[activePage] || PAGE_META.home;
     if ($("#pageTitle")) $("#pageTitle").textContent = meta.title;
     if ($("#pageSub")) $("#pageSub").textContent = meta.sub;
+    if ($("#pageBreadcrumbRoute")) {
+      $("#pageBreadcrumbRoute").textContent = meta.routeLabel || activePage;
+      $("#pageBreadcrumbRoute").title = meta.path || "/";
+    }
+    document.title = `${meta.title} | agennews.store`;
     $$(".nav-item[data-page]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.page === activePage);
     });
     $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${activePage}`));
+    if (syncHistory) syncRoute(activePage);
     closeSidebar();
 
     applyPageFromCache(activePage);
@@ -3056,6 +3082,12 @@
 
   $("#menuToggle")?.addEventListener("click", openSidebar);
   $("#sidebarOverlay")?.addEventListener("click", closeSidebar);
+  window.addEventListener("popstate", () => {
+    const page = pageFromPathname() || "home";
+    if (page !== activePage) {
+      switchPage(page, { revalidate: false, syncHistory: false });
+    }
+  });
 
   $$("[data-goto]").forEach((btn) => {
     btn.addEventListener("click", () => switchPage(btn.dataset.goto));
