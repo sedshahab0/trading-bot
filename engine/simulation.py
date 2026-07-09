@@ -216,6 +216,23 @@ class SimulationTracker:
         for ts, bar in eligible.iterrows():
             open_price = float(bar["open"])
             high, low, close = float(bar["high"]), float(bar["low"]), float(bar["close"])
+            stamp = pd.Timestamp(ts).tz_convert("UTC").isoformat()
+            first_bar_time = first_bar_time or stamp
+            if pd.Timestamp(ts).to_pydatetime() - opened >= timedelta(hours=self.expiry_hours):
+                raw_r = (
+                    (open_price - entry) / risk
+                    if direction == "BUY"
+                    else (entry - open_price) / risk
+                )
+                r_multiple = (
+                    round(0.5 + 0.5 * raw_r, 3)
+                    if status == "tp1"
+                    else round(raw_r, 3)
+                )
+                status, active, closed_at, close_reason, exit_price = (
+                    "expired", False, stamp, "expired_at_bar_open", open_price,
+                )
+                break
             favorable = (high - entry) / risk if direction == "BUY" else (entry - low) / risk
             adverse = (entry - low) / risk if direction == "BUY" else (high - entry) / risk
             mfe_r, mae_r = max(mfe_r, favorable), max(mae_r, adverse)
@@ -223,8 +240,6 @@ class SimulationTracker:
             sl_hit = low <= sl if direction == "BUY" else high >= sl
             tp1_hit = high >= tp1 if direction == "BUY" else low <= tp1
             tp2_hit = bool(tp2) and (high >= tp2 if direction == "BUY" else low <= tp2)
-            stamp = pd.Timestamp(ts).tz_convert("UTC").isoformat()
-            first_bar_time = first_bar_time or stamp
 
             if status == "open":
                 if sl_hit and (tp1_hit or tp2_hit):
@@ -290,15 +305,6 @@ class SimulationTracker:
                     )
 
             if not active:
-                break
-            if pd.Timestamp(ts).to_pydatetime() - opened >= timedelta(hours=self.expiry_hours):
-                raw_r = (close - entry) / risk if direction == "BUY" else (entry - close) / risk
-                if status == "tp1":
-                    r_multiple = round(0.5 + 0.5 * raw_r, 3)
-                else:
-                    status = "expired"
-                    r_multiple = round(raw_r, 3)
-                active, closed_at, close_reason, exit_price = False, stamp, "expired", close
                 break
 
         last_time = pd.Timestamp(eligible.index[-1]).tz_convert("UTC").isoformat()
