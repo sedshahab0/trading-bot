@@ -21,8 +21,12 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 
-import psutil
+try:
+    import psutil
+except ImportError:  # pragma: no cover - fallback keeps the dashboard alive without the optional package
+    psutil = None
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
@@ -151,7 +155,7 @@ def _dashboard_password() -> str:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 13, "patch": 0, "label": "v2.13", "released": "", "history": []}
+    default = {"major": 2, "minor": 15, "patch": 0, "label": "v2.15", "released": "", "history": []}
     if not VERSION_FILE.exists():
         return default
     try:
@@ -1275,19 +1279,91 @@ def _live_signal_stats() -> dict:
 _net_prev: dict[str, float] = {"ts": 0, "sent": 0, "recv": 0}
 
 
+def _fallback_cpu_percent() -> float:
+    try:
+        load_1m = os.getloadavg()[0]
+        cores = os.cpu_count() or 1
+        return round(min((load_1m / cores) * 100, 100.0), 1)
+    except Exception:
+        return 0.0
+
+
+def _fallback_virtual_memory() -> SimpleNamespace:
+    try:
+        meminfo: dict[str, int] = {}
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            key, value, *_ = line.split()
+            meminfo[key.rstrip(":")] = int(value) * 1024
+        total = meminfo.get("MemTotal", 0)
+        available = meminfo.get("MemAvailable", meminfo.get("MemFree", 0))
+        used = max(total - available, 0)
+        percent = round((used / total) * 100, 1) if total else 0.0
+        return SimpleNamespace(total=total, available=available, used=used, percent=percent)
+    except Exception:
+        return SimpleNamespace(total=0, available=0, used=0, percent=0.0)
+
+
+def _fallback_disk_usage(path: str = "/") -> SimpleNamespace:
+    try:
+        st = os.statvfs(path)
+        total = st.f_frsize * st.f_blocks
+        free = st.f_frsize * st.f_bavail
+        used = max(total - free, 0)
+        percent = round((used / total) * 100, 1) if total else 0.0
+        return SimpleNamespace(total=total, free=free, used=used, percent=percent)
+    except Exception:
+        return SimpleNamespace(total=0, free=0, used=0, percent=0.0)
+
+
+def _fallback_net_io() -> SimpleNamespace:
+    try:
+        sent = 0
+        recv = 0
+        for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
+            if ":" not in line:
+                continue
+            iface, rest = line.split(":", 1)
+            iface = iface.strip()
+            if iface == "lo":
+                continue
+            parts = rest.split()
+            if len(parts) >= 16:
+                recv += int(parts[0])
+                sent += int(parts[8])
+        return SimpleNamespace(bytes_sent=sent, bytes_recv=recv)
+    except Exception:
+        return SimpleNamespace(bytes_sent=0, bytes_recv=0)
+
+
+def _fallback_boot_time() -> float:
+    try:
+        uptime_secs = float(Path("/proc/uptime").read_text().split()[0])
+        return time.time() - uptime_secs
+    except Exception:
+        return time.time()
+
+
 def _system_stats() -> dict:
     global _net_prev, _cpu_primed
     now = time.time()
     if _system_micro_cache["data"] is not None and now - _system_micro_cache["ts"] < 1.5:
         return dict(_system_micro_cache["data"])
 
-    if not _cpu_primed:
-        psutil.cpu_percent(interval=None)
-        _cpu_primed = True
-    cpu_pct = psutil.cpu_percent(interval=0)
-    mem = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
-    net = psutil.net_io_counters()
+    if psutil is not None:
+        if not _cpu_primed:
+            psutil.cpu_percent(interval=None)
+            _cpu_primed = True
+        cpu_pct = psutil.cpu_percent(interval=0)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        net = psutil.net_io_counters()
+        boot_ts = psutil.boot_time()
+    else:
+        cpu_pct = _fallback_cpu_percent()
+        mem = _fallback_virtual_memory()
+        disk = _fallback_disk_usage("/")
+        net = _fallback_net_io()
+        boot_ts = _fallback_boot_time()
     now = time.time()
     net_speed = {"up_kbps": 0.0, "down_kbps": 0.0}
     if _net_prev["ts"]:
@@ -1300,7 +1376,7 @@ def _system_stats() -> dict:
     bot_mem = sum(_proc_info(n).get("memory_mb", 0) for n in PROCESSES)
     bot_cpu = sum(_proc_info(n).get("cpu", 0) for n in PROCESSES)
 
-    boot = datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc)
+    boot = datetime.fromtimestamp(boot_ts, tz=timezone.utc)
     uptime_secs = (datetime.now(timezone.utc) - boot).total_seconds()
 
     payload = {

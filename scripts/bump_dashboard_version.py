@@ -124,7 +124,7 @@ def main() -> int:
     )
     index_text = replace_once(
         index_text,
-        r'(<span class="version-pill" id="sidebarVersionFull" title="[^"]*">)v[\d.]+(</span>)',
+        r'(<span class="version-pill" id="sidebarVersionFull" title="[^"]*">)v?[\d.]+(</span>)',
         rf"\g<1>{full}\g<2>",
         path=index_html,
     )

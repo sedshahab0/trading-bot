@@ -208,7 +208,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.13", full: "2.13.0", major: 2, minor: 13, patch: 0 };
+  let dashboardVersion = { label: "v2.15", full: "2.15.0", major: 2, minor: 15, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
