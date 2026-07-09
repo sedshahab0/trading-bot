@@ -193,6 +193,7 @@
   let facebookPayload = null;
   let facebookPreviewSignalId = null;
   let facebookPreviewTemplates = null;
+  let facebookPublishPollTimer = null;
   function normalizePage(page) {
     return PAGE_META[page] ? page : "home";
   }
@@ -216,7 +217,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.27", full: "2.27.0", major: 2, minor: 27, patch: 0 };
+  let dashboardVersion = { label: "v2.28", full: "2.28.0", major: 2, minor: 28, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -4640,8 +4641,61 @@
   }
 
   function closeFacebookPreviewModal() {
+    clearTimeout(facebookPublishPollTimer);
+    facebookPublishPollTimer = null;
     $("#fbPreviewModal")?.classList.remove("open");
     $("#fbPreviewModal")?.setAttribute("aria-hidden", "true");
+  }
+
+  function renderFacebookPublishStatus(status = {}) {
+    const state = status.state || "queued";
+    const terminal = ["completed", "partial", "failed"].includes(state);
+    const titles = {
+      queued: "در صف ارسال",
+      running: "آماده‌سازی مرورگر",
+      sending: "در حال ارسال به گروه",
+      completed: "ارسال کامل شد",
+      partial: "ارسال با خطای جزئی تمام شد",
+      failed: "ارسال ناموفق بود",
+    };
+    $("#fbPublishProgress")?.classList.remove("hidden");
+    $("#fbPublishProgress")?.setAttribute("data-state", state);
+    $("#fbPublishSpinner")?.classList.toggle("hidden", terminal);
+    if ($("#fbPublishTitle")) $("#fbPublishTitle").textContent = titles[state] || "وضعیت ارسال";
+    if ($("#fbPublishMessage")) $("#fbPublishMessage").textContent = status.message || "در حال دریافت وضعیت از سرور";
+    if ($("#fbPublishGroup")) $("#fbPublishGroup").textContent = status.group || "—";
+    if ($("#fbPublishCount")) $("#fbPublishCount").textContent = `${status.current || 0} از ${status.total || 0}`;
+    if ($("#fbPublishSuccess")) $("#fbPublishSuccess").textContent = status.success || 0;
+    if ($("#fbPublishFailed")) $("#fbPublishFailed").textContent = status.failed || 0;
+    if ($("#fbPublishDetail")) $("#fbPublishDetail").textContent = status.detail || "";
+    const url = $("#fbPublishUrl");
+    if (url) {
+      url.hidden = !status.url;
+      if (status.url) url.href = status.url;
+    }
+    const button = $("#btnFbApproveSend");
+    if (button) {
+      button.disabled = !terminal || state === "completed";
+      button.textContent = terminal ? (state === "completed" ? "ارسال انجام شد" : "تلاش دوباره") : "ارسال در حال انجام است";
+    }
+    return terminal;
+  }
+
+  async function pollFacebookPublishStatus(signalId) {
+    clearTimeout(facebookPublishPollTimer);
+    try {
+      const status = await api(`/api/facebook/jobs/${signalId}/status`);
+      const terminal = renderFacebookPublishStatus(status);
+      if (terminal) {
+        invalidateCache("facebook");
+        await fetchFacebook({ force: true });
+        toast(status.state === "completed" ? "پیام با موفقیت به گروه ارسال شد" : "ارسال فیسبوک با خطا تمام شد", status.state === "completed" ? "success" : "error");
+        return;
+      }
+    } catch (error) {
+      if ($("#fbPublishDetail")) $("#fbPublishDetail").textContent = `دریافت وضعیت موقتاً ناموفق بود: ${error.message}`;
+    }
+    facebookPublishPollTimer = setTimeout(() => pollFacebookPublishStatus(signalId), 2000);
   }
 
   $("#btnFbAddGroup")?.addEventListener("click", () => {
@@ -4841,6 +4895,14 @@
         return `<button type="button" data-fb-template="${esc(key)}">${esc(language)} · ${esc(template)}</button>`;
       }).join("");
       showFacebookPreviewTemplate(keys[0]);
+      clearTimeout(facebookPublishPollTimer);
+      facebookPublishPollTimer = null;
+      $("#fbPublishProgress")?.classList.add("hidden");
+      const approveButton = $("#btnFbApproveSend");
+      if (approveButton) {
+        approveButton.disabled = false;
+        approveButton.textContent = "تأیید و ارسال به گروه‌های فعال";
+      }
       $("#fbPreviewModal")?.classList.add("open");
       $("#fbPreviewModal")?.setAttribute("aria-hidden", "false");
     } catch (error) {
@@ -4860,10 +4922,14 @@
     const button = $("#btnFbApproveSend");
     try {
       button?.classList.add("loading");
-      await api(`/api/facebook/jobs/${facebookPreviewSignalId}/send`, { method: "POST" });
-      closeFacebookPreviewModal();
-      toast("ارسال فیسبوک در صف اجرا قرار گرفت");
+      if (button) button.disabled = true;
+      const result = await api(`/api/facebook/jobs/${facebookPreviewSignalId}/send`, { method: "POST" });
+      renderFacebookPublishStatus(result.status || { state: "queued" });
+      toast("ارسال آغاز شد؛ وضعیت زنده در همین پنجره نمایش داده می‌شود");
+      pollFacebookPublishStatus(facebookPreviewSignalId);
     } catch (error) {
+      if (button) button.disabled = false;
+      renderFacebookPublishStatus({ state: "failed", message: error.message });
       toast(error.message, "error");
     } finally {
       button?.classList.remove("loading");

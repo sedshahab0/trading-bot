@@ -83,6 +83,7 @@ FACEBOOK_SESSION_FILE = FACEBOOK_DIR / "fb_session.json"
 FACEBOOK_SESSION_STATUS_FILE = FACEBOOK_DIR / "session_status.json"
 FACEBOOK_POST_LOG = FACEBOOK_DIR / "post_log.xlsx"
 FACEBOOK_JOBS_DIR = DATA_ROOT / "facebook-jobs"
+FACEBOOK_STATUS_DIR = DATA_ROOT / "facebook-status"
 FACEBOOK_POSTER = BOT_ROOT / "Facebook" / "script2_post_to_groups.py"
 VENV_PYTHON = BOT_ROOT / "venv" / "bin" / "python3"
 
@@ -191,7 +192,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 27, "patch": 0, "label": "v2.27", "released": "", "history": []}
+    default = {"major": 2, "minor": 28, "patch": 0, "label": "v2.28", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2213,8 +2214,32 @@ def _facebook_jobs(limit: int = 30) -> list[dict]:
         data = _read_json(path)
         if isinstance(data, dict):
             data["job_file"] = path.name
+            status_file = FACEBOOK_STATUS_DIR / f"{path.stem}.json"
+            data["publish_status"] = _read_json(status_file) if status_file.exists() else None
             rows.append(data)
     return rows
+
+
+def _facebook_publish_status(signal_id: str) -> dict:
+    path = FACEBOOK_STATUS_DIR / f"{secure_filename(signal_id)}.json"
+    if not path.exists():
+        return {"signal_id": signal_id, "state": "idle"}
+    value = _read_json(path)
+    return value if isinstance(value, dict) else {"signal_id": signal_id, "state": "unknown"}
+
+
+def _write_facebook_publish_status(signal_id: str, value: dict) -> dict:
+    FACEBOOK_STATUS_DIR.mkdir(parents=True, exist_ok=True)
+    path = FACEBOOK_STATUS_DIR / f"{secure_filename(signal_id)}.json"
+    payload = {
+        "signal_id": signal_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        **value,
+    }
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    temp.replace(path)
+    return payload
 
 
 def _facebook_preview(job_file: Path) -> dict:
@@ -2936,9 +2961,20 @@ def api_facebook_job_send(signal_id: str):
         return jsonify({"error": "فیسبوک هنوز آماده ارسال نیست", "status": readiness}), 409
     stdout_path = FACEBOOK_DIR / "poster_stdout.log"
     stderr_path = FACEBOOK_DIR / "poster_stderr.log"
+    status_file = FACEBOOK_STATUS_DIR / f"{secure_filename(signal_id)}.json"
+    status = _write_facebook_publish_status(signal_id, {
+        "state": "queued",
+        "message": "ارسال در صف مرورگر سرور قرار گرفت",
+        "success": 0,
+        "failed": 0,
+    })
     with stdout_path.open("a", encoding="utf-8") as stdout, stderr_path.open("a", encoding="utf-8") as stderr:
         subprocess.Popen(
-            [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--signal-file", str(job)],
+            [
+                str(VENV_PYTHON), str(FACEBOOK_POSTER),
+                "--signal-file", str(job),
+                "--status-file", str(status_file),
+            ],
             cwd=str(FACEBOOK_POSTER.parent),
             env=_facebook_env(),
             stdout=stdout,
@@ -2946,7 +2982,13 @@ def api_facebook_job_send(signal_id: str):
             start_new_session=True,
         )
     _audit("facebook_send", signal_id)
-    return jsonify({"ok": True, "signal_id": signal_id})
+    return jsonify({"ok": True, "signal_id": signal_id, "status": status})
+
+
+@app.route("/api/facebook/jobs/<signal_id>/status")
+@auth_required
+def api_facebook_job_status(signal_id: str):
+    return jsonify(_facebook_publish_status(signal_id))
 
 
 @app.route("/api/facebook/mode", methods=["PATCH"])

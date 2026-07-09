@@ -497,7 +497,24 @@ def parse_args():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--test-session", action="store_true")
+    parser.add_argument("--status-file", default=None)
     return parser.parse_args()
+
+
+def write_publish_status(path, state, **details):
+    if not path:
+        return
+    payload = {
+        "state": state,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+        **details,
+    }
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    temp = target + ".tmp"
+    with open(temp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+    os.replace(temp, target)
 
 
 def preflight():
@@ -593,6 +610,11 @@ def main():
 
     if not pending:
         print("✅ All groups posted! Reset post_log.xlsx to start a new campaign.")
+        write_publish_status(
+            args.status_file, "completed",
+            message="این سیگنال قبلاً به همه گروه‌های فعال ارسال شده است",
+            total=len(groups), success=len(already_posted), failed=0,
+        )
         return
 
     batch = pending[:BATCH_SIZE]
@@ -606,8 +628,14 @@ def main():
             print(f"[DRY RUN] {group['url']} | {lang} #{tmpl} | {len(message)} chars")
         return 0
 
-    driver = build_driver()
+    write_publish_status(
+        args.status_file, "running",
+        message="مرورگر سرور در حال آماده‌سازی است",
+        total=len(batch), success=0, failed=0,
+    )
+    driver = None
     try:
+        driver = build_driver()
         session_loaded = load_session(driver)
         if not (session_loaded and "login" not in driver.current_url and "facebook.com" in driver.current_url):
             manual_login(driver)
@@ -622,6 +650,16 @@ def main():
 
             print(f"[{i}/{len(batch)}] {group['name'] or group['url']}")
             print(f"         Language: {lang} | Template: #{tmpl}")
+            write_publish_status(
+                args.status_file, "sending",
+                message="صفحه گروه در مرورگر سرور باز شده است",
+                group=group["name"] or group["url"],
+                url=group["url"],
+                current=i,
+                total=len(batch),
+                success=success_count,
+                failed=fail_count,
+            )
 
             ok, notes = post_to_group(driver, group["url"], message)
 
@@ -633,6 +671,18 @@ def main():
                 print(f"         ❌ Failed: {notes}")
                 log_result(group["num"], group["url"], "❌ Failed", signal_id, notes)
                 fail_count += 1
+            write_publish_status(
+                args.status_file, "sending",
+                message="نتیجه این گروه ثبت شد",
+                group=group["name"] or group["url"],
+                url=group["url"],
+                current=i,
+                total=len(batch),
+                success=success_count,
+                failed=fail_count,
+                last_result="success" if ok else "failed",
+                detail=notes,
+            )
 
             if i < len(batch):
                 random_delay()
@@ -644,9 +694,26 @@ def main():
             print(f"⏭  {remaining} groups remaining — run again tomorrow.")
         else:
             print("🎉 All groups posted!")
+        final_state = "completed" if fail_count == 0 else "partial" if success_count else "failed"
+        write_publish_status(
+            args.status_file, final_state,
+            message="ارسال با موفقیت تمام شد" if final_state == "completed" else "ارسال با خطا تمام شد",
+            total=len(batch),
+            success=success_count,
+            failed=fail_count,
+        )
 
+    except Exception as exc:
+        write_publish_status(
+            args.status_file, "failed",
+            message="مرورگر سرور هنگام ارسال با خطا روبه‌رو شد",
+            error=type(exc).__name__,
+            detail=str(exc)[:500],
+        )
+        raise
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
 
 
 if __name__ == "__main__":
