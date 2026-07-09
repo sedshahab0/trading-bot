@@ -97,10 +97,16 @@ class DataProvider:
                 "TWELVE_DATA_API_KEY is required. Get a free key at https://twelvedata.com"
             )
         key = f"{symbol}:{timeframe}"
+        normalized_symbol = symbol.replace("/", "").upper()
+        provider_symbol = (
+            f"{normalized_symbol[:3]}/{normalized_symbol[3:]}"
+            if len(normalized_symbol) == 6 and normalized_symbol.isalpha()
+            else symbol
+        )
         interval = INTERVAL_MAP[timeframe]
         url = "https://api.twelvedata.com/time_series"
         params = {
-            "symbol": symbol,
+            "symbol": provider_symbol,
             "interval": interval,
             "outputsize": OUTPUT_SIZE[timeframe],
             "apikey": self.api_key,
