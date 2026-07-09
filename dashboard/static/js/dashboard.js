@@ -228,7 +228,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.34", full: "2.34.0", major: 2, minor: 34, patch: 0 };
+  let dashboardVersion = { label: "v2.36", full: "2.36.0", major: 2, minor: 36, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -636,6 +636,7 @@
     try {
       sessionStorage.removeItem("tc:status");
       sessionStorage.removeItem("tc:bootstrap");
+      sessionStorage.removeItem("tc:settings-draft");
     } catch {}
   }
 
@@ -1029,7 +1030,6 @@
     settingsDraft.pollSeconds = live.poll_seconds;
     settingsDraft.facebookEnable = toggles.facebook_enable;
     settingsDraft.engineDebug = toggles.engine_debug;
-    safeSessionStorageSet("tc:settings-draft", JSON.stringify(settingsDraft));
     return { ...live, ...toggles };
   }
 
@@ -1083,7 +1083,6 @@
     settingsDraft.pollSeconds = pollSeconds;
     settingsDraft.facebookEnable = facebookEnable;
     settingsDraft.engineDebug = engineDebug;
-    safeSessionStorageSet("tc:settings-draft", JSON.stringify(settingsDraft));
     return { minScore, pollSeconds, facebookEnable, engineDebug, pending: true };
   }
 
@@ -1111,23 +1110,11 @@
     settingsDraft.pollSeconds = null;
     settingsDraft.facebookEnable = null;
     settingsDraft.engineDebug = null;
-    try {
-      sessionStorage.removeItem("tc:settings-draft");
-    } catch {}
   }
 
   function loadSettingsDraft() {
-    const raw = safeSessionStorageGet("tc:settings-draft", "");
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object") return;
-      settingsDraft.active = !!parsed.active;
-      settingsDraft.minScore = parsed.minScore ?? null;
-      settingsDraft.pollSeconds = parsed.pollSeconds ?? null;
-      settingsDraft.facebookEnable = parsed.facebookEnable ?? null;
-      settingsDraft.engineDebug = parsed.engineDebug ?? null;
-    } catch {}
+    // Settings draft is in-memory only — never restore from sessionStorage.
+    clearSettingsDraft();
   }
 
   function applySettingsFieldValue(idRange, idHidden, idDisplay, value, suffix = "") {
@@ -5338,7 +5325,7 @@
       });
     }
 
-    fetchBootstrap().catch(() => {
+    fetchBootstrap({ force: true }).catch(() => {
       fetchStatus({ force: true }).catch(() => {});
       fetchSystem({ force: true }).catch(() => {});
     });

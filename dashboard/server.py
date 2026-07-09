@@ -78,6 +78,8 @@ VERSION_FILE = Path(__file__).parent / "version.json"
 CLIENT_DIAGNOSTIC_LOG = Path(__file__).parent / "client-diagnostics.log"
 CACHE_DB = Path(os.environ.get("DASHBOARD_CACHE_DB", str(BOT_ROOT / ".cache" / "dashboard-cache.sqlite3")))
 SIMULATION_DB = Path(os.environ.get("SIMULATION_DB", str(DATA_ROOT / "signal-simulation.sqlite3")))
+SETTINGS_DB = Path(os.environ.get("SETTINGS_DB", str(DATA_ROOT / "dashboard-settings.sqlite3")))
+_settings_bootstrapped = False
 FACEBOOK_DIR = DATA_ROOT / "facebook"
 FACEBOOK_GROUPS_FILE = FACEBOOK_DIR / "fb_my_groups.xlsx"
 FACEBOOK_SESSION_FILE = FACEBOOK_DIR / "fb_session.json"
@@ -193,7 +195,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 34, "patch": 0, "label": "v2.34", "released": "", "history": []}
+    default = {"major": 2, "minor": 36, "patch": 0, "label": "v2.36", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -401,7 +403,81 @@ def _invalidate_dashboard_cache() -> None:
         _cache_delete_prefix(prefix)
 
 
-def _parse_env() -> dict[str, str]:
+def _settings_db() -> sqlite3.Connection:
+    SETTINGS_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(SETTINGS_DB, timeout=3)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=3000")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bot_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    return conn
+
+
+def _bootstrap_bot_settings_from_env() -> None:
+    global _settings_bootstrapped
+    if _settings_bootstrapped:
+        return
+    _settings_bootstrapped = True
+    env = _parse_env_file()
+    if not env:
+        return
+    try:
+        with _settings_db() as conn:
+            count = conn.execute("SELECT COUNT(*) AS c FROM bot_settings").fetchone()["c"]
+            if count:
+                return
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for key in BACKUP_KEYS:
+                if key in env:
+                    conn.execute(
+                        """
+                        INSERT INTO bot_settings (key, value, updated_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (key, env[key], now),
+                    )
+    except Exception:
+        pass
+
+
+def _load_bot_settings() -> dict[str, str]:
+    _bootstrap_bot_settings_from_env()
+    try:
+        with _settings_db() as conn:
+            rows = conn.execute("SELECT key, value FROM bot_settings").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+    except Exception:
+        return {}
+
+
+def _upsert_bot_settings(updates: dict[str, str]) -> None:
+    if not updates:
+        return
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _settings_db() as conn:
+        for key, value in updates.items():
+            conn.execute(
+                """
+                INSERT INTO bot_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (key, str(value), now),
+            )
+
+
+def _parse_env_file() -> dict[str, str]:
     if not ENV_FILE.exists():
         return {}
     out: dict[str, str] = {}
@@ -414,7 +490,16 @@ def _parse_env() -> dict[str, str]:
     return out
 
 
-def _write_env(updates: dict[str, str]) -> None:
+def _parse_env() -> dict[str, str]:
+    """Merged config: .env secrets plus DB-backed bot settings (DB wins)."""
+    env = _parse_env_file()
+    db_settings = _load_bot_settings()
+    if db_settings:
+        env.update(db_settings)
+    return env
+
+
+def _write_env_file(updates: dict[str, str]) -> None:
     lines: list[str] = []
     seen: set[str] = set()
     if ENV_FILE.exists():
@@ -431,6 +516,15 @@ def _write_env(updates: dict[str, str]) -> None:
         if k not in seen:
             lines.append(f"{k}={v}")
     ENV_FILE.write_text("\n".join(lines) + "\n")
+
+
+def _write_env(updates: dict[str, str]) -> None:
+    """Persist bot settings to SQLite (source of truth) and sync .env for the engine."""
+    bot_updates = {k: v for k, v in updates.items() if k in BACKUP_KEYS}
+    if bot_updates:
+        _upsert_bot_settings(bot_updates)
+        _invalidate_dashboard_cache()
+    _write_env_file(updates)
 
 
 def _notifications_paused() -> bool:

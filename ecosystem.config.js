@@ -44,6 +44,7 @@ module.exports = {
         BOT_ROOT: "/opt/trading-bot",
         BOT_DATA_ROOT: "/var/lib/trading-bot",
         ENV_FILE: "/opt/trading-bot/.env",
+        SETTINGS_DB: "/var/lib/trading-bot/dashboard-settings.sqlite3",
         DEPLOY_BRANCH: "main",
         DASHBOARD_PORT: "8080",
         BEHIND_PROXY: "1",

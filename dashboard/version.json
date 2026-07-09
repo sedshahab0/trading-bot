@@ -1,15 +1,22 @@
 {
   "major": 2,
-  "minor": 34,
+  "minor": 36,
   "patch": 0,
-  "label": "v2.34",
+  "label": "v2.36",
   "released": "2026-07-09",
   "history": [
     {
-      "version": "2.34.0",
-      "label": "v2.34",
+      "version": "2.36.0",
+      "label": "v2.36",
       "date": "2026-07-09",
       "title": "Automated dashboard update",
+      "level": "minor"
+    },
+    {
+      "version": "2.35.0",
+      "label": "v2.35",
+      "date": "2026-07-09",
+      "title": "Persist dashboard settings in SQLite database",
       "level": "minor"
     },
     {
