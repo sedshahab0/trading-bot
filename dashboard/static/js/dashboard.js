@@ -228,7 +228,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.38", full: "2.38.0", major: 2, minor: 38, patch: 0 };
+  let dashboardVersion = { label: "v2.40", full: "2.40.0", major: 2, minor: 40, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -341,6 +341,7 @@
   const DataCache = {
     _mem: new Map(),
     _inflight: new Map(),
+    _seq: new Map(),
     _revalidate: new Map(),
 
     get(key) {
@@ -449,7 +450,6 @@
 
     async load(key, fetcher, ttl, { force = false, onStale = null } = {}) {
       const cached = this.get(key);
-      const entry = this.getEntry(key);
 
       if (!force && cached && this.isFresh(key, ttl)) {
         return cached;
@@ -462,16 +462,20 @@
         } catch {}
       }
 
-      if (this._inflight.has(key)) {
+      if (!force && this._inflight.has(key)) {
         if (stale) return stale;
         return this._inflight.get(key);
       }
 
+      const seq = (this._seq.get(key) || 0) + 1;
+      this._seq.set(key, seq);
       const task = Promise.resolve()
         .then(fetcher)
         .then((data) => {
-          this.set(key, data);
-          this._inflight.delete(key);
+      if (this._seq.get(key) === seq) {
+        this.set(key, data);
+        this._inflight.delete(key);
+      }
           if (onStale) {
             try {
               onStale(data, false);
@@ -482,7 +486,7 @@
           return data;
         })
         .catch((err) => {
-          this._inflight.delete(key);
+          if (this._seq.get(key) === seq) this._inflight.delete(key);
           if (stale) return stale;
           throw err;
         });
@@ -1042,10 +1046,11 @@
     const toggles = getLiveConfigToggles();
 
     const livePending =
-      live.min_score !== serverMin ||
-      live.poll_seconds !== serverPoll ||
-      toggles.facebook_enable !== serverFacebook ||
-      toggles.engine_debug !== serverDebug;
+      settingsDraft.active &&
+      (live.min_score !== serverMin ||
+        live.poll_seconds !== serverPoll ||
+        toggles.facebook_enable !== serverFacebook ||
+        toggles.engine_debug !== serverDebug);
     const draftMin = settingsDraft.minScore != null ? String(settingsDraft.minScore) : null;
     const draftPoll = settingsDraft.pollSeconds != null ? String(settingsDraft.pollSeconds) : null;
     const draftFacebook =
@@ -1069,14 +1074,14 @@
       };
     }
 
-    const minScore = live.min_score !== serverMin ? live.min_score : draftMin ?? serverMin;
-    const pollSeconds = live.poll_seconds !== serverPoll ? live.poll_seconds : draftPoll ?? serverPoll;
+    const minScore = settingsDraft.active && live.min_score !== serverMin ? live.min_score : draftMin ?? serverMin;
+    const pollSeconds = settingsDraft.active && live.poll_seconds !== serverPoll ? live.poll_seconds : draftPoll ?? serverPoll;
     const facebookEnable =
-      toggles.facebook_enable !== serverFacebook
+      settingsDraft.active && toggles.facebook_enable !== serverFacebook
         ? toggles.facebook_enable
         : draftFacebook ?? serverFacebook;
     const engineDebug =
-      toggles.engine_debug !== serverDebug ? toggles.engine_debug : draftDebug ?? serverDebug;
+      settingsDraft.active && toggles.engine_debug !== serverDebug ? toggles.engine_debug : draftDebug ?? serverDebug;
 
     settingsDraft.active = true;
     settingsDraft.minScore = minScore;
