@@ -1,0 +1,44 @@
+---
+description: Always commit and push code changes before deploy
+alwaysApply: true
+---
+
+# Git Versioning Policy
+
+Every code change MUST be version-controlled before it is considered done or deployed.
+
+## After Any Code Change
+
+1. Run `git status` and `git diff` to review what changed.
+2. Stage relevant files with `git add` (never commit secrets like raw API keys).
+3. Commit with a message that explains **why**, not just what changed.
+4. Push to the remote branch (typically `origin/main`).
+
+## Deploy Rules
+
+- **Never deploy** (SCP, SSH manual edits, pm2 restart of uncommitted code) without committing and pushing first.
+- Server updates should use `git pull origin main` from the deployed repo path.
+- After pull, restart affected services (e.g. `pm2 restart dashboard signal-engine`).
+
+## Safety Constraints
+
+- **Never** skip hooks (`--no-verify`, `--no-gpg-sign`) unless the user explicitly requests it.
+- **Never** force-push to `main` or `master`.
+- **Never** amend a commit that has already been pushed unless all amend conditions are met.
+- Do not commit `.env` or credential files unless they are already tracked and the change is intentional.
+
+## Commit Message Examples
+
+```
+Fix settings draft overwriting server config on refresh.
+
+The dashboard was persisting stale status/bootstrap data in sessionStorage,
+causing min_score and toggle values to revert incorrectly after save.
+```
+
+```
+Improve Telegram delivery log coverage from engine and signal_log.
+
+Merge engine stdout/stderr logs with signal_log entries so the dashboard
+shows successful sends even when JSONL delivery log is incomplete.
+```
