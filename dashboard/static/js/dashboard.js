@@ -183,7 +183,7 @@
     } catch {}
   }
 
-  let browserNotifEnabled = safeLocalStorageGet("tc:browser-notif", "0") === "1";
+  let browserNotifEnabled = false;
   const firedAlertKeys = new Set();
   const settingsDraft = {
     active: false,
@@ -228,7 +228,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.36", full: "2.36.0", major: 2, minor: 36, patch: 0 };
+  let dashboardVersion = { label: "v2.38", full: "2.38.0", major: 2, minor: 38, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -1786,7 +1786,9 @@
     if ($("#opsWebhookOnSignal")) $("#opsWebhookOnSignal").checked = !!cfg.webhook_on_signal;
     if ($("#opsMaintenanceEnabled")) $("#opsMaintenanceEnabled").checked = !!cfg.maintenance_enabled;
     if ($("#opsMaintenanceWindow")) $("#opsMaintenanceWindow").value = cfg.maintenance_window || "22:00-06:00";
+    browserNotifEnabled = !!cfg.browser_notif_enabled;
     if ($("#opsBrowserNotif")) $("#opsBrowserNotif").checked = browserNotifEnabled;
+    safeLocalStorageSet("tc:browser-notif", browserNotifEnabled ? "1" : "0");
   }
 
   async function fetchOpsConfig({ force = false } = {}) {
@@ -1814,6 +1816,7 @@
       webhook_on_signal: $("#opsWebhookOnSignal")?.checked,
       maintenance_enabled: $("#opsMaintenanceEnabled")?.checked,
       maintenance_window: $("#opsMaintenanceWindow")?.value?.trim() || "22:00-06:00",
+      browser_notif_enabled: !!$("#opsBrowserNotif")?.checked,
     };
     browserNotifEnabled = !!$("#opsBrowserNotif")?.checked;
     safeLocalStorageSet("tc:browser-notif", browserNotifEnabled ? "1" : "0");

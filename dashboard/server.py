@@ -111,6 +111,7 @@ OPS_CONFIG_KEYS = {
     "WEBHOOK_ON_SIGNAL",
     "MAINTENANCE_ENABLED",
     "MAINTENANCE_WINDOW",
+    "BROWSER_NOTIF_ENABLED",
 }
 
 BACKUP_KEYS = {
@@ -195,7 +196,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 36, "patch": 0, "label": "v2.36", "released": "", "history": []}
+    default = {"major": 2, "minor": 38, "patch": 0, "label": "v2.38", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2025,6 +2026,7 @@ def _ops_config() -> dict:
         "webhook_on_signal": env.get("WEBHOOK_ON_SIGNAL", "0") == "1",
         "maintenance_enabled": env.get("MAINTENANCE_ENABLED", "0") == "1",
         "maintenance_window": env.get("MAINTENANCE_WINDOW", "22:00-06:00"),
+        "browser_notif_enabled": env.get("BROWSER_NOTIF_ENABLED", "0") == "1",
     }
 
 
@@ -3785,12 +3787,13 @@ def api_ops_config_patch():
         "webhook_on_signal": "WEBHOOK_ON_SIGNAL",
         "maintenance_enabled": "MAINTENANCE_ENABLED",
         "maintenance_window": "MAINTENANCE_WINDOW",
+        "browser_notif_enabled": "BROWSER_NOTIF_ENABLED",
     }
     updates: dict[str, str] = {}
     for js_key, env_key in mapping.items():
         if js_key in data:
             val = data[js_key]
-            if js_key in ("webhook_on_signal", "maintenance_enabled"):
+            if js_key in ("webhook_on_signal", "maintenance_enabled", "browser_notif_enabled"):
                 updates[env_key] = "1" if val else "0"
             else:
                 updates[env_key] = str(val)

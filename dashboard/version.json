@@ -1,10 +1,24 @@
 {
   "major": 2,
-  "minor": 36,
+  "minor": 38,
   "patch": 0,
-  "label": "v2.36",
+  "label": "v2.38",
   "released": "2026-07-09",
   "history": [
+    {
+      "version": "2.38.0",
+      "label": "v2.38",
+      "date": "2026-07-09",
+      "title": "Automated dashboard update",
+      "level": "minor"
+    },
+    {
+      "version": "2.37.0",
+      "label": "v2.37",
+      "date": "2026-07-09",
+      "title": "Persist browser notifications in SQLite database",
+      "level": "minor"
+    },
     {
       "version": "2.36.0",
       "label": "v2.36",
