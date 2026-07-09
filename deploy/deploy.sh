@@ -2,7 +2,7 @@
 # Cloud-agent / local deploy script for TradeChi dashboard + engine
 set -euo pipefail
 
-HOST="${DEPLOY_HOST:-65.109.179.227}"
+HOST="${DEPLOY_HOST:-91.107.251.1}"
 USER="${DEPLOY_USER:-root}"
 PATH_ON_SERVER="${DEPLOY_PATH:-/opt/trading-bot}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
