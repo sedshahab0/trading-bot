@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css?v=20" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=2.23.0" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=2.24.0" />
   <script src="/static/vendor/chart.umd.min.js?v=2"></script>
 </head>
 <body class="auth-pending">
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.23</span>
+            <span class="version-badge" id="loginVersion">v2.24</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.23</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.24</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.23.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.24.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -607,6 +607,67 @@
             </div>
             <div class="signals-feed" id="signalFeed"></div>
             <nav class="signals-pagination" id="signalPagination" aria-label="صفحه‌بندی سیگنال‌ها"></nav>
+          </article>
+        </div>
+
+        <!-- PAGE: Signal Simulation -->
+        <div class="page" id="page-simulation">
+          <section class="simulation-hero">
+            <div class="hero-bg"></div>
+            <div class="simulation-hero-copy">
+              <div class="hero-status-row">
+                <span class="status-pill"><span class="status-indicator running"></span><span>Replay روی قیمت واقعی</span></span>
+                <span class="hero-time" id="simUpdated">—</span>
+              </div>
+              <h2 class="hero-title">آزمایشگاه عملکرد سیگنال</h2>
+              <p class="hero-sub">اگر تمام سیگنال‌های ربات اجرا می‌شدند، نتیجه فرضی آن‌ها چه بود؟</p>
+            </div>
+            <div class="simulation-score" id="simScoreCard">
+              <span class="simulation-score-label">بازده تجمعی</span>
+              <strong id="simTotalR">0R</strong>
+              <span id="simVerdict">داده کافی نیست</span>
+            </div>
+          </section>
+
+          <div class="simulation-kpis">
+            <article class="sim-kpi"><span>نرخ برد</span><strong id="simWinRate">—</strong><small id="simWinLoss">0W / 0L</small></article>
+            <article class="sim-kpi"><span>Profit Factor</span><strong id="simProfitFactor">—</strong><small>سود ناخالص ÷ زیان</small></article>
+            <article class="sim-kpi"><span>میانگین معامله</span><strong id="simAvgR">—</strong><small>برحسب ریسک اولیه</small></article>
+            <article class="sim-kpi"><span>Max Drawdown</span><strong id="simDrawdown">—</strong><small>افت از سقف Equity</small></article>
+          </div>
+
+          <div class="page-toolbar simulation-toolbar">
+            <select id="simDays" class="select-input" aria-label="بازه شبیه‌سازی"><option value="7">۷ روز</option><option value="30" selected>۳۰ روز</option><option value="90">۹۰ روز</option><option value="365">همه سال</option></select>
+            <select id="simSymbol" class="select-input" aria-label="نماد شبیه‌سازی"><option value="all">همه نمادها</option></select>
+            <select id="simStatus" class="select-input" aria-label="نتیجه شبیه‌سازی"><option value="all">همه نتایج</option><option value="win">سودده</option><option value="loss">زیان‌ده</option><option value="open">باز</option><option value="tp1">TP1</option><option value="tp2">TP2</option><option value="sl">SL</option><option value="expired">منقضی</option></select>
+            <button class="btn btn-secondary" id="btnSimRefresh">بروزرسانی نتایج</button>
+          </div>
+
+          <div class="simulation-grid">
+            <article class="panel simulation-equity-panel">
+              <div class="panel-top"><div><h3 class="panel-heading">منحنی بازده فرضی</h3><p class="panel-desc">تجمع نتیجه معاملات برحسب R</p></div><span class="simulation-live-badge" id="simClosedCount">۰ بسته‌شده</span></div>
+              <div class="simulation-chart"><canvas id="simulationEquityChart"></canvas><div class="chart-empty" id="simulationEquityEmpty">پس از بسته‌شدن معاملات، نمودار ساخته می‌شود.</div></div>
+            </article>
+            <article class="panel">
+              <div class="panel-top"><div><h3 class="panel-heading">عملکرد نمادها</h3><p class="panel-desc">مقایسه بازده و نرخ برد</p></div></div>
+              <div class="simulation-symbols" id="simSymbolCards"></div>
+            </article>
+          </div>
+
+          <article class="panel simulation-method">
+            <div class="simulation-method-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div>
+            <div><strong>روش محاسبه محافظه‌کارانه</strong><p id="simMethodText">۵۰٪ حجم در TP1 و ۵۰٪ تا TP2؛ اگر SL و TP در یک کندل لمس شوند، SL اول در نظر گرفته می‌شود.</p></div>
+            <span id="simAmbiguous">۰ مورد مبهم</span>
+          </article>
+
+          <article class="panel panel-flush simulation-table-panel">
+            <div class="panel-top simulation-table-head"><div><h3 class="panel-heading">دفتر معاملات فرضی</h3><p class="panel-desc">تمام سیگنال‌ها و نتیجه replay آن‌ها</p></div><span class="hint" id="simTradeCount">۰ سیگنال</span></div>
+            <div class="simulation-table-wrap">
+              <table class="simulation-table">
+                <thead><tr><th>زمان</th><th>نماد</th><th>جهت</th><th>Entry</th><th>SL</th><th>TP1 / TP2</th><th>نتیجه</th><th>R</th><th>MFE / MAE</th></tr></thead>
+                <tbody id="simTradeBody"></tbody>
+              </table>
+            </div>
           </article>
         </div>
 
@@ -1179,6 +1240,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=2.23.0"></script>
+  <script src="/static/js/dashboard.js?v=2.24.0"></script>
 </body>
 </html>

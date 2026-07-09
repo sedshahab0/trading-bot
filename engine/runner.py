@@ -13,6 +13,7 @@ from engine.config import EngineConfig, _env_bool
 from engine.data_provider import DataProvider
 from engine.notifier import send_facebook_bridge, send_telegram, startup_message
 from engine.signal_logic import SignalEngine
+from engine.simulation import SimulationTracker
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,13 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
 
     data = DataProvider(cfg.twelve_data_api_key, cfg.data_provider)
     engine = SignalEngine(cfg, data)
+    simulation = SimulationTracker(
+        os.environ.get("SIMULATION_DB", "/var/lib/trading-bot/signal-simulation.sqlite3"),
+        expiry_hours=int(os.environ.get("SIMULATION_EXPIRY_HOURS", "72")),
+    )
+    simulation.import_signal_log(
+        os.environ.get("SIGNAL_LOG_FILE", "/var/lib/trading-bot/signal_log.txt")
+    )
     state = _load_state(cfg.state_file)
 
     if cfg.send_startup_message and not state.get("startup_sent") and not cfg.notifications_paused:
@@ -133,6 +141,7 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
 
                 data.prefetch_symbol(symbol)
                 frames = engine.fetch_frames(symbol)
+                simulation.evaluate_symbol(symbol, frames["M5"])
 
                 cross_alert = engine.check_golden_cross(symbol, frames["D1"])
                 if cross_alert:
@@ -151,6 +160,16 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
 
                 if send_telegram(cfg, sig.message_html):
                     last_signal_at[symbol] = time.time()
+                    simulation.register({
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "symbol": sig.symbol,
+                        "direction": sig.direction,
+                        "entry": sig.entry,
+                        "sl": sig.sl,
+                        "tp1": sig.tp1,
+                        "tp2": sig.tp2,
+                        "score": sig.score,
+                    })
                     send_facebook_bridge(cfg, sig)
                     logger.info(
                         "Signal sent %s %s score=%s entry=%s",

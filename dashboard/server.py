@@ -74,6 +74,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 VERSION_FILE = Path(__file__).parent / "version.json"
 CLIENT_DIAGNOSTIC_LOG = Path(__file__).parent / "client-diagnostics.log"
 CACHE_DB = Path(os.environ.get("DASHBOARD_CACHE_DB", str(BOT_ROOT / ".cache" / "dashboard-cache.sqlite3")))
+SIMULATION_DB = Path(os.environ.get("SIMULATION_DB", str(DATA_ROOT / "signal-simulation.sqlite3")))
 FACEBOOK_DIR = DATA_ROOT / "facebook"
 FACEBOOK_GROUPS_FILE = FACEBOOK_DIR / "fb_my_groups.xlsx"
 FACEBOOK_SESSION_FILE = FACEBOOK_DIR / "fb_session.json"
@@ -187,7 +188,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 23, "patch": 0, "label": "v2.23", "released": "", "history": []}
+    default = {"major": 2, "minor": 24, "patch": 0, "label": "v2.24", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2197,6 +2198,91 @@ def _facebook_preview(job_file: Path) -> dict:
     return json.loads(lines[-1])
 
 
+def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all") -> dict:
+    if not SIMULATION_DB.exists():
+        return {"trades": [], "summary": {"total": 0, "closed": 0}, "equity": [], "by_symbol": []}
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = [dict(row) for row in conn.execute(
+            "SELECT * FROM simulated_trades WHERE signal_time >= ? ORDER BY signal_time DESC",
+            (cutoff,),
+        ).fetchall()]
+    if symbol != "all":
+        rows = [row for row in rows if row["symbol"] == symbol.replace("/", "").upper()]
+    if status == "open":
+        rows = [row for row in rows if row["active"]]
+    elif status == "win":
+        rows = [row for row in rows if not row["active"] and (row.get("r_multiple") or 0) > 0]
+    elif status == "loss":
+        rows = [row for row in rows if not row["active"] and (row.get("r_multiple") or 0) < 0]
+    elif status not in ("all", ""):
+        rows = [row for row in rows if row["status"] == status]
+
+    chronological = sorted(rows, key=lambda row: row["signal_time"])
+    closed = [row for row in chronological if not row["active"] and row.get("r_multiple") is not None]
+    wins = [row for row in closed if row["r_multiple"] > 0]
+    losses = [row for row in closed if row["r_multiple"] < 0]
+    breakeven = [row for row in closed if row["r_multiple"] == 0]
+    gross_profit = sum(row["r_multiple"] for row in wins)
+    gross_loss = abs(sum(row["r_multiple"] for row in losses))
+    cumulative = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    equity = []
+    for row in closed:
+        cumulative += float(row["r_multiple"])
+        peak = max(peak, cumulative)
+        max_drawdown = max(max_drawdown, peak - cumulative)
+        equity.append({
+            "time": row["closed_at"] or row["signal_time"],
+            "value": round(cumulative, 3),
+            "id": row["id"],
+        })
+    symbols: dict[str, dict] = {}
+    for row in rows:
+        bucket = symbols.setdefault(row["symbol"], {"symbol": row["symbol"], "total": 0, "closed": 0, "wins": 0, "losses": 0, "r": 0.0})
+        bucket["total"] += 1
+        if not row["active"] and row.get("r_multiple") is not None:
+            bucket["closed"] += 1
+            bucket["r"] += float(row["r_multiple"])
+            bucket["wins"] += int(row["r_multiple"] > 0)
+            bucket["losses"] += int(row["r_multiple"] < 0)
+    by_symbol = []
+    for bucket in symbols.values():
+        bucket["r"] = round(bucket["r"], 2)
+        decided = bucket["wins"] + bucket["losses"]
+        bucket["win_rate"] = round(bucket["wins"] / decided * 100, 1) if decided else None
+        by_symbol.append(bucket)
+    by_symbol.sort(key=lambda row: row["r"], reverse=True)
+    return {
+        "trades": list(reversed(chronological)),
+        "equity": equity,
+        "by_symbol": by_symbol,
+        "summary": {
+            "total": len(rows),
+            "closed": len(closed),
+            "open": len(rows) - len(closed),
+            "wins": len(wins),
+            "losses": len(losses),
+            "breakeven": len(breakeven),
+            "win_rate": round(len(wins) / (len(wins) + len(losses)) * 100, 1) if wins or losses else None,
+            "total_r": round(cumulative, 2),
+            "avg_r": round(cumulative / len(closed), 3) if closed else None,
+            "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss else (999 if gross_profit else None),
+            "max_drawdown_r": round(max_drawdown, 2),
+            "ambiguous": sum(int(row.get("ambiguous") or 0) for row in rows),
+        },
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "method": {
+            "timeframe": "M5",
+            "position": "50% TP1 + 50% TP2",
+            "same_bar": "SL first (conservative)",
+            "expiry_hours": int(_parse_env().get("SIMULATION_EXPIRY_HOURS", "72")),
+        },
+    }
+
+
 # ── Routes ────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -2451,6 +2537,15 @@ def api_signals():
         }
 
     return jsonify(_cache_json(cache_key, 15, _load))
+
+
+@app.route("/api/simulation")
+@auth_required
+def api_simulation():
+    days = min(max(request.args.get("days", 30, type=int), 1), 365)
+    symbol = request.args.get("symbol", "all").strip()
+    status = request.args.get("status", "all").strip().lower()
+    return jsonify(_simulation_payload(days, symbol, status))
 
 
 @app.route("/api/logs")

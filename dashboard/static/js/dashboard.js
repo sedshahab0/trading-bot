@@ -20,6 +20,7 @@
   let ramSparkChart = null;
   let diskSparkChart = null;
   let netSparkChart = null;
+  let simulationEquityChart = null;
   let eventSource = null;
   let logInterval = null;
   let statusInterval = null;
@@ -204,6 +205,7 @@
     monitor: { title: "مانیتورینگ", sub: "منابع سرور، موتور تحلیل و سلامت سیستم" },
     control: { title: "کنترل ربات", sub: "مدیریت PM2، نوتیفیکیشن و عملیات موتور" },
     signals: { title: "سیگنال‌ها", sub: "ردیابی ارسال، خطا و کیفیت هر سیگنال" },
+    simulation: { title: "شبیه‌ساز", sub: "بازده فرضی سیگنال‌ها روی قیمت واقعی بازار" },
     reports: { title: "گزارش‌ها", sub: "تحلیل عملکرد، تلگرام و خروجی Excel" },
     telegram: { title: "تلگرام", sub: "لاگ کامل ارسال سیگنال‌ها به تلگرام" },
     facebook: { title: "فیسبوک", sub: "مدیریت گروه‌ها، پیام‌ها و انتشار سیگنال" },
@@ -213,7 +215,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.23", full: "2.23.0", major: 2, minor: 23, patch: 0 };
+  let dashboardVersion = { label: "v2.24", full: "2.24.0", major: 2, minor: 24, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -221,6 +223,7 @@
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
     control: '<circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83"/>',
     signals: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    simulation: '<path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 5-7"/><circle cx="18" cy="7" r="1"/>',
     reports: '<path d="M18 20V10M12 20V4M6 20v-6"/>',
     telegram: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
     facebook: '<path d="M14 8h3V3h-3c-3.3 0-6 2.7-6 6v3H5v5h3v4h5v-4h4l1-5h-5V9c0-.6.4-1 1-1z"/>',
@@ -248,6 +251,7 @@
       items: [
         { page: "control", label: "کنترل ربات", icon: "control" },
         { page: "signals", label: "سیگنال‌ها", icon: "signals" },
+        { page: "simulation", label: "شبیه‌ساز عملکرد", icon: "simulation", badge: "جدید" },
         { page: "reports", label: "گزارش‌ها", icon: "reports" },
         { page: "telegram", label: "تلگرام", icon: "telegram" },
         { page: "facebook", label: "فیسبوک", icon: "facebook" },
@@ -291,6 +295,7 @@
     audit: 60000,
     analytics: 120000,
     facebook: 15000,
+    simulation: 30000,
   };
 
   const PERSIST_PREFIXES = ["status", "system", "signals:", "report:", "telegram:", "ops", "cooldowns", "uptime", "bootstrap", "analytics:"];
@@ -311,6 +316,7 @@
     monitor: ["status", "system", "uptime"],
     control: ["status", "cooldowns"],
     signals: ["signals"],
+    simulation: ["simulation"],
     reports: ["report", "analytics"],
     telegram: ["telegram"],
     facebook: ["facebook"],
@@ -2175,6 +2181,14 @@
         if (cached) applySignalsPayload(cached);
         break;
       }
+      case "simulation": {
+        const days = Number($("#simDays")?.value || 30);
+        const symbol = $("#simSymbol")?.value || "all";
+        const status = $("#simStatus")?.value || "all";
+        const cached = DataCache.get(`simulation:${days}:${symbol}:${status}`);
+        if (cached) renderSimulation(cached);
+        break;
+      }
       case "reports": {
         const days = Number($("#reportDays")?.value || 30);
         const report = DataCache.get(reportCacheKey(days));
@@ -2377,6 +2391,119 @@
     return data;
   }
 
+  const SIM_STATUS = {
+    open: { label: "باز", cls: "open" },
+    tp1: { label: "TP1", cls: "win" },
+    tp2: { label: "TP2", cls: "win strong" },
+    sl: { label: "Stop Loss", cls: "loss" },
+    expired: { label: "منقضی", cls: "expired" },
+  };
+
+  function renderSimulation(data) {
+    if (!data) return;
+    const summary = data.summary || {};
+    const trades = data.trades || [];
+    const totalR = Number(summary.total_r || 0);
+    if ($("#simTotalR")) $("#simTotalR").textContent = `${totalR > 0 ? "+" : ""}${totalR.toFixed(2)}R`;
+    if ($("#simScoreCard")) $("#simScoreCard").className = `simulation-score ${totalR > 0 ? "positive" : totalR < 0 ? "negative" : ""}`;
+    if ($("#simVerdict")) $("#simVerdict").textContent = summary.closed < 5 ? "داده بیشتری لازم است" : totalR > 0 ? "بازده مثبت" : totalR < 0 ? "بازده منفی" : "خنثی";
+    if ($("#simWinRate")) $("#simWinRate").textContent = summary.win_rate == null ? "—" : `${summary.win_rate}%`;
+    if ($("#simWinLoss")) $("#simWinLoss").textContent = `${summary.wins || 0}W / ${summary.losses || 0}L`;
+    if ($("#simProfitFactor")) $("#simProfitFactor").textContent = summary.profit_factor == null ? "—" : summary.profit_factor >= 999 ? "∞" : summary.profit_factor;
+    if ($("#simAvgR")) $("#simAvgR").textContent = summary.avg_r == null ? "—" : `${summary.avg_r > 0 ? "+" : ""}${summary.avg_r}R`;
+    if ($("#simDrawdown")) $("#simDrawdown").textContent = `${summary.max_drawdown_r || 0}R`;
+    if ($("#simClosedCount")) $("#simClosedCount").textContent = `${summary.closed || 0} بسته‌شده`;
+    if ($("#simTradeCount")) $("#simTradeCount").textContent = `${summary.total || 0} سیگنال`;
+    if ($("#simAmbiguous")) $("#simAmbiguous").textContent = `${summary.ambiguous || 0} مورد مبهم`;
+    if ($("#simUpdated")) $("#simUpdated").textContent = data.generated_at ? `بروزرسانی ${new Date(data.generated_at).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}` : "—";
+
+    const symbolSelect = $("#simSymbol");
+    if (symbolSelect) {
+      const current = symbolSelect.value || "all";
+      const symbols = [...new Set((data.by_symbol || []).map((row) => row.symbol))];
+      symbolSelect.innerHTML = '<option value="all">همه نمادها</option>' + symbols.map((symbol) => `<option value="${esc(symbol)}">${esc(symbol)}</option>`).join("");
+      symbolSelect.value = symbols.includes(current) ? current : "all";
+    }
+
+    const symbolCards = $("#simSymbolCards");
+    if (symbolCards) {
+      symbolCards.innerHTML = (data.by_symbol || []).length
+        ? data.by_symbol.map((row) => `<div class="sim-symbol-row"><div><strong>${esc(row.symbol)}</strong><span>${row.closed} از ${row.total} بسته</span></div><span class="sim-symbol-rate">${row.win_rate == null ? "—" : `${row.win_rate}%`}</span><b class="${row.r >= 0 ? "positive" : "negative"}">${row.r > 0 ? "+" : ""}${row.r}R</b></div>`).join("")
+        : '<div class="facebook-empty"><strong>هنوز نتیجه‌ای ثبت نشده</strong><span>موتور با دریافت کندل بعدی نتایج را محاسبه می‌کند.</span></div>';
+    }
+
+    const body = $("#simTradeBody");
+    if (body) {
+      body.innerHTML = trades.length
+        ? trades.map((trade) => {
+            const meta = SIM_STATUS[trade.status] || SIM_STATUS.open;
+            const r = trade.r_multiple;
+            return `<tr>
+              <td data-label="زمان"><span class="sim-time">${esc(String(trade.signal_time || "").replace("T", " ").slice(0, 16))}</span></td>
+              <td data-label="نماد"><strong>${esc(trade.symbol)}</strong></td>
+              <td data-label="جهت"><span class="signal-direction ${String(trade.direction).toLowerCase()}">${esc(trade.direction)}</span></td>
+              <td data-label="Entry">${fmtPrice(trade.entry)}</td>
+              <td data-label="SL">${fmtPrice(trade.sl)}</td>
+              <td data-label="TP"><span class="sim-targets">${fmtPrice(trade.tp1)} / ${fmtPrice(trade.tp2)}</span></td>
+              <td data-label="نتیجه"><span class="sim-outcome ${meta.cls}">${meta.label}${trade.ambiguous ? " · مبهم" : ""}</span></td>
+              <td data-label="R"><strong class="${r > 0 ? "positive" : r < 0 ? "negative" : ""}">${r == null ? "—" : `${r > 0 ? "+" : ""}${Number(r).toFixed(2)}R`}</strong></td>
+              <td data-label="MFE / MAE"><span class="sim-excursion">+${Number(trade.mfe_r || 0).toFixed(1)} / -${Number(trade.mae_r || 0).toFixed(1)}</span></td>
+            </tr>`;
+          }).join("")
+        : '<tr><td colspan="9"><div class="facebook-empty"><strong>داده شبیه‌سازی هنوز آماده نیست</strong><span>بعد از دریافت کندل جدید، نتیجه سیگنال‌ها در این بخش ظاهر می‌شود.</span></div></td></tr>';
+    }
+
+    const equity = data.equity || [];
+    const canvas = $("#simulationEquityChart");
+    const empty = $("#simulationEquityEmpty");
+    if (empty) empty.classList.toggle("hidden", equity.length > 0);
+    if (canvas) canvas.classList.toggle("hidden", equity.length === 0);
+    if (simulationEquityChart) simulationEquityChart.destroy();
+    simulationEquityChart = null;
+    if (canvas && equity.length && window.Chart) {
+      simulationEquityChart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: equity.map((point) => String(point.time || "").slice(5, 16).replace("T", " ")),
+          datasets: [{
+            label: "Equity (R)",
+            data: equity.map((point) => point.value),
+            borderColor: totalR >= 0 ? "#63ffd0" : "#f87171",
+            backgroundColor: totalR >= 0 ? "rgba(99,255,208,.09)" : "rgba(248,113,113,.09)",
+            fill: true,
+            tension: .25,
+            pointRadius: equity.length > 35 ? 0 : 2.5,
+          }],
+        },
+        options: {
+          ...chartDefaults(),
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: "#657086", maxTicksLimit: 8, font: chartFont(9) }, grid: { display: false } },
+            y: { ticks: { color: "#657086", callback: (value) => `${value}R`, font: chartFont(9) }, grid: { color: "rgba(255,255,255,.045)" } },
+          },
+          plugins: { legend: { display: false } },
+        },
+      });
+    }
+  }
+
+  async function fetchSimulation({ force = false } = {}) {
+    const days = Number($("#simDays")?.value || 30);
+    const symbol = $("#simSymbol")?.value || "all";
+    const status = $("#simStatus")?.value || "all";
+    const key = `simulation:${days}:${symbol}:${status}`;
+    const data = await DataCache.load(
+      key,
+      () => api(`/api/simulation?days=${days}&symbol=${encodeURIComponent(symbol)}&status=${status}`),
+      CACHE_TTL.simulation,
+      { force, onStale: renderSimulation }
+    );
+    renderSimulation(data);
+    return data;
+  }
+
   async function fetchTelegram({ force = false } = {}) {
     const days = Number($("#telegramDays")?.value || 30);
     const status = $("#telegramStatus")?.value || "all";
@@ -2409,6 +2536,8 @@
       applySignalsPayload(data);
     } else if (key === "facebook") {
       renderFacebook(data);
+    } else if (key.startsWith("simulation:")) {
+      renderSimulation(data);
     }
     _emitRevalidateOrig(key, data);
   };
@@ -2470,6 +2599,7 @@
     }
     if (page === "telegram" || needs.includes("telegram")) tasks.push(fetchTelegram({ force }));
     if (needs.includes("facebook")) tasks.push(fetchFacebook({ force: page === "facebook" ? true : force }));
+    if (needs.includes("simulation")) tasks.push(fetchSimulation({ force }));
     if (needs.includes("logs")) tasks.push(fetchLogs({ force }));
 
     await Promise.allSettled(tasks);
@@ -2675,6 +2805,9 @@
         refreshMonitorLiveCharts({ recreate: true });
         setTimeout(() => refreshMonitorLiveCharts(), 400);
       });
+    }
+    if (activePage === "simulation") {
+      requestAnimationFrame(() => simulationEquityChart?.resize());
     }
 
     if (revalidate) ensurePageData(activePage).catch(() => {});
@@ -3874,6 +4007,10 @@
   });
 
   $("#reportDays")?.addEventListener("change", () => refreshReports({ force: true }));
+  ["#simDays", "#simSymbol", "#simStatus"].forEach((selector) => {
+    $(selector)?.addEventListener("change", () => fetchSimulation({ force: true }).catch((error) => toast(error.message, "error")));
+  });
+  $("#btnSimRefresh")?.addEventListener("click", () => fetchSimulation({ force: true }).catch((error) => toast(error.message, "error")));
 
   async function downloadExport(url) {
     try {
