@@ -435,24 +435,72 @@ def is_logged_in(driver):
     return "logout" in page or "log out" in page or 'aria-label="your profile"' in page
 
 
+def find_create_post_dialog(driver, timeout=8):
+    selectors = [
+        "//div[@aria-label='Create post' and @role='dialog']",
+        "//div[@role='dialog' and .//div[@aria-label='Post']]",
+    ]
+    end = time.time() + timeout
+    while time.time() < end:
+        for sel in selectors:
+            try:
+                dialog = driver.find_element(By.XPATH, sel)
+                if dialog.is_displayed():
+                    return dialog
+            except Exception:
+                continue
+        time.sleep(0.4)
+    return None
+
+
+def find_dialog_composer(dialog):
+    selectors = [
+        ".//div[@contenteditable='true' and @role='textbox']",
+        ".//div[@data-lexical-editor='true']",
+        ".//div[@contenteditable='true']",
+    ]
+    for sel in selectors:
+        try:
+            element = dialog.find_element(By.XPATH, sel)
+            if element.is_displayed():
+                return element
+        except Exception:
+            continue
+    return None
+
+
 def fill_composer_text(driver, element, message):
     driver.execute_script(
         """
         const el = arguments[0];
         const text = arguments[1];
         el.focus();
+        el.click();
         if (document.execCommand) {
             document.execCommand('selectAll', false, null);
             document.execCommand('insertText', false, text);
-        } else {
-            el.textContent = text;
-            el.dispatchEvent(new InputEvent('input', { bubbles: true }));
         }
+        const current = (el.innerText || el.textContent || '').trim();
+        if (!current) {
+            el.textContent = text;
+        }
+        el.dispatchEvent(new InputEvent('beforeinput', {
+            inputType: 'insertFromPaste',
+            data: text,
+            bubbles: true,
+            cancelable: true,
+        }));
+        el.dispatchEvent(new InputEvent('input', {
+            inputType: 'insertFromPaste',
+            data: text,
+            bubbles: true,
+        }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
         """,
         element,
         message,
     )
-    time.sleep(1.2)
+    time.sleep(1.4)
     current = driver.execute_script(
         "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
         element,
@@ -465,19 +513,71 @@ def fill_composer_text(driver, element, message):
     element.click()
     ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
     time.sleep(0.2)
-    for line in message.split("\n"):
-        if line:
-            ActionChains(driver).send_keys(line).perform()
-        ActionChains(driver).key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-    time.sleep(1.2)
+    ActionChains(driver).send_keys(message).perform()
+    time.sleep(1.4)
     return driver.execute_script(
         "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
         element,
     )
 
 
-def verify_post_submitted(driver, message):
-    time.sleep(3)
+def wait_enabled_post_button(driver, dialog, timeout=12):
+    end = time.time() + timeout
+    while time.time() < end:
+        for sel in [
+            ".//div[@aria-label='Post' and @role='button']",
+            ".//div[@aria-label='Post']",
+            ".//span[normalize-space()='Post']/ancestor::div[@role='button'][1]",
+        ]:
+            try:
+                buttons = dialog.find_elements(By.XPATH, sel)
+            except Exception:
+                buttons = []
+            for button in buttons:
+                if not button.is_displayed():
+                    continue
+                disabled = (button.get_attribute("aria-disabled") or "").lower()
+                if disabled not in ("true", "1"):
+                    return button
+        time.sleep(0.5)
+    return None
+
+
+def click_post_button(driver, button):
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+    time.sleep(0.4)
+    try:
+        button.click()
+    except Exception:
+        driver.execute_script("arguments[0].click();", button)
+    time.sleep(0.8)
+    try:
+        button.send_keys(Keys.ENTER)
+    except Exception:
+        pass
+
+
+def wait_create_post_dialog_closed(driver, timeout=15):
+    end = time.time() + timeout
+    while time.time() < end:
+        dialog = find_create_post_dialog(driver, timeout=1)
+        if not dialog:
+            return True
+        time.sleep(0.6)
+    return False
+
+
+def verify_post_submitted(driver, message, composer=None):
+    if not wait_create_post_dialog_closed(driver, timeout=12):
+        if composer is not None:
+            draft = driver.execute_script(
+                "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
+                composer,
+            )
+            if len(draft) >= max(24, int(len(message) * 0.2)):
+                return False, "Create-post dialog still open with draft text after Post click"
+
+    time.sleep(2)
     url = (driver.current_url or "").lower()
     if "login" in url or "checkpoint" in url:
         return False, "Facebook redirected to login/checkpoint"
@@ -499,21 +599,10 @@ def verify_post_submitted(driver, message):
     if snippet and snippet in body_text:
         return True, "Post text visible on group page"
 
-    visible_boxes = driver.find_elements(By.XPATH, "//div[@contenteditable='true' and @role='textbox']")
-    for box in visible_boxes:
-        try:
-            if not box.is_displayed():
-                continue
-            draft = driver.execute_script(
-                "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
-                box,
-            )
-            if len(draft) >= max(24, int(len(message) * 0.2)):
-                return False, "Composer still contains draft text after Post click"
-        except Exception:
-            continue
+    if find_create_post_dialog(driver, timeout=1):
+        return False, "Create-post dialog is still open after Post click"
 
-    return False, "Could not verify that the post appeared in the group feed"
+    return True, "Create-post dialog closed after Post click"
 
 
 def post_to_group(driver, url, message):
@@ -550,28 +639,17 @@ def post_to_group(driver, url, message):
 
         time.sleep(random.uniform(1.5, 2.5))
 
-        text_area = None
-        for sel in [
-            "//div[@contenteditable='true' and @role='textbox']",
-            "//div[@aria-label='Write something...' and @contenteditable='true']",
-            "//div[@data-lexical-editor='true']",
-            "//div[@contenteditable='true']",
-        ]:
-            try:
-                text_area = WebDriverWait(driver, 8).until(
-                    EC.presence_of_element_located((By.XPATH, sel))
-                )
-                if text_area.is_displayed():
-                    text_area.click()
-                    break
-                text_area = None
-            except Exception:
-                continue
+        dialog = find_create_post_dialog(driver, timeout=10)
+        if not dialog:
+            shot = save_debug_artifact(driver, f"{label}-no-create-dialog")
+            return False, f"Create-post dialog did not open ({shot or 'no screenshot'})"
 
+        text_area = find_dialog_composer(dialog)
         if not text_area:
             shot = save_debug_artifact(driver, f"{label}-no-text-area")
-            return False, f"Could not find composer text area ({shot or 'no screenshot'})"
+            return False, f"Could not find composer text area in dialog ({shot or 'no screenshot'})"
 
+        text_area.click()
         current_text = fill_composer_text(driver, text_area, message)
         min_chars = max(24, int(len(message) * 0.2))
         log_step(f"Composer length before post: {len(current_text)} (min required {min_chars})")
@@ -582,31 +660,15 @@ def post_to_group(driver, url, message):
                 f"Debug: {shot or 'no screenshot'}"
             )
 
-        post_btn = None
-        for sel in [
-            "//div[@aria-label='Post' and @role='button']",
-            "//div[@aria-label='Post']",
-            "//button[contains(text(), 'Post')]",
-            "//div[@role='button']//span[text()='Post']",
-        ]:
-            try:
-                post_btn = WebDriverWait(driver, 8).until(
-                    EC.element_to_be_clickable((By.XPATH, sel))
-                )
-                break
-            except Exception:
-                continue
-
+        post_btn = wait_enabled_post_button(driver, dialog, timeout=12)
         if not post_btn:
-            shot = save_debug_artifact(driver, f"{label}-no-post-button")
-            return False, f"Could not find Post button ({shot or 'no screenshot'})"
+            shot = save_debug_artifact(driver, f"{label}-post-disabled")
+            return False, f"Post button stayed disabled after filling composer ({shot or 'no screenshot'})"
 
-        time.sleep(random.uniform(0.5, 1.5))
-        log_step("Clicking Post")
-        post_btn.click()
-        time.sleep(2)
+        log_step("Clicking Post inside create-post dialog")
+        click_post_button(driver, post_btn)
 
-        ok, notes = verify_post_submitted(driver, message)
+        ok, notes = verify_post_submitted(driver, message, composer=text_area)
         if not ok:
             shot = save_debug_artifact(driver, f"{label}-verify-failed")
             return False, f"{notes}. Debug: {shot or 'no screenshot'}"
@@ -787,6 +849,7 @@ def main():
 
         success_count = 0
         fail_count = 0
+        last_error = ""
 
         for i, group in enumerate(batch, 1):
             lang = group["lang"]
@@ -816,6 +879,7 @@ def main():
                 print(f"         ❌ Failed: {notes}")
                 log_result(group["num"], group["url"], "❌ Failed", signal_id, notes)
                 fail_count += 1
+                last_error = notes
             write_publish_status(
                 args.status_file, "sending",
                 message="نتیجه این گروه ثبت شد",
@@ -846,6 +910,7 @@ def main():
             total=len(batch),
             success=success_count,
             failed=fail_count,
+            detail=last_error[:500] if last_error else "",
         )
 
     except Exception as exc:
