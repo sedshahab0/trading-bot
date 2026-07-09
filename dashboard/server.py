@@ -78,6 +78,7 @@ SIMULATION_DB = Path(os.environ.get("SIMULATION_DB", str(DATA_ROOT / "signal-sim
 FACEBOOK_DIR = DATA_ROOT / "facebook"
 FACEBOOK_GROUPS_FILE = FACEBOOK_DIR / "fb_my_groups.xlsx"
 FACEBOOK_SESSION_FILE = FACEBOOK_DIR / "fb_session.json"
+FACEBOOK_SESSION_STATUS_FILE = FACEBOOK_DIR / "session_status.json"
 FACEBOOK_POST_LOG = FACEBOOK_DIR / "post_log.xlsx"
 FACEBOOK_JOBS_DIR = DATA_ROOT / "facebook-jobs"
 FACEBOOK_POSTER = BOT_ROOT / "Facebook" / "script2_post_to_groups.py"
@@ -188,7 +189,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 24, "patch": 0, "label": "v2.24", "released": "", "history": []}
+    default = {"major": 2, "minor": 25, "patch": 0, "label": "v2.25", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2114,6 +2115,37 @@ def _facebook_env() -> dict[str, str]:
     return env
 
 
+def _facebook_session_status() -> dict:
+    if not FACEBOOK_SESSION_STATUS_FILE.exists():
+        return {
+            "state": "untested" if FACEBOOK_SESSION_FILE.exists() else "missing",
+            "tested_at": None,
+            "cookies": None,
+            "reason": None,
+        }
+    try:
+        value = json.loads(FACEBOOK_SESSION_STATUS_FILE.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {"state": "untested"}
+    except (OSError, ValueError):
+        return {"state": "untested" if FACEBOOK_SESSION_FILE.exists() else "missing"}
+
+
+def _save_facebook_session_status(state: str, **details) -> dict:
+    FACEBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    value = {
+        "state": state,
+        "tested_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "cookies": details.get("cookies"),
+        "reason": details.get("reason"),
+        "url": details.get("url"),
+    }
+    temp_file = FACEBOOK_SESSION_STATUS_FILE.with_suffix(".tmp")
+    temp_file.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+    os.chmod(temp_file, 0o600)
+    temp_file.replace(FACEBOOK_SESSION_STATUS_FILE)
+    return value
+
+
 def _facebook_preflight() -> dict:
     try:
         proc = subprocess.run(
@@ -2628,6 +2660,7 @@ def api_facebook():
         "groups": _facebook_groups(),
         "jobs": _facebook_jobs(),
         "auto_post": env.get("FACEBOOK_AUTO_POST", "0") == "1",
+        "session_status": _facebook_session_status(),
         "session_updated": (
             datetime.fromtimestamp(FACEBOOK_SESSION_FILE.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
             if FACEBOOK_SESSION_FILE.exists() else None
@@ -2728,8 +2761,16 @@ def api_facebook_session_upload():
     FACEBOOK_DIR.mkdir(parents=True, exist_ok=True)
     FACEBOOK_SESSION_FILE.write_text(json.dumps(cookies, ensure_ascii=False), encoding="utf-8")
     os.chmod(FACEBOOK_SESSION_FILE, 0o600)
+    session_status = _save_facebook_session_status(
+        "untested", cookies=len(cookies), reason="new_session_uploaded"
+    )
     _audit("facebook_session_upload", f"{len(cookies)} cookies")
-    return jsonify({"ok": True, "cookies": len(cookies), "status": _facebook_preflight()})
+    return jsonify({
+        "ok": True,
+        "cookies": len(cookies),
+        "status": _facebook_preflight(),
+        "session_status": session_status,
+    })
 
 
 @app.route("/api/facebook/session/test", methods=["POST"])
@@ -2746,11 +2787,25 @@ def api_facebook_session_test():
         )
         lines = [line for line in proc.stdout.splitlines() if line.strip().startswith("{")]
         result = json.loads(lines[-1]) if lines else {"ok": False, "reason": proc.stderr.strip() or "test_failed"}
+        result["session_status"] = _save_facebook_session_status(
+            "connected" if result.get("ok") else "failed",
+            cookies=result.get("cookies"),
+            reason=result.get("reason"),
+            url=result.get("url"),
+        )
         if not result.get("ok"):
             result["error"] = "سشن فیسبوک معتبر نیست یا نیاز به ورود مجدد دارد"
         return jsonify(result), 200 if result.get("ok") else 409
     except subprocess.TimeoutExpired:
+        _save_facebook_session_status("failed", reason="timeout")
         return jsonify({"error": "تست اتصال فیسبوک timeout شد"}), 504
+    except Exception as exc:
+        status = _save_facebook_session_status("failed", reason=type(exc).__name__)
+        return jsonify({
+            "error": "اجرای تست اتصال با خطا مواجه شد",
+            "detail": str(exc),
+            "session_status": status,
+        }), 500
 
 
 @app.route("/api/facebook/jobs/<signal_id>/preview")

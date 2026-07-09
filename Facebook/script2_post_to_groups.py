@@ -526,22 +526,32 @@ def main():
             return 2
         driver = build_driver()
         try:
-            loaded = load_session(driver)
-            cookies = driver.get_cookies()
-            login_fields = driver.find_elements(By.NAME, "email") or driver.find_elements(By.NAME, "pass")
-            logged_in = (
-                loaded
-                and any(cookie.get("name") == "c_user" for cookie in cookies)
-                and "login" not in driver.current_url.lower()
-                and not login_fields
-            )
-            print(json.dumps({
-                "ok": logged_in,
-                "url": driver.current_url,
-                "cookies": len(cookies),
-                "reason": None if logged_in else "facebook_login_required",
-            }))
-            return 0 if logged_in else 3
+            driver.set_page_load_timeout(20)
+            try:
+                loaded = load_session(driver)
+                cookies = driver.get_cookies()
+                login_fields = driver.find_elements(By.NAME, "email") or driver.find_elements(By.NAME, "pass")
+                logged_in = (
+                    loaded
+                    and any(cookie.get("name") == "c_user" for cookie in cookies)
+                    and "login" not in driver.current_url.lower()
+                    and not login_fields
+                )
+                print(json.dumps({
+                    "ok": logged_in,
+                    "url": driver.current_url,
+                    "cookies": len(cookies),
+                    "reason": None if logged_in else "facebook_login_required",
+                }))
+                return 0 if logged_in else 3
+            except Exception as exc:
+                print(json.dumps({
+                    "ok": False,
+                    "url": getattr(driver, "current_url", ""),
+                    "cookies": len(driver.get_cookies()),
+                    "reason": f"browser_error:{type(exc).__name__}",
+                }))
+                return 4
         finally:
             driver.quit()
     if args.preview:

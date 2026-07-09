@@ -215,7 +215,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.24", full: "2.24.0", major: 2, minor: 24, patch: 0 };
+  let dashboardVersion = { label: "v2.25", full: "2.25.0", major: 2, minor: 25, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2327,6 +2327,34 @@
     if (value) value.textContent = text;
   }
 
+  function setFacebookSessionState(state, detail = "", cookies = null) {
+    const panel = $(".facebook-session-panel");
+    const title = $("#fbSessionStateTitle");
+    const description = $("#fbSessionStateDetail");
+    if (!panel || !title || !description) return;
+    const states = {
+      missing: ["سشن اضافه نشده", "ابتدا فایل JSON کوکی‌های فیسبوک را انتخاب کنید."],
+      untested: ["فایل دریافت شد؛ نیازمند تست", cookies ? `${cookies} کوکی ذخیره شده است. اکنون اتصال حساب را تست کنید.` : "برای تأیید اعتبار کوکی‌ها، تست اتصال را اجرا کنید."],
+      testing: ["در حال تست اتصال", "مرورگر امن سرور در حال بررسی ورود به حساب فیسبوک است..."],
+      connected: ["حساب متصل است", cookies ? `ورود با ${cookies} کوکی فعال تأیید شد.` : "ورود به حساب فیسبوک با موفقیت تأیید شد."],
+      failed: ["اتصال تأیید نشد", "سشن منقضی یا نامعتبر است؛ فایل تازه‌ای بارگذاری و دوباره تست کنید."],
+    };
+    const selected = states[state] || states.untested;
+    panel.dataset.sessionState = state;
+    title.textContent = selected[0];
+    description.textContent = detail || selected[1];
+  }
+
+  function setFacebookButtonBusy(button, busy, busyLabel) {
+    if (!button) return;
+    const label = button.querySelector(".fb-button-label");
+    if (!button.dataset.idleLabel && label) button.dataset.idleLabel = label.textContent;
+    button.classList.toggle("loading", busy);
+    button.disabled = busy;
+    button.setAttribute("aria-busy", busy ? "true" : "false");
+    if (label) label.textContent = busy ? busyLabel : button.dataset.idleLabel;
+  }
+
   function renderFacebook(data) {
     if (!data) return;
     facebookPayload = data;
@@ -2338,6 +2366,11 @@
       : groups;
     const jobs = data.jobs || [];
     const activeGroups = groups.filter((group) => group.enabled);
+    const sessionStatus = data.session_status || {};
+    const sessionState = status.session_file ? (sessionStatus.state || "untested") : "missing";
+    setFacebookSessionState(sessionState, "", sessionStatus.cookies);
+    const testButton = $("#btnFbTestSession");
+    if (testButton && !testButton.classList.contains("loading")) testButton.disabled = !status.session_file;
     if ($("#fbStatusDot")) $("#fbStatusDot").className = `status-indicator ${status.ready ? "running" : "stopped"}`;
     if ($("#fbStatusLabel")) $("#fbStatusLabel").textContent = status.ready ? "آماده ارسال" : "نیاز به تکمیل";
     if ($("#fbSessionMeta")) $("#fbSessionMeta").textContent = data.session_updated ? `سشن: ${data.session_updated}` : "سشن تنظیم نشده";
@@ -4678,33 +4711,40 @@
     form.append("file", file);
     const button = $("#btnFbSessionUpload");
     try {
-      button?.classList.add("loading");
+      setFacebookButtonBusy(button, true, "در حال بارگذاری...");
+      setFacebookSessionState("testing", "فایل در حال اعتبارسنجی و ذخیره امن روی سرور است.");
       const response = await authFetch("/api/facebook/session", { method: "POST", body: form });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "آپلود سشن ناموفق بود");
       invalidateCache("facebook");
       await fetchFacebook({ force: true });
+      setFacebookSessionState("untested", "", data.cookies);
       toast(`سشن فیسبوک با ${data.cookies} کوکی ذخیره شد`);
     } catch (error) {
+      setFacebookSessionState("failed", error.message);
       toast(error.message, "error");
     } finally {
-      button?.classList.remove("loading");
+      setFacebookButtonBusy(button, false);
       event.target.value = "";
     }
   });
 
   $("#btnFbTestSession")?.addEventListener("click", async () => {
     const button = $("#btnFbTestSession");
+    if (!button || button.disabled || button.classList.contains("loading")) return;
     try {
-      button?.classList.add("loading");
+      setFacebookButtonBusy(button, true, "در حال بررسی ورود...");
+      setFacebookSessionState("testing");
       const result = await api("/api/facebook/session/test", { method: "POST" });
+      setFacebookSessionState("connected", "", result.cookies);
       toast(`اتصال حساب تأیید شد · ${result.cookies} کوکی فعال`);
       invalidateCache("facebook");
       await fetchFacebook({ force: true });
     } catch (error) {
+      setFacebookSessionState("failed", error.message);
       toast(`تست اتصال ناموفق: ${error.message}`, "error");
     } finally {
-      button?.classList.remove("loading");
+      setFacebookButtonBusy(button, false);
     }
   });
 

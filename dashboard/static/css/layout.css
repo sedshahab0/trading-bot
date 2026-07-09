@@ -4738,15 +4738,82 @@ body.auth-pending .app-shell {
   outline: 2px solid rgba(248,113,113,.2);
   outline-offset: 2px;
 }
-.facebook-session-panel { text-align: center; }
+.facebook-session-panel {
+  --session-accent: #7eafff;
+  --session-soft: rgba(91,156,246,.09);
+  text-align: center;
+  transition: border-color .25s ease, box-shadow .25s ease;
+}
+.facebook-session-panel[data-session-state="connected"] {
+  --session-accent: var(--green);
+  --session-soft: rgba(99,255,208,.1);
+  border-color: rgba(99,255,208,.28);
+  box-shadow: inset 0 1px rgba(255,255,255,.03), 0 16px 40px rgba(34,211,153,.05);
+}
+.facebook-session-panel[data-session-state="failed"] {
+  --session-accent: #ff8791;
+  --session-soft: rgba(248,113,113,.1);
+  border-color: rgba(248,113,113,.28);
+}
+.facebook-session-panel[data-session-state="testing"] {
+  --session-accent: #f6c85f;
+  --session-soft: rgba(246,200,95,.1);
+}
 .fb-session-mark {
   width: 64px; height: 64px; display: grid; place-items: center; margin: 0 auto 1rem;
-  border-radius: 19px; color: #7eafff; background: rgba(91,156,246,.09);
-  border: 1px solid rgba(91,156,246,.18);
+  border-radius: 19px; color: var(--session-accent); background: var(--session-soft);
+  border: 1px solid rgba(126,175,255,.24);
+  transition: color .25s ease, background .25s ease, border-color .25s ease;
 }
 .fb-session-mark svg { width: 30px; height: 30px; }
+.facebook-session-state {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  width: 100%;
+  margin-top: .9rem;
+  padding: .72rem .78rem;
+  text-align: right;
+  border: 1px solid rgba(126,175,255,.2);
+  border-radius: 13px;
+  background: var(--session-soft);
+}
+.facebook-session-state-dot {
+  width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%;
+  background: var(--session-accent);
+  box-shadow: 0 0 0 5px rgba(126,175,255,.1);
+}
+.facebook-session-state > div { min-width: 0; display: grid; gap: .18rem; }
+.facebook-session-state strong { color: var(--text); font-size: .75rem; }
+.facebook-session-state span:last-child { color: var(--text-muted); font-size: .64rem; line-height: 1.6; }
+.facebook-session-panel[data-session-state="testing"] .facebook-session-state-dot {
+  animation: fb-session-pulse 1s ease-in-out infinite;
+}
+@keyframes fb-session-pulse {
+  50% { opacity: .45; transform: scale(.72); }
+}
 .facebook-upload-btn { width: 100%; min-height: 46px; margin-top: 1rem; }
 .facebook-test-session-btn { width: 100%; min-height: 44px; margin-top: .55rem; }
+.facebook-upload-btn.loading,
+.facebook-test-session-btn.loading {
+  pointer-events: none;
+  opacity: .72;
+}
+.facebook-upload-btn.loading::before,
+.facebook-test-session-btn.loading::before {
+  content: "";
+  width: 17px; height: 17px; display: inline-block; margin-left: .5rem;
+  border: 2px solid currentColor; border-bottom-color: transparent; border-radius: 50%;
+  vertical-align: middle; animation: fb-button-spin .7s linear infinite;
+}
+@keyframes fb-button-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .facebook-session-panel,
+  .fb-session-mark { transition: none; }
+  .facebook-session-panel[data-session-state="testing"] .facebook-session-state-dot,
+  .facebook-upload-btn.loading::before,
+  .facebook-test-session-btn.loading::before { animation: none; }
+}
 .facebook-security-note { margin: .75rem 0 0; color: var(--text-dim); font-size: .65rem; line-height: 1.7; }
 .facebook-queue-panel { margin-bottom: 1rem; }
 .facebook-job-card {
