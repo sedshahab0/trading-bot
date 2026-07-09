@@ -196,7 +196,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 42, "patch": 0, "label": "v2.42", "released": "", "history": []}
+    default = {"major": 2, "minor": 44, "patch": 0, "label": "v2.44", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default

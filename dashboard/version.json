@@ -1,10 +1,24 @@
 {
   "major": 2,
-  "minor": 42,
+  "minor": 44,
   "patch": 0,
-  "label": "v2.42",
+  "label": "v2.44",
   "released": "2026-07-09",
   "history": [
+    {
+      "version": "2.44.0",
+      "label": "v2.44",
+      "date": "2026-07-09",
+      "title": "Automated dashboard update",
+      "level": "minor"
+    },
+    {
+      "version": "2.43.0",
+      "label": "v2.43",
+      "date": "2026-07-09",
+      "title": "Add detailed route breadcrumbs",
+      "level": "minor"
+    },
     {
       "version": "2.42.0",
       "label": "v2.42",

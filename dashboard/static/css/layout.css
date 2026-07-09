@@ -515,6 +515,15 @@ body.auth-pending .app-shell {
 .topbar-breadcrumb-domain {
   font-family: var(--font-en);
   direction: ltr;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.topbar-breadcrumb-section {
+  color: var(--text-muted);
+  font-family: var(--font-en);
+  direction: ltr;
+  text-transform: lowercase;
 }
 
 .topbar-breadcrumb-sep {
@@ -527,6 +536,25 @@ body.auth-pending .app-shell {
   font-family: var(--font-en);
   direction: ltr;
   text-transform: lowercase;
+  font-weight: 700;
+}
+
+.topbar-route-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 84px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid rgba(99, 255, 208, 0.18);
+  border-radius: 999px;
+  background: rgba(99, 255, 208, 0.06);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  direction: ltr;
+}
 }
 
 .topbar-title h1 {
@@ -754,6 +782,10 @@ body.auth-pending .app-shell {
   .topbar-breadcrumb {
     justify-content: center;
     max-width: 100%;
+  }
+
+  .topbar-route-pill {
+    display: none;
   }
 
   .topbar-title h1,
