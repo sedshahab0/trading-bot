@@ -29,7 +29,7 @@ try:
     import psutil
 except ImportError:  # pragma: no cover - fallback keeps the dashboard alive without the optional package
     psutil = None
-from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
+from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
@@ -196,7 +196,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 40, "patch": 0, "label": "v2.40", "released": "", "history": []}
+    default = {"major": 2, "minor": 42, "patch": 0, "label": "v2.42", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2594,6 +2594,29 @@ def _simulation_payload(
 @app.route("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
+
+
+SPA_ROUTES = {
+    "home",
+    "monitor",
+    "control",
+    "signals",
+    "simulation",
+    "reports",
+    "telegram",
+    "facebook",
+    "settings",
+    "logs",
+}
+
+
+@app.route("/<path:route>")
+def spa_routes(route: str):
+    if route.startswith(("api/", "static/")):
+        abort(404)
+    if route.strip("/") in SPA_ROUTES:
+        return send_from_directory(STATIC_DIR, "index.html")
+    abort(404)
 
 
 @app.route("/api/auth/login", methods=["POST"])
