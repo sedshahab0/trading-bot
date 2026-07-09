@@ -439,34 +439,86 @@ def find_create_post_dialog(driver, timeout=8):
     selectors = [
         "//div[@aria-label='Create post' and @role='dialog']",
         "//div[@role='dialog' and .//div[@aria-label='Post']]",
+        "//div[@role='dialog' and .//span[normalize-space()='Post']]",
     ]
     end = time.time() + timeout
     while time.time() < end:
         for sel in selectors:
             try:
-                dialog = driver.find_element(By.XPATH, sel)
-                if dialog.is_displayed():
-                    return dialog
+                for dialog in driver.find_elements(By.XPATH, sel):
+                    if dialog.is_displayed():
+                        return dialog
             except Exception:
                 continue
         time.sleep(0.4)
     return None
 
 
-def find_dialog_composer(dialog):
+def _element_area(element):
+    try:
+        rect = element.rect
+        return max(0, rect.get("width", 0)) * max(0, rect.get("height", 0))
+    except Exception:
+        return 0
+
+
+def _is_comment_box(element):
+    label = (element.get_attribute("aria-label") or "").lower()
+    placeholder = (element.get_attribute("placeholder") or "").lower()
+    return "comment" in label or "comment" in placeholder
+
+
+def find_visible_composer(driver, timeout=12):
     selectors = [
-        ".//div[@contenteditable='true' and @role='textbox']",
-        ".//div[@data-lexical-editor='true']",
-        ".//div[@contenteditable='true']",
+        "//div[@contenteditable='true' and @role='textbox']",
+        "//div[@aria-label='Write something...' and @contenteditable='true']",
+        "//div[contains(@aria-label,'Write something') and @contenteditable='true']",
+        "//div[@role='dialog']//div[@contenteditable='true']",
+        "//div[@data-lexical-editor='true']//div[@contenteditable='true']",
+        "//div[@data-lexical-editor='true']",
+        "//div[@contenteditable='true']",
     ]
-    for sel in selectors:
-        try:
-            element = dialog.find_element(By.XPATH, sel)
-            if element.is_displayed():
-                return element
-        except Exception:
-            continue
-    return None
+    end = time.time() + timeout
+    best = None
+    best_area = 0
+    while time.time() < end:
+        for sel in selectors:
+            try:
+                elements = driver.find_elements(By.XPATH, sel)
+            except Exception:
+                elements = []
+            for element in elements:
+                try:
+                    if not element.is_displayed() or _is_comment_box(element):
+                        continue
+                    area = _element_area(element)
+                    if area >= best_area:
+                        best = element
+                        best_area = area
+                except Exception:
+                    continue
+        if best and best_area >= 1200:
+            return best
+        time.sleep(0.5)
+    return best
+
+
+def find_dialog_composer(driver, dialog=None, timeout=12):
+    if dialog is not None:
+        selectors = [
+            ".//div[@contenteditable='true' and @role='textbox']",
+            ".//div[@data-lexical-editor='true']//div[@contenteditable='true']",
+            ".//div[@data-lexical-editor='true']",
+            ".//div[@contenteditable='true']",
+        ]
+        for sel in selectors:
+            try:
+                for element in dialog.find_elements(By.XPATH, sel):
+                    if element.is_displayed() and not _is_comment_box(element):
+                        return element
+            except Exception:
+                continue
+    return find_visible_composer(driver, timeout=timeout)
 
 
 def fill_composer_text(driver, element, message):
@@ -521,24 +573,40 @@ def fill_composer_text(driver, element, message):
     )
 
 
-def wait_enabled_post_button(driver, dialog, timeout=12):
+def wait_enabled_post_button(driver, dialog=None, timeout=12):
+    scopes = []
+    if dialog is not None:
+        scopes.append(dialog)
+    scopes.append(driver)
     end = time.time() + timeout
     while time.time() < end:
-        for sel in [
-            ".//div[@aria-label='Post' and @role='button']",
-            ".//div[@aria-label='Post']",
-            ".//span[normalize-space()='Post']/ancestor::div[@role='button'][1]",
-        ]:
+        for scope in scopes:
+            root = scope
             try:
-                buttons = dialog.find_elements(By.XPATH, sel)
+                if scope is driver:
+                    buttons = root.find_elements(
+                        By.XPATH,
+                        "//div[@aria-label='Post'] | //div[@aria-label='Post' and @role='button'] | //span[normalize-space()='Post']/ancestor::div[@role='button'][1]",
+                    )
+                else:
+                    buttons = root.find_elements(
+                        By.XPATH,
+                        ".//div[@aria-label='Post'] | .//div[@aria-label='Post' and @role='button'] | .//span[normalize-space()='Post']/ancestor::div[@role='button'][1]",
+                    )
             except Exception:
                 buttons = []
             for button in buttons:
-                if not button.is_displayed():
+                try:
+                    if not button.is_displayed():
+                        continue
+                    label = (button.get_attribute("aria-label") or "").lower()
+                    if "comment" in label:
+                        continue
+                    disabled = (button.get_attribute("aria-disabled") or "").lower()
+                    if disabled not in ("true", "1"):
+                        return button
+                except Exception:
                     continue
-                disabled = (button.get_attribute("aria-disabled") or "").lower()
-                if disabled not in ("true", "1"):
-                    return button
         time.sleep(0.5)
     return None
 
@@ -637,17 +705,18 @@ def post_to_group(driver, url, message):
             shot = save_debug_artifact(driver, f"{label}-no-compose-entry")
             return False, f"Could not find post composer entry ({shot or 'no screenshot'})"
 
-        time.sleep(random.uniform(1.5, 2.5))
+        time.sleep(random.uniform(2, 3.5))
 
         dialog = find_create_post_dialog(driver, timeout=10)
-        if not dialog:
-            shot = save_debug_artifact(driver, f"{label}-no-create-dialog")
-            return False, f"Create-post dialog did not open ({shot or 'no screenshot'})"
+        if dialog:
+            log_step("Create-post dialog detected")
+        else:
+            log_step("Create-post dialog not detected; scanning page for composer")
 
-        text_area = find_dialog_composer(dialog)
+        text_area = find_dialog_composer(driver, dialog=dialog, timeout=12)
         if not text_area:
             shot = save_debug_artifact(driver, f"{label}-no-text-area")
-            return False, f"Could not find composer text area in dialog ({shot or 'no screenshot'})"
+            return False, f"Could not find composer text area ({shot or 'no screenshot'})"
 
         text_area.click()
         current_text = fill_composer_text(driver, text_area, message)
@@ -660,7 +729,7 @@ def post_to_group(driver, url, message):
                 f"Debug: {shot or 'no screenshot'}"
             )
 
-        post_btn = wait_enabled_post_button(driver, dialog, timeout=12)
+        post_btn = wait_enabled_post_button(driver, dialog=dialog, timeout=12)
         if not post_btn:
             shot = save_debug_artifact(driver, f"{label}-post-disabled")
             return False, f"Post button stayed disabled after filling composer ({shot or 'no screenshot'})"
