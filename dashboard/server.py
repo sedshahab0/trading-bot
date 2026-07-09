@@ -179,7 +179,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 18, "patch": 0, "label": "v2.18", "released": "", "history": []}
+    default = {"major": 2, "minor": 19, "patch": 0, "label": "v2.19", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2401,10 +2401,21 @@ def api_config_patch():
     _audit("config_update", ", ".join(f"{k}={updates[k]}" for k in updates.keys()))
     _invalidate_dashboard_cache()
     env = _parse_env()
+    restart_ok, restart_note, restart_skipped = _restart_signal_engine()
+    _audit(
+        "config_apply",
+        "signal-engine restart "
+        + ("skipped (notifications paused)" if restart_skipped else ("ok" if restart_ok else "failed")),
+    )
     return jsonify({
         "ok": True,
         "updated": list(updates.keys()),
         "config": {k: env.get(k, "") for k in updates.keys()},
+        "engine_restart": {
+            "ok": restart_ok,
+            "skipped": restart_skipped,
+            "message": restart_note,
+        },
     })
 
 

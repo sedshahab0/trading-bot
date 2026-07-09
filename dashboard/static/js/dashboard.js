@@ -208,7 +208,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.18", full: "2.18.0", major: 2, minor: 18, patch: 0 };
+  let dashboardVersion = { label: "v2.19", full: "2.19.0", major: 2, minor: 19, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -4355,8 +4355,18 @@
       invalidateCache("status", "bootstrap");
       applyConfigToDashboard(savedCfg);
       await fetchStatus({ force: true });
-      toast("تنظیمات ذخیره شد — برای اعمال در موتور signal-engine را ری‌استارت کنید");
-      logControlActivity(`تنظیمات ذخیره: min_score=${savedCfg.min_score}, poll=${savedCfg.poll_seconds}s`, "ok");
+      const restart = result.engine_restart || {};
+      if (restart.skipped) {
+        toast("تنظیمات ذخیره شد و هنگام ادامه نوتیفیکیشن اعمال می‌شود");
+      } else if (restart.ok === false) {
+        toast("تنظیمات ذخیره شد، اما ری‌استارت خودکار موتور ناموفق بود", "error");
+      } else {
+        toast("تنظیمات ذخیره و روی موتور اعمال شد");
+      }
+      logControlActivity(
+        `تنظیمات ذخیره و اعمال شد: min_score=${savedCfg.min_score}, poll=${savedCfg.poll_seconds}s`,
+        restart.ok === false ? "error" : "ok"
+      );
     } catch (err) {
       toast(err.message, "error");
     } finally {
