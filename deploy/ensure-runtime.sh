@@ -9,6 +9,7 @@ LOCK_FILE="${LOCK_FILE:-/tmp/trading-bot-runtime.lock}"
 DATA_ROOT="${BOT_DATA_ROOT:-/var/lib/trading-bot}"
 
 mkdir -p "${DATA_ROOT}"
+mkdir -p "${DATA_ROOT}/facebook" "${DATA_ROOT}/facebook-jobs"
 
 is_healthy() {
   [[ -x "${VENV_DIR}/bin/python3" ]] || return 1
@@ -16,7 +17,9 @@ is_healthy() {
   "${VENV_DIR}/bin/python3" - <<'PY' >/dev/null 2>&1
 import flask
 import gunicorn
+import openpyxl
 import psutil
+import selenium
 PY
 }
 
@@ -45,6 +48,8 @@ python3 -m venv "${VENV_DIR}"
 "${VENV_DIR}/bin/python3" - <<'PY'
 import flask
 import gunicorn
+import openpyxl
 import psutil
+import selenium
 print("runtime ok")
 PY

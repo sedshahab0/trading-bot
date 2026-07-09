@@ -17,13 +17,15 @@ USAGE:
 """
 
 from flask import Flask, request, jsonify
-import json, os, subprocess, threading
+import hashlib, json, os, subprocess, threading
 from datetime import datetime
+from pathlib import Path
 
 app        = Flask(__name__)
 QUEUE_FILE = os.environ.get("SIGNAL_QUEUE_FILE", "signal_queue.json")
 LOG_FILE   = os.environ.get("SIGNAL_LOG_FILE", "signal_log.txt")
 SCRIPT2    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "script2_post_to_groups.py")
+JOBS_DIR   = Path(os.environ.get("FACEBOOK_JOBS_DIR", "/var/lib/trading-bot/facebook-jobs"))
 CERT_FILE  = "server.crt"
 KEY_FILE   = "server.key"
 
@@ -41,15 +43,19 @@ def save_signal(sig):
     os.makedirs(os.path.dirname(os.path.abspath(QUEUE_FILE)), exist_ok=True)
     with open(QUEUE_FILE, "w", encoding="utf-8") as f:
         json.dump(sig, f, ensure_ascii=False, indent=2)
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    job_file = JOBS_DIR / f"{sig['signal_id']}.json"
+    job_file.write_text(json.dumps(sig, ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"Signal saved → {sig}")
+    return job_file
 
-def run_script2():
-    log("Launching script2_post_to_groups.py ...")
+def run_script2(job_file):
+    log(f"Launching script2_post_to_groups.py for {job_file.name} ...")
     try:
         venv_python = os.environ.get(
             "VENV_PYTHON", "/opt/trading-bot/venv/bin/python3")
         subprocess.Popen(
-            [venv_python, SCRIPT2],
+            [venv_python, SCRIPT2, "--signal-file", str(job_file)],
             cwd=os.path.dirname(os.path.abspath(__file__)),
             stdout=open("script2_stdout.log", "a"),
             stderr=open("script2_stderr.log", "a"),
@@ -57,6 +63,25 @@ def run_script2():
         )
     except Exception as e:
         log(f"Failed to launch script2: {e}")
+
+
+def poster_preflight():
+    venv_python = os.environ.get("VENV_PYTHON", "/opt/trading-bot/venv/bin/python3")
+    try:
+        result = subprocess.run(
+            [venv_python, SCRIPT2, "--preflight"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        details = json.loads(lines[-1]) if lines else {}
+        details["ready"] = result.returncode == 0 and bool(details.get("ready"))
+        return details
+    except Exception as exc:
+        return {"ready": False, "error": str(exc)}
+
 
 def generate_cert():
     """Generate a self-signed SSL certificate if not present."""
@@ -113,10 +138,26 @@ def receive_signal():
         data.setdefault("tp3",   "--")
         data.setdefault("rr",    "1:2")
         data.setdefault("basis", "SMC Structure + Liquidity Grab + Daily Bias")
+        data["received_at"] = datetime.now().isoformat(timespec="seconds")
+        fingerprint = "|".join(str(data.get(k, "")) for k in ("received_at", "symbol", "direction", "entry"))
+        data["signal_id"] = hashlib.sha256(fingerprint.encode()).hexdigest()[:16]
 
-        save_signal(data)
-        threading.Thread(target=run_script2, daemon=True).start()
-        return jsonify({"status": "ok", "message": "Signal received. Posting started."}), 200
+        job_file = save_signal(data)
+        readiness = poster_preflight()
+        if not readiness.get("ready"):
+            log(f"Facebook poster not ready: {readiness}")
+            return jsonify({
+                "status": "error",
+                "signal_id": data["signal_id"],
+                "message": "Signal saved, but Facebook poster is not configured.",
+                "facebook": readiness,
+            }), 503
+        threading.Thread(target=run_script2, args=(job_file,), daemon=True).start()
+        return jsonify({
+            "status": "ok",
+            "signal_id": data["signal_id"],
+            "message": "Signal received. Facebook posting job started.",
+        }), 200
 
     except Exception as e:
         log(f"Error: {e}")
@@ -131,6 +172,11 @@ def status():
     except Exception:
         last = None
     return jsonify({"status": "running", "last_signal": last}), 200
+
+
+@app.route("/facebook/status", methods=["GET"])
+def facebook_status():
+    return jsonify(poster_preflight()), 200
 
 
 # ── Main ─────────────────────────────────────────────────────────────

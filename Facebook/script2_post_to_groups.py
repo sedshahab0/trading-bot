@@ -16,6 +16,10 @@ USAGE (automatic):
     Triggered by signal_server.py when EA fires a signal.
 """
 
+import argparse
+import fcntl
+import importlib.util
+import sys
 import time
 import random
 import json
@@ -23,28 +27,22 @@ import os
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 # ─────────────────────────────────────────────
-#  YOUR FACEBOOK CREDENTIALS
-# ─────────────────────────────────────────────
-FB_EMAIL    = "your_email@example.com"   # ← Replace
-FB_PASSWORD = "your_password"            # ← Replace
-
-# ─────────────────────────────────────────────
 #  FILES
 # ─────────────────────────────────────────────
-GROUPS_FILE  = "fb_my_groups.xlsx"
-LOG_FILE     = "post_log.xlsx"
-QUEUE_FILE   = "signal_queue.json"
-SESSION_FILE = "fb_session.json"
+GROUPS_FILE  = os.environ.get("FACEBOOK_GROUPS_FILE", "fb_my_groups.xlsx")
+LOG_FILE     = os.environ.get("FACEBOOK_POST_LOG", "post_log.xlsx")
+QUEUE_FILE   = os.environ.get("SIGNAL_QUEUE_FILE", "signal_queue.json")
+SESSION_FILE = os.environ.get("FACEBOOK_SESSION_FILE", "fb_session.json")
+LOCK_FILE    = os.environ.get("FACEBOOK_POSTER_LOCK", "/var/lib/trading-bot/facebook-poster.lock")
+HEADLESS     = os.environ.get("FACEBOOK_HEADLESS", "1") == "1"
 
 # ─────────────────────────────────────────────
 #  SAFETY SETTINGS
@@ -57,30 +55,18 @@ MAX_DELAY_SECONDS = 320
 #  SIGNAL LOADER
 # ─────────────────────────────────────────────
 
-def load_signal():
+def load_signal(signal_file=None):
     """
     Load signal from signal_queue.json.
     Falls back to a placeholder if file doesn't exist.
     """
-    if os.path.exists(QUEUE_FILE):
-        with open(QUEUE_FILE, "r", encoding="utf-8") as f:
+    source = signal_file or QUEUE_FILE
+    if os.path.exists(source):
+        with open(source, "r", encoding="utf-8") as f:
             sig = json.load(f)
         print(f"[✓] Signal loaded: {sig['symbol']} {sig['direction']} @ {sig['entry']}")
         return sig
-    else:
-        print("[!] No signal_queue.json found. Using placeholder values.")
-        print("    Run signal_server.py and trigger from your EA, or edit signal_queue.json manually.")
-        return {
-            "symbol":    "XAUUSD",
-            "direction": "BUY",
-            "entry":     "0.00",
-            "sl":        "0.00",
-            "tp1":       "0.00",
-            "tp2":       "0.00",
-            "tp3":       "0.00",
-            "rr":        "1:3",
-            "basis":     "SMC Structure + Liquidity Grab + Daily Bias"
-        }
+    raise FileNotFoundError(f"Signal file not found: {source}")
 
 
 # ─────────────────────────────────────────────
@@ -289,13 +275,13 @@ def build_driver():
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
     opts.add_argument("--window-size=1280,900")
+    if HEADLESS:
+        opts.add_argument("--headless=new")
     opts.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=opts
-    )
+    driver = webdriver.Chrome(options=opts)
     driver.execute_script(
         "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
     )
@@ -326,6 +312,11 @@ def save_session(driver):
 
 
 def manual_login(driver):
+    if HEADLESS:
+        raise RuntimeError(
+            f"Facebook session is missing or expired: {SESSION_FILE}. "
+            "Create the session interactively before enabling production posting."
+        )
     driver.get("https://www.facebook.com")
     time.sleep(3)
     print()
@@ -339,6 +330,8 @@ def manual_login(driver):
 
 
 def load_groups_from_excel():
+    if not os.path.exists(GROUPS_FILE):
+        return []
     wb = load_workbook(GROUPS_FILE)
     ws = wb.active
     groups = []
@@ -354,13 +347,13 @@ def load_groups_from_excel():
     return groups
 
 
-def get_already_posted():
+def get_already_posted(signal_id):
     try:
         wb = load_workbook(LOG_FILE)
         ws = wb.active
         posted = set()
         for row in ws.iter_rows(min_row=2, values_only=True):
-            if row and row[3] == "✅ Success":
+            if row and row[3] == "✅ Success" and len(row) > 5 and row[5] == signal_id:
                 posted.add(row[1])
         return posted
     except FileNotFoundError:
@@ -379,7 +372,7 @@ def init_log():
         ws.column_dimensions["C"].width = 20
         ws.column_dimensions["D"].width = 15
         ws.column_dimensions["E"].width = 35
-        headers = ["#", "Group URL", "Posted At", "Status", "Notes"]
+        headers = ["#", "Group URL", "Posted At", "Status", "Notes", "Signal ID"]
         hf = PatternFill("solid", start_color="1F3864")
         for c, h in enumerate(headers, 1):
             cell = ws.cell(row=1, column=c, value=h)
@@ -389,13 +382,13 @@ def init_log():
         wb.save(LOG_FILE)
 
 
-def log_result(row_num, url, status, notes=""):
+def log_result(row_num, url, status, signal_id, notes=""):
     wb = load_workbook(LOG_FILE)
     ws = wb.active
     next_row = ws.max_row + 1
     fill_color = "E2EFDA" if status == "✅ Success" else "FCE4D6"
     fill = PatternFill("solid", start_color=fill_color)
-    values = [row_num, url, datetime.now().strftime("%Y-%m-%d %H:%M"), status, notes]
+    values = [row_num, url, datetime.now().strftime("%Y-%m-%d %H:%M"), status, notes, signal_id]
     for c, v in enumerate(values, 1):
         cell = ws.cell(row=next_row, column=c, value=v)
         cell.font = Font(name="Arial", size=10)
@@ -495,12 +488,48 @@ def post_to_group(driver, url, message):
 #  MAIN
 # ─────────────────────────────────────────────
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--signal-file", default=None)
+    parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    return parser.parse_args()
+
+
+def preflight():
+    checks = {
+        "selenium": importlib.util.find_spec("selenium") is not None,
+        "groups_file": os.path.isfile(GROUPS_FILE),
+        "session_file": os.path.isfile(SESSION_FILE),
+        "chrome": any(
+            os.path.isfile(path)
+            for path in ("/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser")
+        ),
+    }
+    groups = load_groups_from_excel() if checks["groups_file"] else []
+    checks["groups_count"] = len(groups)
+    checks["ready"] = all(checks[k] for k in ("selenium", "groups_file", "session_file", "chrome")) and bool(groups)
+    print(json.dumps(checks, ensure_ascii=False))
+    return checks
+
+
 def main():
+    args = parse_args()
+    checks = preflight()
+    if args.preflight:
+        return 0 if checks["ready"] else 2
+    if not checks["ready"] and not args.dry_run:
+        missing = [k for k in ("selenium", "groups_file", "session_file", "chrome") if not checks[k]]
+        if not checks["groups_count"]:
+            missing.append("configured_groups")
+        raise RuntimeError(f"Facebook poster is not ready: {', '.join(missing)}")
+
     print("\n🚀 Facebook Group Auto Poster — Script 2 (Signal-Driven)")
     print("=" * 55)
 
     # Load live signal and build dynamic templates
-    sig = load_signal()
+    sig = load_signal(args.signal_file)
+    signal_id = str(sig.get("signal_id") or "legacy")
     TEMPLATES = build_templates(sig)
 
     print(f"\n📊 Signal: {sig['symbol']} {sig['direction']} | Entry: {sig['entry']} | SL: {sig['sl']}")
@@ -508,10 +537,9 @@ def main():
 
     groups = load_groups_from_excel()
     if not groups:
-        print(f"[!] No groups found in {GROUPS_FILE}. Run Script 1 first.")
-        return
+        raise RuntimeError(f"No Facebook groups found in {GROUPS_FILE}")
 
-    already_posted = get_already_posted()
+    already_posted = get_already_posted(signal_id)
     pending = [g for g in groups if g["url"] not in already_posted]
 
     print(f"[i] Total groups  : {len(groups)}")
@@ -525,6 +553,14 @@ def main():
 
     batch = pending[:BATCH_SIZE]
     init_log()
+
+    if args.dry_run:
+        for group in batch:
+            lang = group["lang"]
+            tmpl = group["tmpl"]
+            message = TEMPLATES.get(lang, TEMPLATES["English"]).get(tmpl, TEMPLATES["English"]["1"])
+            print(f"[DRY RUN] {group['url']} | {lang} #{tmpl} | {len(message)} chars")
+        return 0
 
     driver = build_driver()
     try:
@@ -547,11 +583,11 @@ def main():
 
             if ok:
                 print(f"         ✅ Success")
-                log_result(group["num"], group["url"], "✅ Success", notes)
+                log_result(group["num"], group["url"], "✅ Success", signal_id, notes)
                 success_count += 1
             else:
                 print(f"         ❌ Failed: {notes}")
-                log_result(group["num"], group["url"], "❌ Failed", notes)
+                log_result(group["num"], group["url"], "❌ Failed", signal_id, notes)
                 fail_count += 1
 
             if i < len(batch):
@@ -570,4 +606,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--preflight" in sys.argv:
+        raise SystemExit(main())
+    os.makedirs(os.path.dirname(os.path.abspath(LOCK_FILE)), exist_ok=True)
+    with open(LOCK_FILE, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        raise SystemExit(main())
