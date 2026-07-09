@@ -6,6 +6,7 @@ alwaysApply: true
 # Git Versioning Policy
 
 Every code change MUST be version-controlled before it is considered done or deployed.
+**No exceptions** — commit and push are mandatory for every update, not optional follow-ups.
 
 ## After Any Code Change
 
