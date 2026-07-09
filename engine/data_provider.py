@@ -21,8 +21,8 @@ INTERVAL_MAP = {
 }
 
 OUTPUT_SIZE = {
-    # Covers the full 72h simulation window plus a safety margin.
-    "M5": 1200,
+    # Twelve Data's current plan caps a single response at 500 rows.
+    "M5": 500,
     "M15": 300,
     "H1": 300,
     "D1": 250,
