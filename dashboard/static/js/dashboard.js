@@ -213,7 +213,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.22", full: "2.22.0", major: 2, minor: 22, patch: 0 };
+  let dashboardVersion = { label: "v2.23", full: "2.23.0", major: 2, minor: 23, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -4809,6 +4809,11 @@
   function startStreams() {
     stopStreams();
     switchPage(activePage, { revalidate: false });
+    if (activePage === "facebook") {
+      fetchFacebook({ force: true }).catch((error) => {
+        toast(error.message || "بارگذاری اطلاعات فیسبوک ناموفق بود", "error");
+      });
+    }
 
     fetchBootstrap().catch(() => {
       fetchStatus({ force: true }).catch(() => {});
