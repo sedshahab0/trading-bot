@@ -2114,6 +2114,7 @@ def _facebook_env() -> dict[str, str]:
         "FACEBOOK_POST_LOG": str(FACEBOOK_POST_LOG),
         "SIGNAL_QUEUE_FILE": str(SIGNAL_QUEUE),
         "FACEBOOK_HEADLESS": "1",
+        "FACEBOOK_DEBUG_DIR": str(FACEBOOK_DIR / "debug"),
     })
     return env
 
@@ -3004,6 +3005,8 @@ def api_facebook_job_send(signal_id: str):
     readiness = _facebook_preflight()
     if not readiness.get("ready"):
         return jsonify({"error": "فیسبوک هنوز آماده ارسال نیست", "status": readiness}), 409
+    payload = request.get_json(silent=True) or {}
+    force = bool(payload.get("force"))
     stdout_path = FACEBOOK_DIR / "poster_stdout.log"
     stderr_path = FACEBOOK_DIR / "poster_stderr.log"
     status_file = FACEBOOK_STATUS_DIR / f"{secure_filename(signal_id)}.json"
@@ -3019,6 +3022,7 @@ def api_facebook_job_send(signal_id: str):
                 str(VENV_PYTHON), str(FACEBOOK_POSTER),
                 "--signal-file", str(job),
                 "--status-file", str(status_file),
+                *(["--force"] if force else []),
             ],
             cwd=str(FACEBOOK_POSTER.parent),
             env=_facebook_env(),

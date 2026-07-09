@@ -4878,6 +4878,7 @@ body.auth-pending .app-shell {
 }
 .facebook-publish-progress.hidden { display: none; }
 .facebook-publish-progress[data-state="completed"] { border-color: rgba(99,255,208,.35); background: linear-gradient(145deg, rgba(99,255,208,.1), rgba(6,12,23,.72)); }
+.facebook-publish-progress[data-state="already_sent"] { border-color: rgba(251,191,36,.35); background: linear-gradient(145deg, rgba(251,191,36,.1), rgba(6,12,23,.72)); }
 .facebook-publish-progress[data-state="failed"],
 .facebook-publish-progress[data-state="partial"] { border-color: rgba(248,113,113,.34); background: linear-gradient(145deg, rgba(248,113,113,.08), rgba(6,12,23,.72)); }
 .facebook-publish-progress-head { display: flex; align-items: flex-start; gap: .8rem; }
@@ -4889,6 +4890,7 @@ body.auth-pending .app-shell {
   border-radius: 50%; border: 1px solid rgba(126,175,255,.28); background: rgba(255,255,255,.04);
 }
 .facebook-publish-state-icon[data-state="completed"] { border-color: rgba(99,255,208,.4); background: rgba(99,255,208,.12); }
+.facebook-publish-state-icon[data-state="already_sent"] { border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.12); }
 .facebook-publish-state-icon[data-state="failed"],
 .facebook-publish-state-icon[data-state="partial"] { border-color: rgba(248,113,113,.4); background: rgba(248,113,113,.1); }
 .facebook-publish-state-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
@@ -4896,6 +4898,8 @@ body.auth-pending .app-shell {
 .facebook-publish-error { color: #ff9f9f; }
 .facebook-publish-state-icon[data-state="completed"] .facebook-publish-spinner { display: none; }
 .facebook-publish-state-icon[data-state="completed"] .facebook-publish-check { display: block; }
+.facebook-publish-state-icon[data-state="already_sent"] .facebook-publish-spinner { display: none; }
+.facebook-publish-state-icon[data-state="already_sent"] .facebook-publish-check { display: block; color: #ffd666; }
 .facebook-publish-state-icon[data-state="failed"] .facebook-publish-spinner,
 .facebook-publish-state-icon[data-state="partial"] .facebook-publish-spinner { display: none; }
 .facebook-publish-state-icon[data-state="failed"] .facebook-publish-error,

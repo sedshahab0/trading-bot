@@ -4726,12 +4726,13 @@
 
   function renderFacebookPublishStatus(status = {}) {
     const state = status.state || "queued";
-    const terminal = ["completed", "partial", "failed"].includes(state);
+    const terminal = ["completed", "partial", "failed", "already_sent"].includes(state);
     const titles = {
       queued: "در صف ارسال",
       running: "آماده‌سازی مرورگر",
       sending: "در حال ارسال به گروه",
       completed: "ارسال کامل شد",
+      already_sent: "قبلاً ارسال شده",
       partial: "ارسال با خطای جزئی تمام شد",
       failed: "ارسال ناموفق بود",
     };
@@ -4741,6 +4742,7 @@
     const failed = Number(status.failed || 0);
     let percent = 0;
     if (state === "completed") percent = 100;
+    else if (state === "already_sent") percent = 100;
     else if (total > 0) percent = Math.min(100, Math.round((current / total) * 100));
     else if (terminal && success + failed > 0) percent = Math.min(100, Math.round((success / (success + failed)) * 100));
     $("#fbPublishProgress")?.classList.remove("hidden");
@@ -4765,8 +4767,10 @@
     }
     const button = $("#btnFbApproveSend");
     if (button) {
-      button.disabled = !terminal || state === "completed";
-      button.textContent = terminal ? (state === "completed" ? "ارسال انجام شد" : "تلاش دوباره") : "ارسال در حال انجام است";
+      button.disabled = !terminal;
+      button.textContent = terminal
+        ? (state === "completed" ? "ارسال مجدد" : state === "already_sent" ? "ارسال مجدد" : "تلاش دوباره")
+        : "ارسال در حال انجام است";
     }
     return terminal;
   }
@@ -4780,7 +4784,14 @@
         invalidateCache("facebook");
         await fetchFacebook({ force: true });
         await fetchFacebookHistory(1);
-        toast(status.state === "completed" ? "پیام با موفقیت به گروه ارسال شد" : "ارسال فیسبوک با خطا تمام شد", status.state === "completed" ? "success" : "error");
+        const toastMap = {
+          completed: ["پیام با موفقیت به گروه ارسال شد", "success"],
+          already_sent: ["این سیگنال قبلاً برای این گروه ثبت شده است", "error"],
+          partial: ["ارسال فیسبوک با خطای جزئی تمام شد", "error"],
+          failed: ["ارسال فیسبوک ناموفق بود", "error"],
+        };
+        const [text, kind] = toastMap[status.state] || toastMap.failed;
+        toast(text, kind);
         return;
       }
     } catch (error) {
@@ -5007,12 +5018,21 @@
   });
 
   $("#btnFbApproveSend")?.addEventListener("click", async () => {
-    if (!facebookPreviewSignalId || !confirm("این پیام به تمام گروه‌های فعال ارسال شود؟")) return;
+    if (!facebookPreviewSignalId) return;
+    const progressState = $("#fbPublishProgress")?.getAttribute("data-state") || "";
+    const force = ["completed", "already_sent", "partial", "failed"].includes(progressState);
+    const confirmText = force
+      ? "این سیگنال دوباره به گروه‌های فعال ارسال شود؟ (حالت ارسال مجدد)"
+      : "این پیام به تمام گروه‌های فعال ارسال شود؟";
+    if (!confirm(confirmText)) return;
     const button = $("#btnFbApproveSend");
     try {
       button?.classList.add("loading");
       if (button) button.disabled = true;
-      const result = await api(`/api/facebook/jobs/${facebookPreviewSignalId}/send`, { method: "POST" });
+      const result = await api(`/api/facebook/jobs/${facebookPreviewSignalId}/send`, {
+        method: "POST",
+        body: JSON.stringify({ force }),
+      });
       renderFacebookPublishStatus(result.status || { state: "queued" });
       toast("ارسال آغاز شد؛ وضعیت زنده در همین پنجره نمایش داده می‌شود");
       pollFacebookPublishStatus(facebookPreviewSignalId);

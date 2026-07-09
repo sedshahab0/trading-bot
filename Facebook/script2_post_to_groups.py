@@ -31,6 +31,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
@@ -43,6 +44,7 @@ QUEUE_FILE   = os.environ.get("SIGNAL_QUEUE_FILE", "signal_queue.json")
 SESSION_FILE = os.environ.get("FACEBOOK_SESSION_FILE", "fb_session.json")
 LOCK_FILE    = os.environ.get("FACEBOOK_POSTER_LOCK", "/var/lib/trading-bot/facebook-poster.lock")
 HEADLESS     = os.environ.get("FACEBOOK_HEADLESS", "1") == "1"
+DEBUG_DIR    = os.environ.get("FACEBOOK_DEBUG_DIR", "/var/lib/trading-bot/facebook/debug")
 
 # ─────────────────────────────────────────────
 #  SAFETY SETTINGS
@@ -398,19 +400,143 @@ def log_result(row_num, url, status, signal_id, notes=""):
     wb.save(LOG_FILE)
 
 
-def post_to_group(driver, url, message):
+def log_step(message):
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{stamp}] {message}", flush=True)
+
+
+def save_debug_artifact(driver, label):
     try:
+        os.makedirs(DEBUG_DIR, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in label)[:60]
+        png_path = os.path.join(DEBUG_DIR, f"{stamp}-{safe}.png")
+        html_path = os.path.join(DEBUG_DIR, f"{stamp}-{safe}.html")
+        driver.save_screenshot(png_path)
+        with open(html_path, "w", encoding="utf-8") as handle:
+            handle.write(driver.page_source)
+        log_step(f"Saved debug artifacts: {png_path}")
+        return png_path
+    except Exception as exc:
+        log_step(f"Could not save debug artifact: {exc}")
+        return ""
+
+
+def normalize_snippet(message, limit=80):
+    text = "".join(ch for ch in message if ch.isalnum() or ch.isspace())
+    return " ".join(text.split())[:limit]
+
+
+def is_logged_in(driver):
+    url = (driver.current_url or "").lower()
+    if "login" in url or "checkpoint" in url:
+        return False
+    page = driver.page_source.lower()
+    return "logout" in page or "log out" in page or 'aria-label="your profile"' in page
+
+
+def fill_composer_text(driver, element, message):
+    driver.execute_script(
+        """
+        const el = arguments[0];
+        const text = arguments[1];
+        el.focus();
+        if (document.execCommand) {
+            document.execCommand('selectAll', false, null);
+            document.execCommand('insertText', false, text);
+        } else {
+            el.textContent = text;
+            el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        }
+        """,
+        element,
+        message,
+    )
+    time.sleep(1.2)
+    current = driver.execute_script(
+        "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
+        element,
+    )
+    min_chars = max(24, int(len(message) * 0.2))
+    if len(current) >= min_chars:
+        return current
+
+    log_step("Composer insertText was short; retrying with ActionChains")
+    element.click()
+    ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
+    time.sleep(0.2)
+    for line in message.split("\n"):
+        if line:
+            ActionChains(driver).send_keys(line).perform()
+        ActionChains(driver).key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
+    time.sleep(1.2)
+    return driver.execute_script(
+        "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
+        element,
+    )
+
+
+def verify_post_submitted(driver, message):
+    time.sleep(3)
+    url = (driver.current_url or "").lower()
+    if "login" in url or "checkpoint" in url:
+        return False, "Facebook redirected to login/checkpoint"
+
+    body_text = ""
+    try:
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+    except Exception:
+        pass
+
+    for err in ("Something went wrong", "Couldn't post", "Try again later", "You can't post"):
+        if err.lower() in body_text.lower():
+            return False, f"Facebook error: {err}"
+
+    if "pending" in body_text.lower() and "approval" in body_text.lower():
+        return True, "Post submitted (pending admin approval)"
+
+    snippet = normalize_snippet(message, 60)
+    if snippet and snippet in body_text:
+        return True, "Post text visible on group page"
+
+    visible_boxes = driver.find_elements(By.XPATH, "//div[@contenteditable='true' and @role='textbox']")
+    for box in visible_boxes:
+        try:
+            if not box.is_displayed():
+                continue
+            draft = driver.execute_script(
+                "return (arguments[0].innerText || arguments[0].textContent || '').trim();",
+                box,
+            )
+            if len(draft) >= max(24, int(len(message) * 0.2)):
+                return False, "Composer still contains draft text after Post click"
+        except Exception:
+            continue
+
+    return False, "Could not verify that the post appeared in the group feed"
+
+
+def post_to_group(driver, url, message):
+    label = url.rstrip("/").split("/")[-1]
+    try:
+        log_step(f"Opening group page: {url}")
         driver.get(url)
         time.sleep(random.uniform(4, 6))
+
+        if not is_logged_in(driver):
+            shot = save_debug_artifact(driver, f"{label}-not-logged-in")
+            return False, f"Facebook session is not logged in ({shot or 'no screenshot'})"
 
         post_box = None
         for sel in [
             "//div[@role='button' and contains(., 'Write something')]",
             "//div[@aria-label='Write something...']",
             "//span[contains(text(), 'Write something')]",
+            "//div[@role='button' and contains(., 'Create a public post')]",
+            "//span[contains(text(), 'Create a public post')]",
         ]:
             try:
-                post_box = WebDriverWait(driver, 6).until(
+                post_box = WebDriverWait(driver, 8).until(
                     EC.element_to_be_clickable((By.XPATH, sel))
                 )
                 post_box.click()
@@ -419,7 +545,8 @@ def post_to_group(driver, url, message):
                 continue
 
         if not post_box:
-            return False, "Could not find post box"
+            shot = save_debug_artifact(driver, f"{label}-no-compose-entry")
+            return False, f"Could not find post composer entry ({shot or 'no screenshot'})"
 
         time.sleep(random.uniform(1.5, 2.5))
 
@@ -428,41 +555,37 @@ def post_to_group(driver, url, message):
             "//div[@contenteditable='true' and @role='textbox']",
             "//div[@aria-label='Write something...' and @contenteditable='true']",
             "//div[@data-lexical-editor='true']",
+            "//div[@contenteditable='true']",
         ]:
             try:
-                text_area = WebDriverWait(driver, 5).until(
+                text_area = WebDriverWait(driver, 8).until(
                     EC.presence_of_element_located((By.XPATH, sel))
                 )
-                text_area.click()
-                break
+                if text_area.is_displayed():
+                    text_area.click()
+                    break
+                text_area = None
             except Exception:
                 continue
 
         if not text_area:
-            return False, "Could not find text area"
+            shot = save_debug_artifact(driver, f"{label}-no-text-area")
+            return False, f"Could not find composer text area ({shot or 'no screenshot'})"
 
-        time.sleep(1)
-
-        driver.execute_script(
-            """
-            const el = arguments[0];
-            el.focus();
-            const dt = new DataTransfer();
-            dt.setData('text/plain', arguments[1]);
-            el.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true}));
-            """,
-            text_area, message,
-        )
-        time.sleep(2)
-
-        current_text = driver.execute_script("return arguments[0].innerText;", text_area)
-        if not current_text.strip():
-            text_area.send_keys(message)
-            time.sleep(2)
+        current_text = fill_composer_text(driver, text_area, message)
+        min_chars = max(24, int(len(message) * 0.2))
+        log_step(f"Composer length before post: {len(current_text)} (min required {min_chars})")
+        if len(current_text) < min_chars:
+            shot = save_debug_artifact(driver, f"{label}-empty-composer")
+            return False, (
+                f"Composer text was not filled ({len(current_text)} chars). "
+                f"Debug: {shot or 'no screenshot'}"
+            )
 
         post_btn = None
         for sel in [
             "//div[@aria-label='Post' and @role='button']",
+            "//div[@aria-label='Post']",
             "//button[contains(text(), 'Post')]",
             "//div[@role='button']//span[text()='Post']",
         ]:
@@ -475,15 +598,24 @@ def post_to_group(driver, url, message):
                 continue
 
         if not post_btn:
-            return False, "Could not find Post button"
+            shot = save_debug_artifact(driver, f"{label}-no-post-button")
+            return False, f"Could not find Post button ({shot or 'no screenshot'})"
 
         time.sleep(random.uniform(0.5, 1.5))
+        log_step("Clicking Post")
         post_btn.click()
-        time.sleep(4)
-        return True, "Posted successfully"
+        time.sleep(2)
+
+        ok, notes = verify_post_submitted(driver, message)
+        if not ok:
+            shot = save_debug_artifact(driver, f"{label}-verify-failed")
+            return False, f"{notes}. Debug: {shot or 'no screenshot'}"
+        log_step(f"Verified post submission: {notes}")
+        return True, notes
 
     except Exception as e:
-        return False, str(e)[:120]
+        shot = save_debug_artifact(driver, f"{label}-exception")
+        return False, f"{str(e)[:100]}. Debug: {shot or 'no screenshot'}"
 
 
 # ─────────────────────────────────────────────
@@ -498,6 +630,7 @@ def parse_args():
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--test-session", action="store_true")
     parser.add_argument("--status-file", default=None)
+    parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
 
@@ -600,7 +733,7 @@ def main():
     if not groups:
         raise RuntimeError(f"No Facebook groups found in {GROUPS_FILE}")
 
-    already_posted = get_already_posted(signal_id)
+    already_posted = set() if args.force else get_already_posted(signal_id)
     pending = [g for g in groups if g["url"] not in already_posted]
 
     print(f"[i] Total groups  : {len(groups)}")
@@ -609,11 +742,23 @@ def main():
     print(f"[i] This batch    : {min(BATCH_SIZE, len(pending))}\n")
 
     if not pending:
-        print("✅ All groups posted! Reset post_log.xlsx to start a new campaign.")
+        if args.force:
+            pending = groups[:]
+            print("[!] Force mode enabled — ignoring previous success log for this signal")
+        else:
+            print("✅ All groups posted! Reset post_log.xlsx to start a new campaign.")
+            write_publish_status(
+                args.status_file, "already_sent",
+                message="این سیگنال قبلاً به همه گروه‌های فعال ارسال شده است",
+                total=len(groups), success=len(already_posted), failed=0,
+            )
+            return
+
+    if not pending:
         write_publish_status(
-            args.status_file, "completed",
-            message="این سیگنال قبلاً به همه گروه‌های فعال ارسال شده است",
-            total=len(groups), success=len(already_posted), failed=0,
+            args.status_file, "failed",
+            message="گروه فعالی برای ارسال پیدا نشد",
+            total=0, success=0, failed=0,
         )
         return
 
@@ -664,7 +809,7 @@ def main():
             ok, notes = post_to_group(driver, group["url"], message)
 
             if ok:
-                print(f"         ✅ Success")
+                print(f"         ✅ Success — {notes}")
                 log_result(group["num"], group["url"], "✅ Success", signal_id, notes)
                 success_count += 1
             else:
