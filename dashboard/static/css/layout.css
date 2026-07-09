@@ -4140,6 +4140,13 @@ body.auth-pending .app-shell {
 
 .btn-save-settings { min-width: 160px; min-height: 44px; }
 
+.settings-save-bar .hint {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.55;
+}
+
 .settings-debug-hint { margin-top: 0.75rem; margin-bottom: 0; }
 
 /* Symbol modal — checkbox track list */
@@ -4294,14 +4301,39 @@ body.auth-pending .app-shell {
     margin-top: 0.05rem;
   }
 
+  .settings-audit-panel {
+    margin-bottom: 0.75rem;
+  }
+
+  .settings-audit-panel .audit-log {
+    max-height: 200px;
+  }
+
+  .settings-audit-panel .audit-log:has(.panel-empty) {
+    max-height: none;
+  }
+
   .settings-save-bar {
-    padding: 0.9rem 0.95rem;
-    bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    position: static;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+    margin-top: 0.75rem;
+    margin-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    padding: 1rem 0.95rem;
+    box-shadow: none;
+  }
+
+  .settings-save-bar .hint {
+    text-align: center;
   }
 
   .settings-symbols-top .btn-compact { width: 100%; justify-content: center; }
-  .settings-save-bar { flex-direction: column; align-items: stretch; }
-  .btn-save-settings { width: 100%; }
+  .btn-save-settings { width: 100%; min-height: 48px; flex-shrink: 0; }
+
+  #page-settings {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
   .sym-section-head { flex-direction: column; align-items: flex-start; }
   .sym-bulk-actions { width: 100%; justify-content: flex-start; }
 }
