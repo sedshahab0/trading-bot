@@ -6,6 +6,9 @@ VENV_DIR="${VENV_DIR:-${BOT_ROOT}/venv}"
 REQ_DASH="${REQ_DASH:-${BOT_ROOT}/dashboard/requirements.txt}"
 REQ_ENGINE="${REQ_ENGINE:-${BOT_ROOT}/requirements-engine.txt}"
 LOCK_FILE="${LOCK_FILE:-/tmp/trading-bot-runtime.lock}"
+DATA_ROOT="${BOT_DATA_ROOT:-/var/lib/trading-bot}"
+
+mkdir -p "${DATA_ROOT}"
 
 is_healthy() {
   [[ -x "${VENV_DIR}/bin/python3" ]] || return 1

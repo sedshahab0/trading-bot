@@ -208,7 +208,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.16", full: "2.16.0", major: 2, minor: 16, patch: 0 };
+  let dashboardVersion = { label: "v2.17", full: "2.17.0", major: 2, minor: 17, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -1058,8 +1058,10 @@
 
     const cfg = data.config || {};
     if ($("#cfgSymbols")) $("#cfgSymbols").value = cfg.symbols || "";
-    if ($("#cfgMinScore")) $("#cfgMinScore").value = cfg.min_score || "5";
-    if ($("#cfgPoll")) $("#cfgPoll").value = cfg.poll_seconds || "30";
+    if (!settingsDraft.active) {
+      if ($("#cfgMinScore")) $("#cfgMinScore").value = cfg.min_score || "5";
+      if ($("#cfgPoll")) $("#cfgPoll").value = cfg.poll_seconds || "30";
+    }
     if ($("#cfgFacebook")) $("#cfgFacebook").checked = cfg.facebook_enable;
     if ($("#cfgDebug")) $("#cfgDebug").checked = cfg.engine_debug;
     if ($("#debugStatus")) $("#debugStatus").textContent = cfg.engine_debug ? "روشن" : "خاموش";
@@ -1084,10 +1086,9 @@
     const minScore = cfg.min_score || "5";
     const poll = cfg.poll_seconds || "30";
 
-    const live = getLiveSettingsValue();
-    const keepDraft = settingsDraft.active && (live.min_score !== minScore || live.poll_seconds !== poll);
-    const scoreValue = keepDraft ? live.min_score : minScore;
-    const pollValue = keepDraft ? live.poll_seconds : poll;
+    const keepDraft = settingsDraft.active;
+    const scoreValue = keepDraft && settingsDraft.minScore != null ? settingsDraft.minScore : minScore;
+    const pollValue = keepDraft && settingsDraft.pollSeconds != null ? settingsDraft.pollSeconds : poll;
 
     applySettingsFieldValue("#cfgMinScoreRange", "#cfgMinScore", "#settingsScoreDisplay", scoreValue);
     applySettingsFieldValue("#cfgPollRange", "#cfgPoll", "#settingsPollDisplay", pollValue, "s");
@@ -4345,6 +4346,7 @@
             engine_debug: (result.config.ENGINE_DEBUG ?? (formCfg.engine_debug ? "1" : "0")) === "1",
           }
         : formCfg;
+      clearSettingsDraft();
       lastStatusFingerprint = null;
       invalidateCache("status", "bootstrap");
       applyConfigToDashboard(savedCfg);

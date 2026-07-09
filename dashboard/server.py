@@ -41,13 +41,16 @@ except ImportError:
 
 # ── Paths ─────────────────────────────────────────────────────────────
 BOT_ROOT = Path(os.environ.get("BOT_ROOT", "/opt/trading-bot"))
+DATA_ROOT = Path(os.environ.get("BOT_DATA_ROOT", str(BOT_ROOT)))
 ENV_FILE = Path(os.environ.get("ENV_FILE", str(BOT_ROOT / ".env")))
 STATE_FILE = BOT_ROOT / "engine_state.json"
-SIGNAL_LOG = BOT_ROOT / "Facebook" / "signal_log.txt"
-SIGNAL_QUEUE = BOT_ROOT / "Facebook" / "signal_queue.json"
-TELEGRAM_DELIVERY_LOG = BOT_ROOT / "Facebook" / "telegram_delivery.log"
-OUTCOMES_LOG = BOT_ROOT / "Facebook" / "signal_outcomes.log"
-AUDIT_LOG = BOT_ROOT / "Facebook" / "dashboard_audit.log"
+SIGNAL_LOG = Path(os.environ.get("SIGNAL_LOG_FILE", str(DATA_ROOT / "signal_log.txt")))
+SIGNAL_QUEUE = Path(os.environ.get("SIGNAL_QUEUE_FILE", str(DATA_ROOT / "signal_queue.json")))
+TELEGRAM_DELIVERY_LOG = Path(
+    os.environ.get("TELEGRAM_DELIVERY_LOG", str(DATA_ROOT / "telegram_delivery.log"))
+)
+OUTCOMES_LOG = Path(os.environ.get("SIGNAL_OUTCOMES_LOG", str(DATA_ROOT / "signal_outcomes.log")))
+AUDIT_LOG = Path(os.environ.get("DASHBOARD_AUDIT_LOG", str(DATA_ROOT / "dashboard_audit.log")))
 STRATEGY_DIR = BOT_ROOT / "strategy"
 STRATEGY_UPLOADS = STRATEGY_DIR / "uploads"
 STRATEGY_ACTIVE = STRATEGY_DIR / "active.mq5"
@@ -176,7 +179,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 16, "patch": 0, "label": "v2.16", "released": "", "history": []}
+    default = {"major": 2, "minor": 17, "patch": 0, "label": "v2.17", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default

@@ -21,8 +21,8 @@ import json, os, subprocess, threading
 from datetime import datetime
 
 app        = Flask(__name__)
-QUEUE_FILE = "signal_queue.json"
-LOG_FILE   = "signal_log.txt"
+QUEUE_FILE = os.environ.get("SIGNAL_QUEUE_FILE", "signal_queue.json")
+LOG_FILE   = os.environ.get("SIGNAL_LOG_FILE", "signal_log.txt")
 SCRIPT2    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "script2_post_to_groups.py")
 CERT_FILE  = "server.crt"
 KEY_FILE   = "server.key"
@@ -33,10 +33,12 @@ def log(msg):
     ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line)
+    os.makedirs(os.path.dirname(os.path.abspath(LOG_FILE)), exist_ok=True)
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
 def save_signal(sig):
+    os.makedirs(os.path.dirname(os.path.abspath(QUEUE_FILE)), exist_ok=True)
     with open(QUEUE_FILE, "w", encoding="utf-8") as f:
         json.dump(sig, f, ensure_ascii=False, indent=2)
     log(f"Signal saved → {sig}")

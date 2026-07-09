@@ -9,6 +9,8 @@ module.exports = {
       env: {
         BEHIND_PROXY: "1",
         VENV_PYTHON: "/opt/trading-bot/venv/bin/python3",
+        SIGNAL_LOG_FILE: "/var/lib/trading-bot/signal_log.txt",
+        SIGNAL_QUEUE_FILE: "/var/lib/trading-bot/signal_queue.json",
       },
       autorestart: true,
       max_restarts: 20,
@@ -33,6 +35,7 @@ module.exports = {
       interpreter: "none",
       env: {
         BOT_ROOT: "/opt/trading-bot",
+        BOT_DATA_ROOT: "/var/lib/trading-bot",
         ENV_FILE: "/opt/trading-bot/.env",
         DASHBOARD_USERNAME: "admin",
         DASHBOARD_PASSWORD: "tradingbot2026",
