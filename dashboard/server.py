@@ -166,7 +166,7 @@ def _dashboard_username() -> str:
 
 
 def _dashboard_password() -> str:
-    return os.environ.get("DASHBOARD_PASSWORD", "tradingbot2026")
+    return os.environ.get("DASHBOARD_PASSWORD", "")
 
 
 _GIT_REVISION_CACHE: dict[str, str | None] = {"rev": None}
@@ -191,7 +191,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 26, "patch": 0, "label": "v2.26", "released": "", "history": []}
+    default = {"major": 2, "minor": 27, "patch": 0, "label": "v2.27", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default

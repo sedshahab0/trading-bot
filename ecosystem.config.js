@@ -39,12 +39,11 @@ module.exports = {
       script: "/opt/trading-bot/deploy/runtime/gunicorn.sh",
       args: "-w 1 --threads 4 -b 0.0.0.0:8080 --timeout 120 server:app",
       interpreter: "none",
+      env_file: "/opt/trading-bot/.env",
       env: {
         BOT_ROOT: "/opt/trading-bot",
         BOT_DATA_ROOT: "/var/lib/trading-bot",
         ENV_FILE: "/opt/trading-bot/.env",
-        DASHBOARD_USERNAME: "admin",
-        DASHBOARD_PASSWORD: "tradingbot2026",
         DEPLOY_BRANCH: "main",
         DASHBOARD_PORT: "8080",
         BEHIND_PROXY: "1",
