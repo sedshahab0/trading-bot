@@ -37,7 +37,8 @@ rsync -avz -e "ssh ${SSH_OPTS[*]}" \
 ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" bash -s <<EOF
 set -euo pipefail
 nginx -t && systemctl reload nginx
-pm2 restart dashboard
+cd ${PATH_ON_SERVER}
+pm2 startOrReload ecosystem.config.js --update-env
 PAUSED=\$(grep -E '^NOTIFICATIONS_PAUSED=' ${PATH_ON_SERVER}/.env 2>/dev/null | cut -d= -f2 || echo 0)
 if [[ "\$PAUSED" == "1" ]]; then
   pm2 stop signal-engine 2>/dev/null || true

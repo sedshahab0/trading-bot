@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "signal-server",
       cwd: "/opt/trading-bot/Facebook",
-      script: "/opt/trading-bot/venv/bin/python3",
+      script: "/opt/trading-bot/deploy/runtime/python3.sh",
       args: "signal_server.py",
       interpreter: "none",
       env: {
@@ -17,7 +17,7 @@ module.exports = {
     {
       name: "signal-engine",
       cwd: "/opt/trading-bot",
-      script: "/opt/trading-bot/venv/bin/python3",
+      script: "/opt/trading-bot/deploy/runtime/python3.sh",
       args: "run_engine.py",
       interpreter: "none",
       env_file: "/opt/trading-bot/.env",
@@ -28,7 +28,7 @@ module.exports = {
     {
       name: "dashboard",
       cwd: "/opt/trading-bot/dashboard",
-      script: "/opt/trading-bot/venv/bin/gunicorn",
+      script: "/opt/trading-bot/deploy/runtime/gunicorn.sh",
       args: "-w 1 --threads 4 -b 0.0.0.0:8080 --timeout 120 server:app",
       interpreter: "none",
       env: {

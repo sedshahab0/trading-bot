@@ -154,9 +154,31 @@ def _dashboard_password() -> str:
     return os.environ.get("DASHBOARD_PASSWORD", "tradingbot2026")
 
 
+_GIT_REVISION_CACHE: dict[str, str | None] = {"rev": None}
+
+
+def _git_revision() -> str | None:
+    cached = _GIT_REVISION_CACHE.get("rev")
+    if cached is not None:
+        return cached
+    repo_root = Path(__file__).resolve().parents[1]
+    try:
+        rev = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        _GIT_REVISION_CACHE["rev"] = rev or None
+    except Exception:
+        _GIT_REVISION_CACHE["rev"] = None
+    return _GIT_REVISION_CACHE["rev"]
+
+
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 15, "patch": 0, "label": "v2.15", "released": "", "history": []}
+    default = {"major": 2, "minor": 16, "patch": 0, "label": "v2.16", "released": "", "history": []}
     if not VERSION_FILE.exists():
+        default["revision"] = _git_revision()
         return default
     try:
         data = json.loads(VERSION_FILE.read_text())
@@ -172,8 +194,10 @@ def _dashboard_version() -> dict:
             "full": f"{major}.{minor}.{patch}",
             "released": data.get("released", ""),
             "history": data.get("history", []),
+            "revision": _git_revision(),
         }
     except (json.JSONDecodeError, TypeError, ValueError):
+        default["revision"] = _git_revision()
         return default
 
 

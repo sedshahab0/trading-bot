@@ -36,7 +36,7 @@ gitx checkout "${DEPLOY_BRANCH}"
 gitx reset --hard "origin/${DEPLOY_BRANCH}"
 
 if command -v pm2 >/dev/null; then
-  pm2 restart dashboard
+  pm2 startOrReload ecosystem.config.js --update-env
   pm2 save
 fi
 

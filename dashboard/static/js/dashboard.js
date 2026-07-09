@@ -208,7 +208,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.15", full: "2.15.0", major: 2, minor: 15, patch: 0 };
+  let dashboardVersion = { label: "v2.16", full: "2.16.0", major: 2, minor: 16, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2398,22 +2398,27 @@
   function applyVersion(info) {
     if (!info) return;
     const nextFull = info.full || `${info.major}.${info.minor}.${info.patch || 0}`;
-    const storedFull = safeLocalStorageGet("tc:build-version", "");
-    if (storedFull && storedFull !== nextFull) {
+    const nextBuild = info.revision || info.build || "nogit";
+    const nextKey = `${nextFull}@${nextBuild}`;
+    const storedKey = safeLocalStorageGet("tc:build-version", "");
+    if (storedKey && storedKey !== nextKey) {
       clearDashboardCache();
-      safeLocalStorageSet("tc:build-version", nextFull);
+      safeLocalStorageSet("tc:build-version", nextKey);
       location.reload();
       return;
     }
     dashboardVersion = {
       label: info.label || `v${info.major}.${info.minor}`,
       full: nextFull,
+      revision: nextBuild,
       major: info.major,
       minor: info.minor,
       patch: info.patch || 0,
     };
     const label = dashboardVersion.label;
-    const full = `v${dashboardVersion.full}`;
+    const full = dashboardVersion.revision && dashboardVersion.revision !== "nogit"
+      ? `v${dashboardVersion.full} · ${dashboardVersion.revision}`
+      : `v${dashboardVersion.full}`;
     if ($("#sidebarVersion")) $("#sidebarVersion").textContent = label;
     if ($("#sidebarVersionFull")) {
       $("#sidebarVersionFull").textContent = full;
@@ -2421,7 +2426,7 @@
     }
     if ($("#loginVersion")) $("#loginVersion").textContent = label;
     document.title = `TradeChi ${label} — Dashboard`;
-    safeLocalStorageSet("tc:build-version", nextFull);
+    safeLocalStorageSet("tc:build-version", nextKey);
   }
 
   window.addEventListener("error", (event) => {
