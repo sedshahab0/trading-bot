@@ -134,14 +134,18 @@ def status():
 # ── Main ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    generate_cert()
+    behind_proxy = os.environ.get("BEHIND_PROXY") == "1"
+    if not behind_proxy:
+        generate_cert()
+    else:
+        log("Running behind nginx -> skipping local certificate generation")
     log("=" * 52)
     log("Signal Server started → https://agennews.store")
     log("MT5 whitelist URL   → https://agennews.store")
     log("EA InpFacebookURL   → https://agennews.store/signal")
     log("Waiting for signals from MT4/MT5 EA...")
     log("=" * 52)
-    if os.environ.get("BEHIND_PROXY") == "1":
+    if behind_proxy:
         log("Running behind nginx → HTTP on 127.0.0.1:5005")
         app.run(host="127.0.0.1", port=5005, debug=False)
     else:
