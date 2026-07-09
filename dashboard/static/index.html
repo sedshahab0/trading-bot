@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css?v=20" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=2.20.0" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=2.21.0" />
   <script src="/static/vendor/chart.umd.min.js?v=2"></script>
 </head>
 <body class="auth-pending">
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.20</span>
+            <span class="version-badge" id="loginVersion">v2.21</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.20</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.21</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.20.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.21.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -756,6 +756,11 @@
                 <div><h3 class="panel-heading">گروه‌های مقصد</h3><p class="panel-desc">هر گروه می‌تواند زبان و قالب پیام مستقل داشته باشد</p></div>
                 <button class="btn btn-primary btn-compact" id="btnFbAddGroup"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> افزودن گروه</button>
               </div>
+              <div class="facebook-group-tools">
+                <input type="search" class="search-input" id="fbGroupSearch" placeholder="جستجوی نام یا لینک گروه..." />
+                <button class="btn btn-secondary btn-compact" id="btnFbEnableAll">فعال‌سازی همه</button>
+                <button class="btn btn-ghost btn-compact" id="btnFbDisableAll">توقف همه</button>
+              </div>
               <div class="facebook-groups-list" id="fbGroupsList"></div>
             </section>
 
@@ -765,6 +770,7 @@
               <p class="panel-desc">فایل JSON کوکی‌های Facebook را برای ورود امن مرورگر سرور بارگذاری کنید.</p>
               <input type="file" id="fbSessionFile" accept=".json,application/json" hidden />
               <button class="btn btn-secondary facebook-upload-btn" id="btnFbSessionUpload">انتخاب فایل سشن</button>
+              <button class="btn btn-ghost facebook-test-session-btn" id="btnFbTestSession">تست اتصال حساب</button>
               <p class="facebook-security-note">فایل با سطح دسترسی محدود روی سرور نگهداری می‌شود.</p>
             </aside>
           </div>
@@ -776,6 +782,11 @@
             </div>
             <div class="facebook-jobs" id="fbJobsList"></div>
           </section>
+
+          <details class="panel facebook-log-panel">
+            <summary><span>لاگ و عیب‌یابی ارسال</span><button type="button" class="link-btn" id="btnFbLogs">دریافت لاگ</button></summary>
+            <div class="facebook-log-view" id="fbLogView">برای مشاهده جزئیات، دریافت لاگ را بزنید.</div>
+          </details>
         </div>
 
         <!-- PAGE: Settings -->
@@ -1127,6 +1138,7 @@
     <div class="modal-sheet facebook-modal" role="dialog" aria-modal="true" aria-labelledby="fbGroupModalTitle">
       <div class="modal-header"><div><h2 class="modal-title" id="fbGroupModalTitle">افزودن گروه فیسبوک</h2><p class="modal-sub">مشخصات مقصد و قالب ارسال را تنظیم کنید</p></div><button type="button" class="modal-close" data-fb-close aria-label="بستن">×</button></div>
       <form class="modal-body facebook-group-form" id="fbGroupForm">
+        <input type="hidden" id="fbGroupId" />
         <label>نام گروه<input class="text-input" id="fbGroupName" required autocomplete="off" /></label>
         <label>لینک گروه<input class="text-input" id="fbGroupUrl" required inputmode="url" placeholder="https://www.facebook.com/groups/..." /></label>
         <div class="facebook-form-grid">
@@ -1145,7 +1157,10 @@
       <div class="modal-body">
         <div class="facebook-preview-tabs" id="fbPreviewTabs"></div>
         <pre class="facebook-message-preview" id="fbMessagePreview"></pre>
-        <button class="btn btn-primary facebook-submit" id="btnFbApproveSend">تأیید و ارسال به گروه‌های فعال</button>
+        <div class="facebook-preview-actions">
+          <button class="btn btn-secondary" id="btnFbDryRun">اجرای آزمایشی</button>
+          <button class="btn btn-primary" id="btnFbApproveSend">تأیید و ارسال به گروه‌های فعال</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1164,6 +1179,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=2.20.0"></script>
+  <script src="/static/js/dashboard.js?v=2.21.0"></script>
 </body>
 </html>

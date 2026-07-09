@@ -187,7 +187,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 20, "patch": 0, "label": "v2.20", "released": "", "history": []}
+    default = {"major": 2, "minor": 21, "patch": 0, "label": "v2.21", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2583,16 +2583,34 @@ def api_facebook_group_update(group_id: str):
         return jsonify({"ok": True})
     data = request.get_json(silent=True) or {}
     group = groups[index]
-    for key in ("name", "language", "template"):
+    for key in ("name", "url", "language", "template"):
         if key in data:
             group[key] = str(data[key]).strip()
     if "enabled" in data:
         group["enabled"] = bool(data["enabled"])
-    if group["language"] not in ("English", "Persian", "Russian") or group["template"] not in ("1", "2", "3"):
+    if (
+        not group["name"]
+        or not re.match(r"^https://(?:www\.)?facebook\.com/groups/[^/?#]+", group["url"], re.I)
+        or group["language"] not in ("English", "Persian", "Russian")
+        or group["template"] not in ("1", "2", "3")
+    ):
         return jsonify({"error": "زبان یا قالب نامعتبر است"}), 400
     _save_facebook_groups(groups)
     _audit("facebook_group_update", group["name"])
     return jsonify({"ok": True, "group": group})
+
+
+@app.route("/api/facebook/groups/bulk", methods=["PATCH"])
+@auth_required
+def api_facebook_groups_bulk():
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+    groups = _facebook_groups()
+    for group in groups:
+        group["enabled"] = enabled
+    _save_facebook_groups(groups)
+    _audit("facebook_groups_bulk", "enabled" if enabled else "disabled")
+    return jsonify({"ok": True, "updated": len(groups)})
 
 
 @app.route("/api/facebook/session", methods=["POST"])
@@ -2619,6 +2637,27 @@ def api_facebook_session_upload():
     return jsonify({"ok": True, "cookies": len(cookies), "status": _facebook_preflight()})
 
 
+@app.route("/api/facebook/session/test", methods=["POST"])
+@auth_required
+def api_facebook_session_test():
+    try:
+        proc = subprocess.run(
+            [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--test-session"],
+            cwd=str(FACEBOOK_POSTER.parent),
+            env=_facebook_env(),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        lines = [line for line in proc.stdout.splitlines() if line.strip().startswith("{")]
+        result = json.loads(lines[-1]) if lines else {"ok": False, "reason": proc.stderr.strip() or "test_failed"}
+        if not result.get("ok"):
+            result["error"] = "سشن فیسبوک معتبر نیست یا نیاز به ورود مجدد دارد"
+        return jsonify(result), 200 if result.get("ok") else 409
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "تست اتصال فیسبوک timeout شد"}), 504
+
+
 @app.route("/api/facebook/jobs/<signal_id>/preview")
 @auth_required
 def api_facebook_job_preview(signal_id: str):
@@ -2626,6 +2665,37 @@ def api_facebook_job_preview(signal_id: str):
     if not job.exists():
         return jsonify({"error": "سیگنال پیدا نشد"}), 404
     return jsonify({"signal": _read_json(job), "templates": _facebook_preview(job)})
+
+
+@app.route("/api/facebook/jobs/<signal_id>/dry-run", methods=["POST"])
+@auth_required
+def api_facebook_job_dry_run(signal_id: str):
+    job = FACEBOOK_JOBS_DIR / f"{secure_filename(signal_id)}.json"
+    if not job.exists():
+        return jsonify({"error": "سیگنال پیدا نشد"}), 404
+    proc = subprocess.run(
+        [str(VENV_PYTHON), str(FACEBOOK_POSTER), "--signal-file", str(job), "--dry-run"],
+        cwd=str(FACEBOOK_POSTER.parent),
+        env=_facebook_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if proc.returncode != 0:
+        return jsonify({"error": proc.stderr.strip() or proc.stdout.strip() or "dry-run failed"}), 409
+    _audit("facebook_dry_run", signal_id)
+    return jsonify({"ok": True, "output": proc.stdout.splitlines()[-20:]})
+
+
+@app.route("/api/facebook/jobs/<signal_id>", methods=["DELETE"])
+@auth_required
+def api_facebook_job_delete(signal_id: str):
+    job = FACEBOOK_JOBS_DIR / f"{secure_filename(signal_id)}.json"
+    if not job.exists():
+        return jsonify({"error": "سیگنال پیدا نشد"}), 404
+    job.unlink()
+    _audit("facebook_job_delete", signal_id)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/facebook/jobs/<signal_id>/send", methods=["POST"])
@@ -2663,6 +2733,20 @@ def api_facebook_mode():
         return jsonify({"error": err or out or "restart failed"}), 500
     _audit("facebook_mode", "auto" if enabled else "approval")
     return jsonify({"ok": True, "auto_post": enabled})
+
+
+@app.route("/api/facebook/logs")
+@auth_required
+def api_facebook_logs():
+    limit = min(max(request.args.get("lines", 80, type=int), 10), 300)
+    entries = []
+    for name in ("poster_stdout.log", "poster_stderr.log"):
+        path = FACEBOOK_DIR / name
+        if path.exists():
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[-limit:]:
+                if line.strip():
+                    entries.append({"source": name, "line": line})
+    return jsonify({"entries": entries[-limit:]})
 
 
 @app.route("/api/control", methods=["POST"])

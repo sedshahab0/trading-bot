@@ -212,7 +212,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.20", full: "2.20.0", major: 2, minor: 20, patch: 0 };
+  let dashboardVersion = { label: "v2.21", full: "2.21.0", major: 2, minor: 21, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2317,6 +2317,10 @@
     facebookPayload = data;
     const status = data.status || {};
     const groups = data.groups || [];
+    const groupQuery = ($("#fbGroupSearch")?.value || "").trim().toLowerCase();
+    const shownGroups = groupQuery
+      ? groups.filter((group) => `${group.name} ${group.url}`.toLowerCase().includes(groupQuery))
+      : groups;
     const jobs = data.jobs || [];
     const activeGroups = groups.filter((group) => group.enabled);
     if ($("#fbStatusDot")) $("#fbStatusDot").className = `status-indicator ${status.ready ? "running" : "stopped"}`;
@@ -2331,8 +2335,8 @@
 
     const groupsList = $("#fbGroupsList");
     if (groupsList) {
-      groupsList.innerHTML = groups.length
-        ? groups.map((group) => `
+      groupsList.innerHTML = shownGroups.length
+        ? shownGroups.map((group) => `
           <article class="facebook-group-card ${group.enabled ? "" : "disabled"}">
             <div class="facebook-group-main">
               <span class="facebook-group-avatar">${esc((group.name || "F").slice(0, 1).toUpperCase())}</span>
@@ -2341,10 +2345,11 @@
             <div class="facebook-group-meta"><span>${esc(group.language)}</span><span>قالب ${esc(group.template)}</span></div>
             <div class="facebook-group-actions">
               <label class="switch compact" title="فعال یا غیرفعال"><input type="checkbox" data-fb-toggle="${esc(group.id)}" ${group.enabled ? "checked" : ""}/><span class="switch-track"></span></label>
+              <button class="icon-btn" data-fb-edit="${esc(group.id)}" aria-label="ویرایش ${esc(group.name)}"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L8 18l-4 1 1-4z"/></svg></button>
               <button class="icon-btn danger" data-fb-delete="${esc(group.id)}" aria-label="حذف ${esc(group.name)}"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/></svg></button>
             </div>
           </article>`).join("")
-        : '<div class="facebook-empty"><strong>هنوز گروهی اضافه نشده</strong><span>اولین گروه مقصد را اضافه کنید تا مسیر انتشار آماده شود.</span></div>';
+        : `<div class="facebook-empty"><strong>${groupQuery ? "گروهی با این جستجو پیدا نشد" : "هنوز گروهی اضافه نشده"}</strong><span>${groupQuery ? "عبارت جستجو را تغییر دهید." : "اولین گروه مقصد را اضافه کنید تا مسیر انتشار آماده شود."}</span></div>`;
     }
 
     const jobsList = $("#fbJobsList");
@@ -2354,7 +2359,7 @@
           <article class="facebook-job-card">
             <div class="facebook-job-signal"><span class="signal-direction ${(job.direction || "").toLowerCase()}">${esc(job.direction || "—")}</span><strong>${esc(job.symbol || "—")}</strong><span>${esc(job.received_at || job.timestamp || "")}</span></div>
             <div class="facebook-job-levels"><span>Entry <strong>${esc(job.entry || "—")}</strong></span><span>SL <strong>${esc(job.sl || "—")}</strong></span><span>TP <strong>${esc(job.tp1 || "—")}</strong></span></div>
-            <button class="btn btn-secondary btn-compact" data-fb-preview="${esc(job.signal_id || "")}">پیش‌نمایش و تأیید</button>
+            <div class="facebook-job-actions"><button class="btn btn-secondary btn-compact" data-fb-preview="${esc(job.signal_id || "")}">پیش‌نمایش و تأیید</button><button class="icon-btn danger" data-fb-job-delete="${esc(job.signal_id || "")}" aria-label="حذف از صف"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6"/></svg></button></div>
           </article>`).join("")
         : '<div class="facebook-empty"><strong>صف پیام خالی است</strong><span>با تولید سیگنال جدید، پیام آماده تأیید اینجا نمایش داده می‌شود.</span></div>';
     }
@@ -4422,6 +4427,8 @@
 
   $("#btnFbAddGroup")?.addEventListener("click", () => {
     $("#fbGroupForm")?.reset();
+    if ($("#fbGroupId")) $("#fbGroupId").value = "";
+    if ($("#fbGroupModalTitle")) $("#fbGroupModalTitle").textContent = "افزودن گروه فیسبوک";
     if ($("#fbGroupError")) $("#fbGroupError").textContent = "";
     $("#fbGroupModal")?.classList.add("open");
     $("#fbGroupModal")?.setAttribute("aria-hidden", "false");
@@ -4435,8 +4442,9 @@
     const submit = event.submitter;
     try {
       submit?.classList.add("loading");
-      await api("/api/facebook/groups", {
-        method: "POST",
+      const groupId = $("#fbGroupId")?.value || "";
+      await api(groupId ? `/api/facebook/groups/${groupId}` : "/api/facebook/groups", {
+        method: groupId ? "PATCH" : "POST",
         body: JSON.stringify({
           name: $("#fbGroupName")?.value,
           url: $("#fbGroupUrl")?.value,
@@ -4448,7 +4456,7 @@
       closeFacebookGroupModal();
       invalidateCache("facebook");
       await fetchFacebook({ force: true });
-      toast("گروه فیسبوک اضافه شد");
+      toast(groupId ? "تغییرات گروه ذخیره شد" : "گروه فیسبوک اضافه شد");
     } catch (error) {
       if ($("#fbGroupError")) $("#fbGroupError").textContent = error.message;
     } finally {
@@ -4473,6 +4481,21 @@
   });
 
   $("#fbGroupsList")?.addEventListener("click", async (event) => {
+    const editButton = event.target.closest("[data-fb-edit]");
+    if (editButton) {
+      const group = (facebookPayload?.groups || []).find((item) => item.id === editButton.dataset.fbEdit);
+      if (!group) return;
+      if ($("#fbGroupId")) $("#fbGroupId").value = group.id;
+      if ($("#fbGroupName")) $("#fbGroupName").value = group.name;
+      if ($("#fbGroupUrl")) $("#fbGroupUrl").value = group.url;
+      if ($("#fbGroupLanguage")) $("#fbGroupLanguage").value = group.language;
+      if ($("#fbGroupTemplate")) $("#fbGroupTemplate").value = group.template;
+      if ($("#fbGroupModalTitle")) $("#fbGroupModalTitle").textContent = "ویرایش گروه فیسبوک";
+      if ($("#fbGroupError")) $("#fbGroupError").textContent = "";
+      $("#fbGroupModal")?.classList.add("open");
+      $("#fbGroupModal")?.setAttribute("aria-hidden", "false");
+      return;
+    }
     const button = event.target.closest("[data-fb-delete]");
     if (!button || !confirm("این گروه از مقصدهای فیسبوک حذف شود؟")) return;
     try {
@@ -4484,6 +4507,21 @@
       toast(error.message, "error");
     }
   });
+
+  $("#fbGroupSearch")?.addEventListener("input", () => renderFacebook(facebookPayload));
+
+  async function setAllFacebookGroups(enabled) {
+    try {
+      await api("/api/facebook/groups/bulk", { method: "PATCH", body: JSON.stringify({ enabled }) });
+      invalidateCache("facebook");
+      await fetchFacebook({ force: true });
+      toast(enabled ? "همه گروه‌ها فعال شدند" : "همه گروه‌ها متوقف شدند");
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+  $("#btnFbEnableAll")?.addEventListener("click", () => setAllFacebookGroups(true));
+  $("#btnFbDisableAll")?.addEventListener("click", () => setAllFacebookGroups(false));
 
   $("#btnFbSessionUpload")?.addEventListener("click", () => $("#fbSessionFile")?.click());
   $("#fbSessionFile")?.addEventListener("change", async (event) => {
@@ -4505,6 +4543,21 @@
     } finally {
       button?.classList.remove("loading");
       event.target.value = "";
+    }
+  });
+
+  $("#btnFbTestSession")?.addEventListener("click", async () => {
+    const button = $("#btnFbTestSession");
+    try {
+      button?.classList.add("loading");
+      const result = await api("/api/facebook/session/test", { method: "POST" });
+      toast(`اتصال حساب تأیید شد · ${result.cookies} کوکی فعال`);
+      invalidateCache("facebook");
+      await fetchFacebook({ force: true });
+    } catch (error) {
+      toast(`تست اتصال ناموفق: ${error.message}`, "error");
+    } finally {
+      button?.classList.remove("loading");
     }
   });
 
@@ -4530,6 +4583,19 @@
   }
 
   $("#fbJobsList")?.addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest("[data-fb-job-delete]");
+    if (deleteButton) {
+      if (!confirm("این پیام از صف تأیید حذف شود؟")) return;
+      try {
+        await api(`/api/facebook/jobs/${deleteButton.dataset.fbJobDelete}`, { method: "DELETE" });
+        invalidateCache("facebook");
+        await fetchFacebook({ force: true });
+        toast("پیام از صف حذف شد");
+      } catch (error) {
+        toast(error.message, "error");
+      }
+      return;
+    }
     const button = event.target.closest("[data-fb-preview]");
     if (!button) return;
     try {
@@ -4575,6 +4641,35 @@
       toast(error.message, "error");
     } finally {
       button?.classList.remove("loading");
+    }
+  });
+
+  $("#btnFbDryRun")?.addEventListener("click", async () => {
+    if (!facebookPreviewSignalId) return;
+    const button = $("#btnFbDryRun");
+    try {
+      button?.classList.add("loading");
+      await api(`/api/facebook/jobs/${facebookPreviewSignalId}/dry-run`, { method: "POST" });
+      toast("اجرای آزمایشی موفق بود؛ هیچ پیامی منتشر نشد");
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      button?.classList.remove("loading");
+    }
+  });
+
+  $("#btnFbLogs")?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api("/api/facebook/logs?lines=100");
+      const entries = data.entries || [];
+      if ($("#fbLogView")) {
+        $("#fbLogView").textContent = entries.length
+          ? entries.map((entry) => `[${entry.source}] ${entry.line}`).join("\n")
+          : "هنوز لاگی ثبت نشده است.";
+      }
+    } catch (error) {
+      toast(error.message, "error");
     }
   });
 

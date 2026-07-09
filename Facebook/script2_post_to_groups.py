@@ -496,6 +496,7 @@ def parse_args():
     parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--test-session", action="store_true")
     return parser.parse_args()
 
 
@@ -518,6 +519,25 @@ def preflight():
 
 def main():
     args = parse_args()
+    if args.test_session:
+        checks = preflight()
+        if not checks["session_file"] or not checks["chrome"] or not checks["selenium"]:
+            print(json.dumps({"ok": False, "reason": "session_or_browser_missing"}))
+            return 2
+        driver = build_driver()
+        try:
+            loaded = load_session(driver)
+            cookies = driver.get_cookies()
+            logged_in = loaded and any(cookie.get("name") == "c_user" for cookie in cookies)
+            print(json.dumps({
+                "ok": logged_in,
+                "url": driver.current_url,
+                "cookies": len(cookies),
+                "reason": None if logged_in else "facebook_login_required",
+            }))
+            return 0 if logged_in else 3
+        finally:
+            driver.quit()
     if args.preview:
         sig = load_signal(args.signal_file)
         templates = build_templates(sig)

@@ -4687,6 +4687,9 @@ body.auth-pending .app-shell {
 .facebook-panel-head { align-items: flex-start; gap: 1rem; }
 .facebook-panel-head .btn { display: inline-flex; align-items: center; gap: .45rem; min-height: 44px; }
 .facebook-groups-list, .facebook-jobs { display: grid; gap: .65rem; margin-top: 1rem; }
+.facebook-group-tools { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: .55rem; margin-top: 1rem; }
+.facebook-group-tools .search-input { width: 100%; min-height: 44px; }
+.facebook-group-tools .btn { min-height: 44px; }
 .facebook-group-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -4728,6 +4731,7 @@ body.auth-pending .app-shell {
 }
 .fb-session-mark svg { width: 30px; height: 30px; }
 .facebook-upload-btn { width: 100%; min-height: 46px; margin-top: 1rem; }
+.facebook-test-session-btn { width: 100%; min-height: 44px; margin-top: .55rem; }
 .facebook-security-note { margin: .75rem 0 0; color: var(--text-dim); font-size: .65rem; line-height: 1.7; }
 .facebook-queue-panel { margin-bottom: 1rem; }
 .facebook-job-card {
@@ -4745,6 +4749,7 @@ body.auth-pending .app-shell {
 .facebook-job-levels { display: flex; gap: .7rem; direction: ltr; }
 .facebook-job-levels span { color: var(--text-dim); font-size: .66rem; }
 .facebook-job-levels strong { color: var(--text); font-family: var(--font-mono); margin-left: .2rem; }
+.facebook-job-actions { display: flex; align-items: center; gap: .45rem; }
 .facebook-empty {
   min-height: 130px; display: grid; place-content: center; gap: .4rem; text-align: center;
   border: 1px dashed rgba(255,255,255,.1); border-radius: 16px; color: var(--text-muted);
@@ -4759,6 +4764,8 @@ body.auth-pending .app-shell {
 .facebook-submit { width: 100%; min-height: 48px; }
 .form-error { min-height: 1.2em; margin: 0; color: var(--red); font-size: .72rem; }
 .facebook-preview-modal { max-width: 680px; }
+.facebook-preview-actions { display: grid; grid-template-columns: auto minmax(220px, 1fr); gap: .65rem; }
+.facebook-preview-actions .btn { min-height: 48px; }
 .facebook-preview-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .8rem; }
 .facebook-preview-tabs button {
   min-height: 40px; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: 10px;
@@ -4771,6 +4778,17 @@ body.auth-pending .app-shell {
   border: 1px solid rgba(91,156,246,.15); border-radius: 15px; background: rgba(2,7,15,.72);
 }
 .switch.compact { transform: scale(.9); }
+.facebook-log-panel { margin-bottom: 1rem; padding: 0; overflow: hidden; }
+.facebook-log-panel summary {
+  min-height: 58px; display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; padding: .8rem 1rem; color: var(--text); cursor: pointer; list-style: none;
+}
+.facebook-log-panel summary::-webkit-details-marker { display: none; }
+.facebook-log-view {
+  max-height: 340px; overflow: auto; padding: 1rem; direction: ltr; text-align: left;
+  white-space: pre-wrap; color: #9caac0; background: rgba(1,5,12,.72);
+  border-top: 1px solid var(--border); font: .68rem/1.75 var(--font-mono);
+}
 
 @media (max-width: 900px) {
   .facebook-readiness { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -4778,6 +4796,7 @@ body.auth-pending .app-shell {
   .facebook-session-panel { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1rem; text-align: right; }
   .fb-session-mark { margin: 0; }
   .facebook-upload-btn { width: auto; margin: 0; }
+  .facebook-test-session-btn { width: auto; margin: 0; }
   .facebook-security-note { grid-column: 2 / -1; margin: 0; }
   .facebook-job-card { grid-template-columns: 1fr auto; }
   .facebook-job-levels { grid-row: 2; grid-column: 1 / -1; }
@@ -4792,18 +4811,22 @@ body.auth-pending .app-shell {
   .fb-ready-icon { width: 36px; height: 36px; flex-basis: 36px; }
   .facebook-panel-head { display: grid; grid-template-columns: 1fr; }
   .facebook-panel-head .btn { width: 100%; justify-content: center; }
+  .facebook-group-tools { grid-template-columns: 1fr 1fr; }
+  .facebook-group-tools .search-input { grid-column: 1 / -1; }
   .facebook-group-card { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
   .facebook-group-meta { grid-row: 2; }
   .facebook-group-actions { grid-row: 1 / 3; grid-column: 2; flex-direction: column; }
   .facebook-session-panel { grid-template-columns: auto 1fr; text-align: right; }
   .facebook-session-panel .panel-desc { grid-column: 2; }
-  .facebook-upload-btn, .facebook-security-note { grid-column: 1 / -1; width: 100%; }
+  .facebook-upload-btn, .facebook-test-session-btn, .facebook-security-note { grid-column: 1 / -1; width: 100%; }
   .facebook-job-card { grid-template-columns: 1fr; }
   .facebook-job-levels { grid-row: auto; grid-column: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }
   .facebook-job-levels span { padding: .5rem; text-align: center; border-radius: 9px; background: rgba(255,255,255,.035); }
   .facebook-job-card .btn { width: 100%; min-height: 44px; }
   .facebook-form-grid { grid-template-columns: 1fr; }
   .facebook-message-preview { min-height: 240px; font-size: .74rem; }
+  .facebook-preview-actions { grid-template-columns: 1fr; }
+  .facebook-preview-actions .btn { width: 100%; }
 }
 .strategy-history-meta { color: var(--text-muted); font-size: 0.68rem; margin-top: 0.15rem; direction: ltr; text-align: right; }
 .strategy-history-actions { display: flex; gap: 0.35rem; flex-shrink: 0; }
