@@ -8,10 +8,12 @@ import ast
 import csv
 import io
 import json
+import math
 import os
 import re
 import sqlite3
 import secrets
+import statistics
 import subprocess
 import sys
 import time
@@ -189,7 +191,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 25, "patch": 0, "label": "v2.25", "released": "", "history": []}
+    default = {"major": 2, "minor": 26, "patch": 0, "label": "v2.26", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2230,9 +2232,19 @@ def _facebook_preview(job_file: Path) -> dict:
     return json.loads(lines[-1])
 
 
-def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all") -> dict:
+def _simulation_payload(
+    days: int = 30,
+    symbol: str = "all",
+    status: str = "all",
+    page: int = 1,
+    per_page: int = 20,
+) -> dict:
     if not SIMULATION_DB.exists():
-        return {"trades": [], "summary": {"total": 0, "closed": 0}, "equity": [], "by_symbol": []}
+        return {
+            "trades": [], "summary": {"total": 0, "closed": 0},
+            "equity": [], "by_symbol": [], "available_symbols": [],
+            "pagination": {"page": 1, "per_page": per_page, "total": 0, "pages": 1},
+        }
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
         conn.row_factory = sqlite3.Row
@@ -2240,6 +2252,7 @@ def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all"
             "SELECT * FROM simulated_trades WHERE signal_time >= ? ORDER BY signal_time DESC",
             (cutoff,),
         ).fetchall()]
+    available_symbols = sorted({row["symbol"] for row in rows})
     if symbol != "all":
         rows = [row for row in rows if row["symbol"] == symbol.replace("/", "").upper()]
     if status == "open":
@@ -2258,6 +2271,18 @@ def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all"
     breakeven = [row for row in closed if row["r_multiple"] == 0]
     gross_profit = sum(row["r_multiple"] for row in wins)
     gross_loss = abs(sum(row["r_multiple"] for row in losses))
+    decided = len(wins) + len(losses)
+    if decided:
+        observed = len(wins) / decided
+        z = 1.96
+        denominator = 1 + z * z / decided
+        center = (observed + z * z / (2 * decided)) / denominator
+        margin = z * math.sqrt(
+            observed * (1 - observed) / decided + z * z / (4 * decided * decided)
+        ) / denominator
+        win_rate_ci = [round(max(0, center - margin) * 100, 1), round(min(1, center + margin) * 100, 1)]
+    else:
+        win_rate_ci = None
     cumulative = 0.0
     peak = 0.0
     max_drawdown = 0.0
@@ -2271,6 +2296,14 @@ def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all"
             "value": round(cumulative, 3),
             "id": row["id"],
         })
+    losing_streak = 0
+    max_losing_streak = 0
+    for row in closed:
+        if float(row["r_multiple"]) < 0:
+            losing_streak += 1
+            max_losing_streak = max(max_losing_streak, losing_streak)
+        else:
+            losing_streak = 0
     symbols: dict[str, dict] = {}
     for row in rows:
         bucket = symbols.setdefault(row["symbol"], {"symbol": row["symbol"], "total": 0, "closed": 0, "wins": 0, "losses": 0, "r": 0.0})
@@ -2287,10 +2320,39 @@ def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all"
         bucket["win_rate"] = round(bucket["wins"] / decided * 100, 1) if decided else None
         by_symbol.append(bucket)
     by_symbol.sort(key=lambda row: row["r"], reverse=True)
+    ambiguous_count = sum(int(row.get("ambiguous") or 0) for row in rows)
+    closed_ambiguous = sum(int(row.get("ambiguous") or 0) for row in closed)
+    verified_count = sum(row.get("data_quality") == "verified_m5" for row in closed)
+    quality_denominator = max(1, len(closed))
+    deterministic_rate = round((len(closed) - closed_ambiguous) / quality_denominator * 100, 1) if closed else 0
+    verified_rate = round(verified_count / quality_denominator * 100, 1)
+    sample_grade = "high" if len(closed) >= 100 else "medium" if len(closed) >= 30 else "low"
+    confidence_score = min(100, round(
+        min(1, len(closed) / 100) * 55
+        + deterministic_rate / 100 * 25
+        + verified_rate / 100 * 20
+    ))
+    ordered_trades = list(reversed(chronological))
+    per_page = max(1, min(100, per_page))
+    total_pages = max(1, math.ceil(len(ordered_trades) / per_page))
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    paginated_trades = ordered_trades[start:start + per_page]
+    avg_win = gross_profit / len(wins) if wins else None
+    avg_loss = gross_loss / len(losses) if losses else None
     return {
-        "trades": list(reversed(chronological)),
+        "trades": paginated_trades,
         "equity": equity,
         "by_symbol": by_symbol,
+        "available_symbols": available_symbols,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": len(ordered_trades),
+            "pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+        },
         "summary": {
             "total": len(rows),
             "closed": len(closed),
@@ -2301,9 +2363,18 @@ def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all"
             "win_rate": round(len(wins) / (len(wins) + len(losses)) * 100, 1) if wins or losses else None,
             "total_r": round(cumulative, 2),
             "avg_r": round(cumulative / len(closed), 3) if closed else None,
+            "median_r": round(statistics.median(float(row["r_multiple"]) for row in closed), 3) if closed else None,
             "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss else (999 if gross_profit else None),
+            "payoff_ratio": round(avg_win / avg_loss, 2) if avg_win is not None and avg_loss else None,
             "max_drawdown_r": round(max_drawdown, 2),
-            "ambiguous": sum(int(row.get("ambiguous") or 0) for row in rows),
+            "recovery_factor": round(cumulative / max_drawdown, 2) if max_drawdown else None,
+            "max_losing_streak": max_losing_streak,
+            "ambiguous": ambiguous_count,
+            "win_rate_ci95": win_rate_ci,
+            "deterministic_rate": deterministic_rate,
+            "verified_rate": verified_rate,
+            "confidence_score": confidence_score,
+            "sample_grade": sample_grade,
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "method": {
@@ -2311,6 +2382,10 @@ def _simulation_payload(days: int = 30, symbol: str = "all", status: str = "all"
             "position": "50% TP1 + 50% TP2",
             "same_bar": "SL first (conservative)",
             "expiry_hours": int(_parse_env().get("SIMULATION_EXPIRY_HOURS", "72")),
+            "algorithm_version": 2,
+            "lookahead_protection": "next complete M5 candle",
+            "gap_handling": "stop exits at candle open when price gaps beyond SL",
+            "costs": "spread, commission and swap are not included",
         },
     }
 
@@ -2577,7 +2652,9 @@ def api_simulation():
     days = min(max(request.args.get("days", 30, type=int), 1), 365)
     symbol = request.args.get("symbol", "all").strip()
     status = request.args.get("status", "all").strip().lower()
-    return jsonify(_simulation_payload(days, symbol, status))
+    page = max(1, request.args.get("page", 1, type=int))
+    per_page = max(1, min(100, request.args.get("per_page", 20, type=int)))
+    return jsonify(_simulation_payload(days, symbol, status, page, per_page))
 
 
 @app.route("/api/logs")

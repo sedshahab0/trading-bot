@@ -33,6 +33,7 @@
   let signalPage = 1;
   let allTelegramEntries = [];
   let telegramPage = 1;
+  let simulationPage = 1;
   let activePage = "home";
   let lastEngineState = null;
   let lastProcesses = [];
@@ -215,7 +216,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.25", full: "2.25.0", major: 2, minor: 25, patch: 0 };
+  let dashboardVersion = { label: "v2.26", full: "2.26.0", major: 2, minor: 26, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2185,7 +2186,7 @@
         const days = Number($("#simDays")?.value || 30);
         const symbol = $("#simSymbol")?.value || "all";
         const status = $("#simStatus")?.value || "all";
-        const cached = DataCache.get(`simulation:${days}:${symbol}:${status}`);
+        const cached = DataCache.get(`simulation:${days}:${symbol}:${status}:${simulationPage}`);
         if (cached) renderSimulation(cached);
         break;
       }
@@ -2427,9 +2428,11 @@
   const SIM_STATUS = {
     open: { label: "باز", cls: "open" },
     tp1: { label: "TP1", cls: "win" },
+    tp1_sl: { label: "TP1 سپس SL", cls: "expired" },
     tp2: { label: "TP2", cls: "win strong" },
     sl: { label: "Stop Loss", cls: "loss" },
     expired: { label: "منقضی", cls: "expired" },
+    invalid: { label: "سطوح نامعتبر", cls: "loss" },
   };
 
   function renderSimulation(data) {
@@ -2449,11 +2452,26 @@
     if ($("#simTradeCount")) $("#simTradeCount").textContent = `${summary.total || 0} سیگنال`;
     if ($("#simAmbiguous")) $("#simAmbiguous").textContent = `${summary.ambiguous || 0} مورد مبهم`;
     if ($("#simUpdated")) $("#simUpdated").textContent = data.generated_at ? `بروزرسانی ${new Date(data.generated_at).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}` : "—";
+    const confidence = Number(summary.confidence_score || 0);
+    if ($("#simConfidenceScore")) $("#simConfidenceScore").textContent = `${confidence}%`;
+    if ($("#simConfidenceBar")) $("#simConfidenceBar").style.width = `${confidence}%`;
+    if ($("#simWinRateCI")) {
+      const ci = summary.win_rate_ci95;
+      $("#simWinRateCI").textContent = Array.isArray(ci) ? `${ci[0]}٪ تا ${ci[1]}٪` : "—";
+    }
+    if ($("#simDeterministic")) $("#simDeterministic").textContent = `${summary.deterministic_rate ?? 0}%`;
+    if ($("#simLossStreak")) $("#simLossStreak").textContent = `${summary.max_losing_streak || 0} معامله`;
+    if ($("#simAlgorithmVersion")) $("#simAlgorithmVersion").textContent = `v${data.method?.algorithm_version || "—"}`;
+    if ($("#simConfidencePanel")) $("#simConfidencePanel").dataset.grade = summary.sample_grade || "low";
+    if ($("#simConfidenceNote")) {
+      const gradeText = { high: "نمونه آماری قوی", medium: "نمونه آماری متوسط", low: "نمونه هنوز کوچک است" };
+      $("#simConfidenceNote").textContent = `${gradeText[summary.sample_grade] || gradeText.low} · ${summary.verified_rate ?? 0}٪ با موتور M5 نسخه جدید ارزیابی شده · هزینه اسپرد و کمیسیون در نتایج لحاظ نشده است.`;
+    }
 
     const symbolSelect = $("#simSymbol");
     if (symbolSelect) {
       const current = symbolSelect.value || "all";
-      const symbols = [...new Set((data.by_symbol || []).map((row) => row.symbol))];
+      const symbols = data.available_symbols || [...new Set((data.by_symbol || []).map((row) => row.symbol))];
       symbolSelect.innerHTML = '<option value="all">همه نمادها</option>' + symbols.map((symbol) => `<option value="${esc(symbol)}">${esc(symbol)}</option>`).join("");
       symbolSelect.value = symbols.includes(current) ? current : "all";
     }
@@ -2485,6 +2503,12 @@
           }).join("")
         : '<tr><td colspan="9"><div class="facebook-empty"><strong>داده شبیه‌سازی هنوز آماده نیست</strong><span>بعد از دریافت کندل جدید، نتیجه سیگنال‌ها در این بخش ظاهر می‌شود.</span></div></td></tr>';
     }
+    const pagination = data.pagination || {};
+    simulationPage = Number(pagination.page || 1);
+    if ($("#simPageInfo")) $("#simPageInfo").textContent = `صفحه ${simulationPage} از ${pagination.pages || 1} · ${pagination.total || 0} معامله`;
+    if ($("#btnSimPrev")) $("#btnSimPrev").disabled = !pagination.has_prev;
+    if ($("#btnSimNext")) $("#btnSimNext").disabled = !pagination.has_next;
+    if ($("#simPagination")) $("#simPagination").classList.toggle("hidden", (pagination.pages || 1) <= 1);
 
     const equity = data.equity || [];
     const canvas = $("#simulationEquityChart");
@@ -2526,10 +2550,10 @@
     const days = Number($("#simDays")?.value || 30);
     const symbol = $("#simSymbol")?.value || "all";
     const status = $("#simStatus")?.value || "all";
-    const key = `simulation:${days}:${symbol}:${status}`;
+    const key = `simulation:${days}:${symbol}:${status}:${simulationPage}`;
     const data = await DataCache.load(
       key,
-      () => api(`/api/simulation?days=${days}&symbol=${encodeURIComponent(symbol)}&status=${status}`),
+      () => api(`/api/simulation?days=${days}&symbol=${encodeURIComponent(symbol)}&status=${status}&page=${simulationPage}&per_page=20`),
       CACHE_TTL.simulation,
       { force, onStale: renderSimulation }
     );
@@ -4041,9 +4065,24 @@
 
   $("#reportDays")?.addEventListener("change", () => refreshReports({ force: true }));
   ["#simDays", "#simSymbol", "#simStatus"].forEach((selector) => {
-    $(selector)?.addEventListener("change", () => fetchSimulation({ force: true }).catch((error) => toast(error.message, "error")));
+    $(selector)?.addEventListener("change", () => {
+      simulationPage = 1;
+      fetchSimulation({ force: true }).catch((error) => toast(error.message, "error"));
+    });
   });
   $("#btnSimRefresh")?.addEventListener("click", () => fetchSimulation({ force: true }).catch((error) => toast(error.message, "error")));
+  $("#btnSimPrev")?.addEventListener("click", () => {
+    if (simulationPage <= 1) return;
+    simulationPage -= 1;
+    fetchSimulation({ force: true }).catch((error) => toast(error.message, "error"));
+  });
+  $("#btnSimNext")?.addEventListener("click", () => {
+    simulationPage += 1;
+    fetchSimulation({ force: true }).catch((error) => {
+      simulationPage = Math.max(1, simulationPage - 1);
+      toast(error.message, "error");
+    });
+  });
 
   async function downloadExport(url) {
     try {

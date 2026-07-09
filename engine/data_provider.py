@@ -21,7 +21,8 @@ INTERVAL_MAP = {
 }
 
 OUTPUT_SIZE = {
-    "M5": 500,
+    # Covers the full 72h simulation window plus a safety margin.
+    "M5": 1200,
     "M15": 300,
     "H1": 300,
     "D1": 250,
