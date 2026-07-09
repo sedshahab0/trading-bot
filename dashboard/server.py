@@ -192,7 +192,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 28, "patch": 0, "label": "v2.28", "released": "", "history": []}
+    default = {"major": 2, "minor": 30, "patch": 0, "label": "v2.30", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2206,6 +2206,42 @@ def _save_facebook_groups(groups: list[dict]) -> None:
     wb.save(FACEBOOK_GROUPS_FILE)
 
 
+def _facebook_post_history(page: int = 1, per_page: int = 12) -> dict:
+    page = max(1, int(page or 1))
+    per_page = max(1, min(50, int(per_page or 12)))
+    if not HAS_OPENPYXL or not FACEBOOK_POST_LOG.exists():
+        return {"items": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
+    wb = load_workbook(FACEBOOK_POST_LOG, read_only=True, data_only=True)
+    ws = wb.active
+    items = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or len(row) < 4:
+            continue
+        status = str(row[3] or "")
+        if status != "✅ Success":
+            continue
+        items.append({
+            "row": row[0],
+            "group_url": str(row[1] or ""),
+            "posted_at": str(row[2] or ""),
+            "status": status,
+            "notes": str(row[4] or "") if len(row) > 4 else "",
+            "signal_id": str(row[5] or "") if len(row) > 5 else "",
+        })
+    wb.close()
+    items.reverse()
+    total = len(items)
+    pages = math.ceil(total / per_page) if total else 0
+    start = (page - 1) * per_page
+    return {
+        "items": items[start:start + per_page],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+    }
+
+
 def _facebook_jobs(limit: int = 30) -> list[dict]:
     FACEBOOK_JOBS_DIR.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -2761,6 +2797,7 @@ def api_facebook():
         "status": _facebook_preflight(),
         "groups": _facebook_groups(),
         "jobs": _facebook_jobs(),
+        "history": _facebook_post_history(),
         "auto_post": env.get("FACEBOOK_AUTO_POST", "0") == "1",
         "session_status": _facebook_session_status(),
         "session_updated": (
@@ -2768,6 +2805,14 @@ def api_facebook():
             if FACEBOOK_SESSION_FILE.exists() else None
         ),
     })
+
+
+@app.route("/api/facebook/history")
+@auth_required
+def api_facebook_history():
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 12, type=int)
+    return jsonify(_facebook_post_history(page=page, per_page=per_page))
 
 
 @app.route("/api/facebook/groups", methods=["POST"])

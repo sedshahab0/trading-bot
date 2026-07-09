@@ -194,6 +194,14 @@
   let facebookPreviewSignalId = null;
   let facebookPreviewTemplates = null;
   let facebookPublishPollTimer = null;
+  let fbJobsPage = 1;
+  let fbHistoryPage = 1;
+  const FB_JOBS_PER_PAGE = 8;
+  const FACEBOOK_PREVIEW_LANGS = [
+    { key: "English", label: "English", short: "EN" },
+    { key: "Persian", label: "فارسی", short: "FA" },
+    { key: "Russian", label: "Русский", short: "RU" },
+  ];
   function normalizePage(page) {
     return PAGE_META[page] ? page : "home";
   }
@@ -217,7 +225,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.28", full: "2.28.0", major: 2, minor: 28, patch: 0 };
+  let dashboardVersion = { label: "v2.30", full: "2.30.0", major: 2, minor: 30, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2357,6 +2365,65 @@
     if (label) label.textContent = busy ? busyLabel : button.dataset.idleLabel;
   }
 
+  function facebookGroupLabel(url) {
+    const normalized = String(url || "").replace(/\/$/, "");
+    const group = (facebookPayload?.groups || []).find((item) => String(item.url || "").replace(/\/$/, "") === normalized);
+    return group?.name || url || "—";
+  }
+
+  function buildFacebookPreviewTabs(templates) {
+    return FACEBOOK_PREVIEW_LANGS.map(({ key, label, short }) => {
+      const variants = templates?.[key] || {};
+      const template = variants["1"] !== undefined ? "1" : (Object.keys(variants)[0] || "1");
+      return { tabKey: `${key}:${template}`, label, short, language: key, template };
+    });
+  }
+
+  function renderFacebookPreviewTabButtons(tabs, activeKey) {
+    if (!$("#fbPreviewTabs")) return;
+    $("#fbPreviewTabs").innerHTML = tabs.map((tab) => `
+      <button type="button" data-fb-template="${esc(tab.tabKey)}" class="${tab.tabKey === activeKey ? "active" : ""}">
+        <span class="facebook-lang-code">${esc(tab.short)}</span>
+        <span>${esc(tab.label)}</span>
+      </button>`).join("");
+  }
+
+  function renderFacebookHistory(history = {}) {
+    const items = history.items || [];
+    const pages = Number(history.pages || 0);
+    fbHistoryPage = Number(history.page || 1);
+    if ($("#fbHistoryCount")) $("#fbHistoryCount").textContent = `${history.total || 0} مورد`;
+    const list = $("#fbHistoryList");
+    if (list) {
+      list.innerHTML = items.length
+        ? items.map((item) => `
+          <article class="facebook-history-card">
+            <div>
+              <strong>${esc(facebookGroupLabel(item.group_url))}</strong>
+              <div class="facebook-history-meta">
+                <span>${esc(item.posted_at || "—")}</span>
+                <span>سیگنال <code>${esc(item.signal_id || "—")}</code></span>
+                ${item.notes ? `<span>${esc(item.notes)}</span>` : ""}
+              </div>
+            </div>
+            <div class="facebook-history-actions">
+              <a class="btn btn-ghost btn-compact" href="${esc(item.group_url)}" target="_blank" rel="noopener">مشاهده گروه</a>
+            </div>
+          </article>`).join("")
+        : '<div class="facebook-empty"><strong>هنوز پیامی با موفقیت ارسال نشده</strong><span>پس از تأیید و ارسال، تاریخچه اینجا نمایش داده می‌شود.</span></div>';
+    }
+    if ($("#fbHistoryPageInfo")) $("#fbHistoryPageInfo").textContent = `صفحه ${fbHistoryPage} از ${Math.max(pages, 1)}`;
+    if ($("#btnFbHistoryPrev")) $("#btnFbHistoryPrev").disabled = fbHistoryPage <= 1;
+    if ($("#btnFbHistoryNext")) $("#btnFbHistoryNext").disabled = pages <= 0 || fbHistoryPage >= pages;
+    $("#fbHistoryPagination")?.classList.toggle("hidden", pages <= 1);
+  }
+
+  async function fetchFacebookHistory(page = fbHistoryPage) {
+    const history = await api(`/api/facebook/history?page=${page}&per_page=12`);
+    renderFacebookHistory(history);
+    return history;
+  }
+
   function renderFacebook(data) {
     if (!data) return;
     facebookPayload = data;
@@ -2403,9 +2470,14 @@
     }
 
     const jobsList = $("#fbJobsList");
+    const totalJobs = jobs.length;
+    const jobPages = Math.max(1, Math.ceil(totalJobs / FB_JOBS_PER_PAGE));
+    if (fbJobsPage > jobPages) fbJobsPage = jobPages;
+    const jobStart = (fbJobsPage - 1) * FB_JOBS_PER_PAGE;
+    const pagedJobs = jobs.slice(jobStart, jobStart + FB_JOBS_PER_PAGE);
     if (jobsList) {
-      jobsList.innerHTML = jobs.length
-        ? jobs.map((job) => `
+      jobsList.innerHTML = pagedJobs.length
+        ? pagedJobs.map((job) => `
           <article class="facebook-job-card">
             <div class="facebook-job-signal"><span class="signal-direction ${(job.direction || "").toLowerCase()}">${esc(job.direction || "—")}</span><strong>${esc(job.symbol || "—")}</strong><span>${esc(job.received_at || job.timestamp || "")}</span></div>
             <div class="facebook-job-levels"><span>Entry <strong>${esc(job.entry || "—")}</strong></span><span>SL <strong>${esc(job.sl || "—")}</strong></span><span>TP <strong>${esc(job.tp1 || "—")}</strong></span></div>
@@ -2413,6 +2485,11 @@
           </article>`).join("")
         : '<div class="facebook-empty"><strong>صف پیام خالی است</strong><span>با تولید سیگنال جدید، پیام آماده تأیید اینجا نمایش داده می‌شود.</span></div>';
     }
+    if ($("#fbJobsPageInfo")) $("#fbJobsPageInfo").textContent = `صفحه ${fbJobsPage} از ${jobPages} · ${totalJobs} پیام`;
+    if ($("#btnFbJobsPrev")) $("#btnFbJobsPrev").disabled = fbJobsPage <= 1;
+    if ($("#btnFbJobsNext")) $("#btnFbJobsNext").disabled = fbJobsPage >= jobPages;
+    $("#fbJobsPagination")?.classList.toggle("hidden", totalJobs <= FB_JOBS_PER_PAGE);
+    renderFacebookHistory(data.history || { items: [], total: 0, page: 1, pages: 0 });
   }
 
   async function fetchFacebook({ force = false } = {}) {
@@ -4658,20 +4735,33 @@
       partial: "ارسال با خطای جزئی تمام شد",
       failed: "ارسال ناموفق بود",
     };
+    const current = Number(status.current || 0);
+    const total = Number(status.total || 0);
+    const success = Number(status.success || 0);
+    const failed = Number(status.failed || 0);
+    let percent = 0;
+    if (state === "completed") percent = 100;
+    else if (total > 0) percent = Math.min(100, Math.round((current / total) * 100));
+    else if (terminal && success + failed > 0) percent = Math.min(100, Math.round((success / (success + failed)) * 100));
     $("#fbPublishProgress")?.classList.remove("hidden");
     $("#fbPublishProgress")?.setAttribute("data-state", state);
+    $("#fbPublishStateIcon")?.setAttribute("data-state", state);
     $("#fbPublishSpinner")?.classList.toggle("hidden", terminal);
     if ($("#fbPublishTitle")) $("#fbPublishTitle").textContent = titles[state] || "وضعیت ارسال";
     if ($("#fbPublishMessage")) $("#fbPublishMessage").textContent = status.message || "در حال دریافت وضعیت از سرور";
-    if ($("#fbPublishGroup")) $("#fbPublishGroup").textContent = status.group || "—";
-    if ($("#fbPublishCount")) $("#fbPublishCount").textContent = `${status.current || 0} از ${status.total || 0}`;
-    if ($("#fbPublishSuccess")) $("#fbPublishSuccess").textContent = status.success || 0;
-    if ($("#fbPublishFailed")) $("#fbPublishFailed").textContent = status.failed || 0;
+    if ($("#fbPublishGroup")) $("#fbPublishGroup").textContent = status.group || facebookGroupLabel(status.url) || "—";
+    if ($("#fbPublishCount")) $("#fbPublishCount").textContent = `${current} از ${total || Math.max(current, success + failed, 1)}`;
+    if ($("#fbPublishSuccess")) $("#fbPublishSuccess").textContent = success;
+    if ($("#fbPublishFailed")) $("#fbPublishFailed").textContent = failed;
+    if ($("#fbPublishBar")) $("#fbPublishBar").style.width = `${percent}%`;
     if ($("#fbPublishDetail")) $("#fbPublishDetail").textContent = status.detail || "";
     const url = $("#fbPublishUrl");
     if (url) {
       url.hidden = !status.url;
-      if (status.url) url.href = status.url;
+      if (status.url) {
+        url.href = status.url;
+        url.textContent = "مشاهده صفحه گروه";
+      }
     }
     const button = $("#btnFbApproveSend");
     if (button) {
@@ -4689,6 +4779,7 @@
       if (terminal) {
         invalidateCache("facebook");
         await fetchFacebook({ force: true });
+        await fetchFacebookHistory(1);
         toast(status.state === "completed" ? "پیام با موفقیت به گروه ارسال شد" : "ارسال فیسبوک با خطا تمام شد", status.state === "completed" ? "success" : "error");
         return;
       }
@@ -4878,34 +4969,32 @@
     }
     const button = event.target.closest("[data-fb-preview]");
     if (!button) return;
+    const signalId = button.dataset.fbPreview;
+    facebookPreviewSignalId = signalId;
+    const previewTabs = buildFacebookPreviewTabs(null);
+    renderFacebookPreviewTabButtons(previewTabs, previewTabs[0]?.tabKey);
+    if ($("#fbPreviewSignal")) $("#fbPreviewSignal").textContent = "در حال بارگذاری پیش‌نمایش...";
+    if ($("#fbMessagePreview")) $("#fbMessagePreview").textContent = "در حال ساخت متن پیام برای سه زبان...";
+    clearTimeout(facebookPublishPollTimer);
+    facebookPublishPollTimer = null;
+    $("#fbPublishProgress")?.classList.add("hidden");
+    const approveButton = $("#btnFbApproveSend");
+    if (approveButton) {
+      approveButton.disabled = false;
+      approveButton.textContent = "تأیید و ارسال به گروه‌های فعال";
+    }
+    $("#fbPreviewModal")?.classList.add("open");
+    $("#fbPreviewModal")?.setAttribute("aria-hidden", "false");
     try {
       button.classList.add("loading");
-      const data = await api(`/api/facebook/jobs/${button.dataset.fbPreview}/preview`);
-      facebookPreviewSignalId = button.dataset.fbPreview;
+      const data = await api(`/api/facebook/jobs/${signalId}/preview`);
       facebookPreviewTemplates = data.templates;
       if ($("#fbPreviewSignal")) $("#fbPreviewSignal").textContent = `${data.signal.symbol} ${data.signal.direction} · ${data.signal.entry}`;
-      const configured = (facebookPayload?.groups || []).filter((group) => group.enabled);
-      const keys = [...new Set((configured.length ? configured : [
-        { language: "English", template: "1" },
-        { language: "Persian", template: "1" },
-        { language: "Russian", template: "1" },
-      ]).map((group) => `${group.language}:${group.template}`))];
-      if ($("#fbPreviewTabs")) $("#fbPreviewTabs").innerHTML = keys.map((key) => {
-        const [language, template] = key.split(":");
-        return `<button type="button" data-fb-template="${esc(key)}">${esc(language)} · ${esc(template)}</button>`;
-      }).join("");
-      showFacebookPreviewTemplate(keys[0]);
-      clearTimeout(facebookPublishPollTimer);
-      facebookPublishPollTimer = null;
-      $("#fbPublishProgress")?.classList.add("hidden");
-      const approveButton = $("#btnFbApproveSend");
-      if (approveButton) {
-        approveButton.disabled = false;
-        approveButton.textContent = "تأیید و ارسال به گروه‌های فعال";
-      }
-      $("#fbPreviewModal")?.classList.add("open");
-      $("#fbPreviewModal")?.setAttribute("aria-hidden", "false");
+      const tabs = buildFacebookPreviewTabs(data.templates);
+      renderFacebookPreviewTabButtons(tabs, tabs[0]?.tabKey);
+      showFacebookPreviewTemplate(tabs[0]?.tabKey);
     } catch (error) {
+      closeFacebookPreviewModal();
       toast(error.message, "error");
     } finally {
       button.classList.remove("loading");
@@ -4966,6 +5055,25 @@
   });
 
   $("#btnFbRefresh")?.addEventListener("click", () => fetchFacebook({ force: true }).catch((error) => toast(error.message, "error")));
+  $("#btnFbJobsPrev")?.addEventListener("click", () => {
+    if (fbJobsPage <= 1) return;
+    fbJobsPage -= 1;
+    renderFacebook(facebookPayload);
+  });
+  $("#btnFbJobsNext")?.addEventListener("click", () => {
+    const totalJobs = (facebookPayload?.jobs || []).length;
+    const jobPages = Math.max(1, Math.ceil(totalJobs / FB_JOBS_PER_PAGE));
+    if (fbJobsPage >= jobPages) return;
+    fbJobsPage += 1;
+    renderFacebook(facebookPayload);
+  });
+  $("#btnFbHistoryPrev")?.addEventListener("click", () => {
+    if (fbHistoryPage <= 1) return;
+    fetchFacebookHistory(fbHistoryPage - 1).catch((error) => toast(error.message, "error"));
+  });
+  $("#btnFbHistoryNext")?.addEventListener("click", () => {
+    fetchFacebookHistory(fbHistoryPage + 1).catch((error) => toast(error.message, "error"));
+  });
 
   // ── Config Save ──
   $("#btnSaveConfig")?.addEventListener("click", async () => {
