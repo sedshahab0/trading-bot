@@ -70,6 +70,7 @@ _pm2_cache: dict = {"ts": 0.0, "data": []}
 _system_micro_cache: dict = {"ts": 0.0, "data": None}
 _enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "enriched": []}
 _simulation_index_ready = False
+_simulation_schema_cache: dict = {"mtime": 0.0, "columns": set()}
 _cpu_primed = False
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
@@ -197,7 +198,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 48, "patch": 0, "label": "v2.48", "released": "", "history": []}
+    default = {"major": 2, "minor": 50, "patch": 0, "label": "v2.50", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2637,16 +2638,39 @@ def _ensure_simulation_indexes() -> None:
         return
     try:
         with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(simulated_trades)")}
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_signal_time ON simulated_trades(signal_time DESC)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_symbol ON simulated_trades(symbol)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_status ON simulated_trades(status)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_active ON simulated_trades(active)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_closed_at ON simulated_trades(closed_at DESC)")
+            if "signal_time" in columns:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_signal_time ON simulated_trades(signal_time DESC)")
+            if "symbol" in columns:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_symbol ON simulated_trades(symbol)")
+            if "status" in columns:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_status ON simulated_trades(status)")
+            if "active" in columns:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_active ON simulated_trades(active)")
+            if "closed_at" in columns:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_closed_at ON simulated_trades(closed_at DESC)")
         _simulation_index_ready = True
     except Exception:
         pass
+
+
+def _simulation_trade_columns() -> set[str]:
+    if not SIMULATION_DB.exists():
+        return set()
+    mtime = SIMULATION_DB.stat().st_mtime
+    cached = _simulation_schema_cache["columns"]
+    if cached and _simulation_schema_cache["mtime"] == mtime:
+        return cached
+    try:
+        with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(simulated_trades)").fetchall()}
+    except Exception:
+        columns = set()
+    _simulation_schema_cache["mtime"] = mtime
+    _simulation_schema_cache["columns"] = columns
+    return columns
 
 
 def _simulation_rows_since(cutoff_iso: str, symbol: str = "all", status: str = "all") -> tuple[list[dict], list[str]]:
@@ -2655,28 +2679,41 @@ def _simulation_rows_since(cutoff_iso: str, symbol: str = "all", status: str = "
     _ensure_simulation_indexes()
     with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
         conn.row_factory = sqlite3.Row
-        rows = [dict(row) for row in conn.execute(
-            """
-            SELECT id, signal_time, closed_at, symbol, direction, status, active, entry, sl, tp1, tp2,
-                   rr, r_multiple, score, outcome, mfe_r, mae_r, ambiguous, data_quality,
-                   delivery_status, expiry_at
-            FROM simulated_trades
-            WHERE signal_time >= ?
-            ORDER BY signal_time DESC
-            """,
-            (cutoff_iso,),
-        ).fetchall()]
-    available_symbols = sorted({row["symbol"] for row in rows})
+        available_columns = _simulation_trade_columns()
+        if not available_columns or "signal_time" not in available_columns:
+            return [], []
+        wanted_columns = [
+            "id", "signal_time", "closed_at", "symbol", "direction", "status", "active",
+            "entry", "sl", "tp1", "tp2", "rr", "r_multiple", "score", "outcome",
+            "mfe_r", "mae_r", "ambiguous", "data_quality", "delivery_status", "expiry_at",
+        ]
+        select_clause = ", ".join(
+            column if column in available_columns else f"NULL AS {column}"
+            for column in wanted_columns
+        )
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                f"""
+                SELECT {select_clause}
+                FROM simulated_trades
+                WHERE signal_time >= ?
+                ORDER BY signal_time DESC
+                """,
+                (cutoff_iso,),
+            ).fetchall()
+        ]
+    available_symbols = sorted({row.get("symbol") for row in rows if row.get("symbol")})
     if symbol != "all":
-        rows = [row for row in rows if row["symbol"] == symbol.replace("/", "").upper()]
+        rows = [row for row in rows if row.get("symbol") == symbol.replace("/", "").upper()]
     if status == "open":
-        rows = [row for row in rows if row["active"]]
+        rows = [row for row in rows if row.get("active")]
     elif status == "win":
-        rows = [row for row in rows if not row["active"] and (row.get("r_multiple") or 0) > 0]
+        rows = [row for row in rows if not row.get("active") and (row.get("r_multiple") or 0) > 0]
     elif status == "loss":
-        rows = [row for row in rows if not row["active"] and (row.get("r_multiple") or 0) < 0]
+        rows = [row for row in rows if not row.get("active") and (row.get("r_multiple") or 0) < 0]
     elif status not in ("all", ""):
-        rows = [row for row in rows if row["status"] == status]
+        rows = [row for row in rows if row.get("status") == status]
     return rows, available_symbols
 
 
@@ -2700,12 +2737,12 @@ def _simulation_payload_from_rows(
         or "2"
     )
     chronological = sorted(rows, key=lambda row: row["signal_time"])
-    closed = [row for row in chronological if not row["active"] and row.get("r_multiple") is not None]
-    wins = [row for row in closed if row["r_multiple"] > 0]
-    losses = [row for row in closed if row["r_multiple"] < 0]
-    breakeven = [row for row in closed if row["r_multiple"] == 0]
-    gross_profit = sum(row["r_multiple"] for row in wins)
-    gross_loss = abs(sum(row["r_multiple"] for row in losses))
+    closed = [row for row in chronological if not row.get("active") and row.get("r_multiple") is not None]
+    wins = [row for row in closed if (row.get("r_multiple") or 0) > 0]
+    losses = [row for row in closed if (row.get("r_multiple") or 0) < 0]
+    breakeven = [row for row in closed if (row.get("r_multiple") or 0) == 0]
+    gross_profit = sum(float(row.get("r_multiple") or 0) for row in wins)
+    gross_loss = abs(sum(float(row.get("r_multiple") or 0) for row in losses))
     decided = len(wins) + len(losses)
     if decided:
         observed = len(wins) / decided
@@ -2723,31 +2760,31 @@ def _simulation_payload_from_rows(
     max_drawdown = 0.0
     equity = []
     for row in closed:
-        cumulative += float(row["r_multiple"])
+        cumulative += float(row.get("r_multiple") or 0)
         peak = max(peak, cumulative)
         max_drawdown = max(max_drawdown, peak - cumulative)
         equity.append({
-            "time": row["closed_at"] or row["signal_time"],
+            "time": row.get("closed_at") or row.get("signal_time"),
             "value": round(cumulative, 3),
-            "id": row["id"],
+            "id": row.get("id"),
         })
     losing_streak = 0
     max_losing_streak = 0
     for row in closed:
-        if float(row["r_multiple"]) < 0:
+        if float(row.get("r_multiple") or 0) < 0:
             losing_streak += 1
             max_losing_streak = max(max_losing_streak, losing_streak)
         else:
             losing_streak = 0
     symbols: dict[str, dict] = {}
     for row in rows:
-        bucket = symbols.setdefault(row["symbol"], {"symbol": row["symbol"], "total": 0, "closed": 0, "wins": 0, "losses": 0, "r": 0.0})
+        bucket = symbols.setdefault(row.get("symbol"), {"symbol": row.get("symbol"), "total": 0, "closed": 0, "wins": 0, "losses": 0, "r": 0.0})
         bucket["total"] += 1
-        if not row["active"] and row.get("r_multiple") is not None:
+        if not row.get("active") and row.get("r_multiple") is not None:
             bucket["closed"] += 1
-            bucket["r"] += float(row["r_multiple"])
-            bucket["wins"] += int(row["r_multiple"] > 0)
-            bucket["losses"] += int(row["r_multiple"] < 0)
+            bucket["r"] += float(row.get("r_multiple") or 0)
+            bucket["wins"] += int((row.get("r_multiple") or 0) > 0)
+            bucket["losses"] += int((row.get("r_multiple") or 0) < 0)
     by_symbol = []
     for bucket in symbols.values():
         bucket["r"] = round(bucket["r"], 2)
@@ -3163,7 +3200,7 @@ def api_simulation():
     page = max(1, request.args.get("page", 1, type=int))
     per_page = max(1, min(100, request.args.get("per_page", 20, type=int)))
     db_mtime = int(SIMULATION_DB.stat().st_mtime) if SIMULATION_DB.exists() else 0
-    cache_key = f"simulation:v3:{db_mtime}:{days}:{symbol}:{status}:{page}:{per_page}"
+    cache_key = f"simulation:v4:{db_mtime}:{days}:{symbol}:{status}:{page}:{per_page}"
     payload = _cache_json(cache_key, 30, lambda: _simulation_payload(days, symbol, status, page, per_page))
     return jsonify(payload)
 
