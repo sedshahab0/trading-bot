@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css?v=20" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=2.46.0" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=2.47.0" />
   <script src="/static/vendor/chart.umd.min.js?v=2"></script>
 </head>
 <body class="auth-pending">
@@ -49,7 +49,7 @@
           <p class="login-error" id="loginError"></p>
           <div class="login-footer">
             <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
-            <span class="version-badge" id="loginVersion">v2.46</span>
+            <span class="version-badge" id="loginVersion">v2.47</span>
           </div>
         </div>
       </div>
@@ -66,7 +66,7 @@
         <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
         <div class="sidebar-brand-text">
           <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.46</span></span>
+          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.47</span></span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -77,7 +77,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.46.0</span>
+          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.47.0</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
@@ -664,6 +664,14 @@
             <select id="simSymbol" class="select-input" aria-label="نماد شبیه‌سازی"><option value="all">همه نمادها</option></select>
             <select id="simStatus" class="select-input" aria-label="نتیجه شبیه‌سازی"><option value="all">همه نتایج</option><option value="win">سودده</option><option value="loss">زیان‌ده</option><option value="open">باز</option><option value="tp1">TP1</option><option value="tp2">TP2</option><option value="sl">SL</option><option value="expired">منقضی</option></select>
             <button class="btn btn-secondary" id="btnSimRefresh">بروزرسانی نتایج</button>
+          </div>
+
+          <div class="simulation-loading hidden" id="simulationLoading" aria-live="polite" aria-label="در حال بارگذاری داده‌ها">
+            <span class="simulation-loading-spinner"></span>
+            <div class="simulation-loading-copy">
+              <strong>در حال بارگذاری داده‌های شبیه‌ساز</strong>
+              <span>ممکن است اولین بار چند ثانیه طول بکشد. کش و کوئری‌ها بهینه شده‌اند.</span>
+            </div>
           </div>
 
           <div class="simulation-grid">
@@ -1329,6 +1337,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=2.46.0"></script>
+  <script src="/static/js/dashboard.js?v=2.47.0"></script>
 </body>
 </html>

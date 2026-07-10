@@ -69,6 +69,7 @@ _telegram_cache: dict = {"mtime": 0.0, "days": 0, "limit": 0, "entries": []}
 _pm2_cache: dict = {"ts": 0.0, "data": []}
 _system_micro_cache: dict = {"ts": 0.0, "data": None}
 _enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "enriched": []}
+_simulation_index_ready = False
 _cpu_primed = False
 PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
@@ -196,7 +197,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 46, "patch": 0, "label": "v2.46", "released": "", "history": []}
+    default = {"major": 2, "minor": 47, "patch": 0, "label": "v2.47", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -2629,13 +2630,39 @@ def _facebook_preview(job_file: Path) -> dict:
     return build_templates(load_signal_data(job_file))
 
 
+def _ensure_simulation_indexes() -> None:
+    global _simulation_index_ready
+    if _simulation_index_ready or not SIMULATION_DB.exists():
+        return
+    try:
+        with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_signal_time ON simulated_trades(signal_time DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_symbol ON simulated_trades(symbol)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_status ON simulated_trades(status)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_active ON simulated_trades(active)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sim_trades_closed_at ON simulated_trades(closed_at DESC)")
+        _simulation_index_ready = True
+    except Exception:
+        pass
+
+
 def _simulation_rows_since(cutoff_iso: str, symbol: str = "all", status: str = "all") -> tuple[list[dict], list[str]]:
     if not SIMULATION_DB.exists():
         return [], []
+    _ensure_simulation_indexes()
     with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
         conn.row_factory = sqlite3.Row
         rows = [dict(row) for row in conn.execute(
-            "SELECT * FROM simulated_trades WHERE signal_time >= ? ORDER BY signal_time DESC",
+            """
+            SELECT id, signal_time, closed_at, symbol, direction, status, active, entry, sl, tp1, tp2,
+                   rr, r_multiple, score, outcome, mfe_r, mae_r, ambiguous, data_quality,
+                   delivery_status, expiry_at
+            FROM simulated_trades
+            WHERE signal_time >= ?
+            ORDER BY signal_time DESC
+            """,
             (cutoff_iso,),
         ).fetchall()]
     available_symbols = sorted({row["symbol"] for row in rows})
@@ -3134,7 +3161,10 @@ def api_simulation():
     status = request.args.get("status", "all").strip().lower()
     page = max(1, request.args.get("page", 1, type=int))
     per_page = max(1, min(100, request.args.get("per_page", 20, type=int)))
-    return jsonify(_simulation_payload(days, symbol, status, page, per_page))
+    db_mtime = int(SIMULATION_DB.stat().st_mtime) if SIMULATION_DB.exists() else 0
+    cache_key = f"simulation:v3:{db_mtime}:{days}:{symbol}:{status}:{page}:{per_page}"
+    payload = _cache_json(cache_key, 30, lambda: _simulation_payload(days, symbol, status, page, per_page))
+    return jsonify(payload)
 
 
 @app.route("/api/logs")

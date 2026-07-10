@@ -236,7 +236,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = pageFromPathname() || normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.46", full: "2.46.0", major: 2, minor: 46, patch: 0 };
+  let dashboardVersion = { label: "v2.47", full: "2.47.0", major: 2, minor: 47, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -605,6 +605,12 @@
 
   function getSimulationExportWindow() {
     return $("#simExportWindow")?.value || "30d";
+  }
+
+  function setSimulationLoading(isLoading) {
+    $("#simulationLoading")?.classList.toggle("hidden", !isLoading);
+    $("#page-simulation")?.classList.toggle("is-loading", !!isLoading);
+    $("#btnSimRefresh")?.classList.toggle("loading", !!isLoading);
   }
 
   // ── Toast ──
@@ -2724,14 +2730,19 @@
     const symbol = $("#simSymbol")?.value || "all";
     const status = $("#simStatus")?.value || "all";
     const key = `simulation:${days}:${symbol}:${status}:${simulationPage}`;
-    const data = await DataCache.load(
-      key,
-      () => api(`/api/simulation?days=${days}&symbol=${encodeURIComponent(symbol)}&status=${status}&page=${simulationPage}&per_page=20`),
-      CACHE_TTL.simulation,
-      { force, onStale: renderSimulation }
-    );
-    renderSimulation(data);
-    return data;
+    setSimulationLoading(true);
+    try {
+      const data = await DataCache.load(
+        key,
+        () => api(`/api/simulation?days=${days}&symbol=${encodeURIComponent(symbol)}&status=${status}&page=${simulationPage}&per_page=20`),
+        CACHE_TTL.simulation,
+        { force, onStale: renderSimulation }
+      );
+      renderSimulation(data);
+      return data;
+    } finally {
+      setSimulationLoading(false);
+    }
   }
 
   async function fetchTelegram({ force = false } = {}) {
