@@ -197,7 +197,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 47, "patch": 0, "label": "v2.47", "released": "", "history": []}
+    default = {"major": 2, "minor": 48, "patch": 0, "label": "v2.48", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -1443,6 +1443,7 @@ def _build_simulation_xlsx(rows: list[dict], payload: dict, meta: dict) -> io.By
     ws.append(["Simulation Replay Export"])
     ws.append(["Generated", payload.get("generated_at", "")])
     ws.append(["Window", meta.get("label", "")])
+    ws.append(["Export Type", meta.get("subset_label", "همه معاملات")])
     ws.append(["Symbol Filter", meta.get("symbol_label", "All")])
     ws.append(["Status Filter", meta.get("status_label", "All")])
     ws.append(["Strategy Version", meta.get("strategy_version") or "—"])
@@ -3887,16 +3888,27 @@ def _simulation_export_window(window: str) -> tuple[datetime, str]:
     return now - timedelta(days=30), "۳۰ روز اخیر"
 
 
+def _simulation_subset(rows: list[dict], subset: str) -> tuple[list[dict], str]:
+    key = (subset or "all").strip().lower()
+    if key == "open":
+        return [row for row in rows if row.get("active")], "فقط معاملات باز"
+    if key == "closed":
+        return [row for row in rows if not row.get("active") and row.get("r_multiple") is not None], "فقط معاملات بسته‌شده"
+    return rows, "همه معاملات"
+
+
 @app.route("/api/export/simulation.xlsx")
 @auth_required
 def export_simulation_xlsx():
     if not HAS_OPENPYXL:
         return jsonify({"error": "openpyxl not installed"}), 500
     window = request.args.get("window", "30d")
+    subset = request.args.get("subset", "all")
     symbol = request.args.get("symbol", "all")
     status = request.args.get("status", "all")
     cutoff_dt, label = _simulation_export_window(window)
     rows, available_symbols = _simulation_rows_since(cutoff_dt.isoformat(), symbol=symbol, status=status)
+    rows, subset_label = _simulation_subset(rows, subset)
     payload = _simulation_payload_from_rows(
         rows,
         available_symbols,
@@ -3909,6 +3921,8 @@ def export_simulation_xlsx():
     meta = {
         "label": label,
         "window": window,
+        "subset": subset,
+        "subset_label": subset_label,
         "symbol": symbol,
         "symbol_label": "همه نمادها" if symbol == "all" else symbol,
         "status": status,
