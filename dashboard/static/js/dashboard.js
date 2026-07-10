@@ -236,7 +236,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = pageFromPathname() || normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.44", full: "2.44.0", major: 2, minor: 44, patch: 0 };
+  let dashboardVersion = { label: "v2.45", full: "2.45.0", major: 2, minor: 45, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -2623,7 +2623,14 @@
     }
     if ($("#simDeterministic")) $("#simDeterministic").textContent = `${summary.deterministic_rate ?? 0}%`;
     if ($("#simLossStreak")) $("#simLossStreak").textContent = `${summary.max_losing_streak || 0} معامله`;
-    if ($("#simAlgorithmVersion")) $("#simAlgorithmVersion").textContent = `v${data.method?.algorithm_version || "—"}`;
+    if ($("#simAlgorithmVersion")) {
+      const versionText = data.method?.algorithm_version_label || data.method?.algorithm_version;
+      $("#simAlgorithmVersion").textContent = versionText
+        ? String(versionText).startsWith("v")
+          ? String(versionText)
+          : `v${versionText}`
+        : "v—";
+    }
     if ($("#simConfidencePanel")) $("#simConfidencePanel").dataset.grade = summary.sample_grade || "low";
     if ($("#simConfidenceNote")) {
       const gradeText = { high: "نمونه آماری قوی", medium: "نمونه آماری متوسط", low: "نمونه هنوز کوچک است" };
@@ -4621,6 +4628,7 @@
       currentEl.innerHTML = `
         <div class="strategy-stat"><span class="strategy-stat-lbl">فایل فعال</span><span class="strategy-stat-val">${esc(active.original_name || "—")}</span></div>
         <div class="strategy-stat"><span class="strategy-stat-lbl">نسخه / Inputs</span><span class="strategy-stat-val">${esc(active.version || "—")} · ${active.input_count ?? "—"}</span></div>
+        <div class="strategy-stat"><span class="strategy-stat-lbl">آخرین نسخه آپلود</span><span class="strategy-stat-val">${esc(payload?.latest_version ? `v${payload.latest_version}` : "—")}</span></div>
         <div class="strategy-stat"><span class="strategy-stat-lbl">آخرین اعمال</span><span class="strategy-stat-val">${esc(active.applied_at || active.uploaded_at || "—")}</span></div>
         ${perfLine}`;
     } else {
@@ -4736,7 +4744,11 @@
       if (!res.ok) throw new Error(data.error || "آپلود ناموفق");
       strategyLastUploadId = data.entry?.id || null;
       DataCache.set("strategy", data.strategy || data);
+      invalidateCache("simulation:*");
       renderStrategyPanel(data.strategy || data);
+      if (activePage === "simulation") {
+        fetchSimulation({ force: true }).catch(() => {});
+      }
       setStrategyPendingFile(null);
       toast("استراتژی آپلود شد — برای اعمال روی ربات «فعال‌سازی» را بزنید");
       logControlActivity(`استراتژی آپلود: ${data.entry?.original_name || "?"}`, "ok");
@@ -4767,7 +4779,11 @@
         body: JSON.stringify({ id, restart_engine: true }),
       });
       DataCache.set("strategy", data.strategy);
+      invalidateCache("simulation:*");
       renderStrategyPanel(data.strategy);
+      if (activePage === "simulation") {
+        fetchSimulation({ force: true }).catch(() => {});
+      }
       strategyLastUploadId = null;
       if (data.entry?.id) {
         strategySelectedId = data.entry.id;

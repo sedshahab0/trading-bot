@@ -196,7 +196,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 44, "patch": 0, "label": "v2.44", "released": "", "history": []}
+    default = {"major": 2, "minor": 45, "patch": 0, "label": "v2.45", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -1651,11 +1651,54 @@ def _save_strategy_manifest(data: dict) -> None:
     STRATEGY_MANIFEST.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _normalize_strategy_version(raw) -> str | None:
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    return value[1:] if value.lower().startswith("v") else value
+
+
+def _strategy_version_meta(manifest: dict | None = None) -> dict:
+    manifest = manifest or _load_strategy_manifest()
+    history = manifest.get("history") or []
+    active_id = manifest.get("active_id") or ""
+    active = _strategy_entry_by_id(manifest, active_id) if active_id else None
+    latest = history[0] if history else None
+    latest_version = _normalize_strategy_version((latest or {}).get("version"))
+    active_version = _normalize_strategy_version((active or {}).get("version"))
+    return {
+        "latest_version": latest_version or active_version,
+        "latest_uploaded_at": (latest or {}).get("uploaded_at"),
+        "active_version": active_version or latest_version,
+        "active_applied_at": (active or {}).get("applied_at"),
+        "active_id": active_id or None,
+    }
+
+
+def _sync_strategy_version_settings(manifest: dict | None = None) -> dict:
+    meta = _strategy_version_meta(manifest)
+    updates: dict[str, str] = {}
+    if meta.get("latest_version"):
+        updates["STRATEGY_LATEST_VERSION"] = meta["latest_version"]
+        updates["SIMULATION_ALGORITHM_VERSION"] = meta["latest_version"]
+    if meta.get("latest_uploaded_at"):
+        updates["STRATEGY_LATEST_UPLOADED_AT"] = meta["latest_uploaded_at"]
+    if meta.get("active_version"):
+        updates["STRATEGY_ACTIVE_VERSION"] = meta["active_version"]
+    if meta.get("active_applied_at"):
+        updates["STRATEGY_ACTIVE_APPLIED_AT"] = meta["active_applied_at"]
+    if updates:
+        _upsert_bot_settings(updates)
+    return meta
+
+
 def _analyze_mq5(content: str) -> dict:
     version = None
     m = _MQ5_VERSION_RE.search(content)
     if m:
-        version = m.group(1)
+        version = _normalize_strategy_version(m.group(1))
     inputs = _MQ5_INPUT_RE.findall(content)
     title = None
     for line in content.splitlines()[:20]:
@@ -1707,6 +1750,7 @@ def _apply_strategy_file(entry: dict, content: str, *, restart_engine: bool = Tr
     )
     manifest["activation_log"] = manifest["activation_log"][-120:]
     _save_strategy_manifest(manifest)
+    _sync_strategy_version_settings(manifest)
     _audit("strategy_apply", f"{entry.get('original_name')} ({entry.get('id')})")
     restart_ok = None
     restart_skipped = False
@@ -1955,6 +1999,7 @@ def _strategy_status_payload() -> dict:
     active = _strategy_entry_by_id(manifest, manifest.get("active_id") or "")
     active_exists = STRATEGY_ACTIVE.exists()
     legacy_exists = STRATEGY_LEGACY.exists()
+    version_meta = _strategy_version_meta(manifest)
     enriched = _get_enriched_all()
     periods_raw = _strategy_activation_periods(manifest)
     perf_by_id = _strategy_performance_by_entry(manifest, enriched, periods_raw)
@@ -2002,6 +2047,10 @@ def _strategy_status_payload() -> dict:
         "active_id": active_id,
         "active_path": str(STRATEGY_ACTIVE) if active_exists else None,
         "legacy_path": str(STRATEGY_LEGACY) if legacy_exists else None,
+        "latest_version": version_meta.get("latest_version"),
+        "latest_uploaded_at": version_meta.get("latest_uploaded_at"),
+        "active_version": version_meta.get("active_version"),
+        "active_applied_at": version_meta.get("active_applied_at"),
         "history": history,
         "uploads_dir": str(STRATEGY_UPLOADS),
         "performance_summary": {
@@ -2438,11 +2487,33 @@ def _simulation_payload(
     page: int = 1,
     per_page: int = 20,
 ) -> dict:
+    strategy_meta = _strategy_version_meta()
+    settings = _load_bot_settings()
+    configured_algorithm_version = _normalize_strategy_version(
+        settings.get("SIMULATION_ALGORITHM_VERSION")
+        or settings.get("STRATEGY_LATEST_VERSION")
+        or strategy_meta.get("latest_version")
+        or strategy_meta.get("active_version")
+        or "2"
+    )
     if not SIMULATION_DB.exists():
         return {
             "trades": [], "summary": {"total": 0, "closed": 0},
             "equity": [], "by_symbol": [], "available_symbols": [],
             "pagination": {"page": 1, "per_page": per_page, "total": 0, "pages": 1},
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "method": {
+                "timeframe": "M5",
+                "position": "50% TP1 + 50% TP2",
+                "same_bar": "SL first (conservative)",
+                "expiry_hours": int(_parse_env().get("SIMULATION_EXPIRY_HOURS", "72")),
+                "algorithm_version": configured_algorithm_version,
+                "algorithm_version_label": f"v{configured_algorithm_version}" if configured_algorithm_version else "v—",
+                "strategy_version": strategy_meta.get("latest_version") or strategy_meta.get("active_version"),
+                "lookahead_protection": "next complete M5 candle",
+                "gap_handling": "stop exits at candle open when price gaps beyond SL",
+                "costs": "spread, commission and swap are not included",
+            },
         }
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
@@ -2581,7 +2652,9 @@ def _simulation_payload(
             "position": "50% TP1 + 50% TP2",
             "same_bar": "SL first (conservative)",
             "expiry_hours": int(_parse_env().get("SIMULATION_EXPIRY_HOURS", "72")),
-            "algorithm_version": 2,
+            "algorithm_version": configured_algorithm_version,
+            "algorithm_version_label": f"v{configured_algorithm_version}" if configured_algorithm_version else "v—",
+            "strategy_version": strategy_meta.get("latest_version") or strategy_meta.get("active_version"),
             "lookahead_protection": "next complete M5 candle",
             "gap_handling": "stop exits at candle open when price gaps beyond SL",
             "costs": "spread, commission and swap are not included",
@@ -3943,6 +4016,7 @@ def api_strategy_upload():
     history.insert(0, entry)
     manifest["history"] = history[:30]
     _save_strategy_manifest(manifest)
+    _sync_strategy_version_settings(manifest)
     _audit("strategy_upload", f"{original} ({entry_id})")
     _invalidate_dashboard_cache()
     return jsonify({"ok": True, "entry": entry, "strategy": _strategy_status_payload()})
