@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import logging
+import os
+import sqlite3
 import time
 from collections import deque
+from pathlib import Path
 from typing import Dict
 
 import pandas as pd
@@ -71,6 +75,71 @@ class DataProvider:
         self.provider = provider
         self._cache: Dict[str, tuple[float, pd.DataFrame]] = {}
         self._limiter = RateLimiter()
+        data_root = Path(os.environ.get("BOT_DATA_ROOT", "/var/lib/trading-bot"))
+        self._cache_db = Path(os.environ.get("MARKET_CACHE_DB", str(data_root / "market-cache.sqlite3")))
+        self._init_persistent_cache()
+
+    def _init_persistent_cache(self) -> None:
+        try:
+            self._cache_db.parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self._cache_db, timeout=3) as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS market_cache (
+                        cache_key TEXT PRIMARY KEY,
+                        fetched_at REAL NOT NULL,
+                        payload TEXT NOT NULL
+                    )
+                """)
+        except (OSError, sqlite3.Error) as exc:
+            logger.warning("Persistent market cache unavailable: %s", exc)
+            self._cache_db = None
+
+    def _read_persistent(self, key: str) -> tuple[float, pd.DataFrame] | None:
+        if self._cache_db is None:
+            return None
+        try:
+            with sqlite3.connect(self._cache_db, timeout=3) as conn:
+                row = conn.execute(
+                    "SELECT fetched_at, payload FROM market_cache WHERE cache_key=?", (key,)
+                ).fetchone()
+            if not row:
+                return None
+            frame = pd.read_json(io.StringIO(row[1]), orient="split")
+            frame.index = pd.to_datetime(frame.index, utc=True)
+            return float(row[0]), frame
+        except (ValueError, OSError, sqlite3.Error) as exc:
+            logger.warning("Persistent cache read failed for %s: %s", key, exc)
+            return None
+
+    def _write_persistent(self, key: str, fetched_at: float, frame: pd.DataFrame) -> None:
+        if self._cache_db is None:
+            return
+        try:
+            payload = frame.to_json(orient="split", date_format="iso")
+            with sqlite3.connect(self._cache_db, timeout=3) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO market_cache(cache_key, fetched_at, payload)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(cache_key) DO UPDATE SET
+                        fetched_at=excluded.fetched_at,
+                        payload=excluded.payload
+                    """,
+                    (key, fetched_at, payload),
+                )
+        except (OSError, sqlite3.Error) as exc:
+            logger.warning("Persistent cache write failed for %s: %s", key, exc)
+
+    def _stale_cache(self, key: str) -> pd.DataFrame | None:
+        cached = self._cache.get(key)
+        if cached:
+            return cached[1].copy()
+        persistent = self._read_persistent(key)
+        if persistent:
+            self._cache[key] = persistent
+            return persistent[1].copy()
+        return None
 
     def get_ohlcv(self, symbol: str, timeframe: str) -> pd.DataFrame:
         key = f"{symbol}:{timeframe}"
@@ -81,6 +150,13 @@ class DataProvider:
             ts, df = self._cache[key]
             if now - ts < ttl:
                 return df.copy()
+        else:
+            persistent = self._read_persistent(key)
+            if persistent:
+                self._cache[key] = persistent
+                ts, df = persistent
+                if now - ts < ttl:
+                    return df.copy()
 
         if self.provider == "yfinance":
             df = self._fetch_yfinance(symbol, timeframe)
@@ -89,6 +165,7 @@ class DataProvider:
 
         df = df.sort_index()
         self._cache[key] = (now, df)
+        self._write_persistent(key, now, df)
         return df.copy()
 
     def _fetch_twelve_data(self, symbol: str, timeframe: str) -> pd.DataFrame:
@@ -126,9 +203,10 @@ class DataProvider:
                         retry,
                         attempt + 1,
                     )
-                    if key in self._cache:
+                    stale = self._stale_cache(key)
+                    if stale is not None:
                         logger.warning("Using stale cache for %s", key)
-                        return self._cache[key][1].copy()
+                        return stale
                     time.sleep(retry)
                     continue
                 r.raise_for_status()
@@ -136,8 +214,9 @@ class DataProvider:
                 if payload.get("status") == "error":
                     msg = payload.get("message", str(payload))
                     if "API credits" in msg or "rate" in msg.lower():
-                        if key in self._cache:
-                            return self._cache[key][1].copy()
+                        stale = self._stale_cache(key)
+                        if stale is not None:
+                            return stale
                         time.sleep(60)
                         continue
                     raise RuntimeError(msg)
@@ -153,15 +232,17 @@ class DataProvider:
                 df = df.rename(columns=str.lower)
                 return df[["open", "high", "low", "close"]].dropna()
             except requests.RequestException as e:
-                if key in self._cache:
+                stale = self._stale_cache(key)
+                if stale is not None:
                     logger.warning("Request failed, stale cache for %s: %s", key, e)
-                    return self._cache[key][1].copy()
+                    return stale
                 if attempt == 2:
                     raise
                 time.sleep(15 * (attempt + 1))
 
-        if key in self._cache:
-            return self._cache[key][1].copy()
+        stale = self._stale_cache(key)
+        if stale is not None:
+            return stale
         raise RuntimeError(f"Failed to fetch {symbol} {timeframe} after retries")
 
     def _fetch_yfinance(self, symbol: str, timeframe: str) -> pd.DataFrame:

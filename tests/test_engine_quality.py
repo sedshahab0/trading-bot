@@ -2,10 +2,12 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
 from engine import indicators
+from engine.data_provider import DataProvider
 from engine.simulation import ALGORITHM_VERSION, SimulationTracker
 
 
@@ -74,6 +76,25 @@ class SimulationIntegrityTests(unittest.TestCase):
                 self.assertEqual(row["status"], "tp2")
                 self.assertEqual(row["algorithm_version"], ALGORITHM_VERSION)
                 self.assertEqual(row["data_quality"], "verified_m5")
+
+
+class PersistentMarketCacheTests(unittest.TestCase):
+    def test_cache_survives_provider_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = str(Path(tmp) / "market.sqlite3")
+            frame = pd.DataFrame(
+                [{"open": 1.0, "high": 1.2, "low": 0.9, "close": 1.1}],
+                index=pd.DatetimeIndex(["2026-07-10T12:00:00+00:00"]),
+            )
+            with patch.dict("os.environ", {"MARKET_CACHE_DB": cache_path}):
+                first = DataProvider("unused")
+                first._write_persistent("EUR/USD:M5", 123.0, frame)
+                second = DataProvider("unused")
+                cached = second._read_persistent("EUR/USD:M5")
+            self.assertIsNotNone(cached)
+            fetched_at, restored = cached
+            self.assertEqual(fetched_at, 123.0)
+            self.assertEqual(float(restored.iloc[0]["close"]), 1.1)
 
 
 if __name__ == "__main__":
