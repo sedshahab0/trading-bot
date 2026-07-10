@@ -198,7 +198,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 54, "patch": 0, "label": "v2.54", "released": "", "history": []}
+    default = {"major": 2, "minor": 55, "patch": 0, "label": "v2.55", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -3270,6 +3270,38 @@ def api_config_patch():
     updates = {k: str(v) for k, v in data.items() if k in allowed}
     if not updates:
         return jsonify({"error": "No valid fields"}), 400
+
+    if "SYMBOLS" in updates:
+        symbols = [
+            item.strip().upper()
+            for item in updates["SYMBOLS"].replace(";", ",").split(",")
+            if item.strip()
+        ]
+        valid_symbol = re.compile(r"^[A-Z0-9._-]{3,12}(?:/[A-Z0-9._-]{3,12})?$")
+        if not symbols or len(symbols) > 20 or any(not valid_symbol.fullmatch(item) for item in symbols):
+            return jsonify({"error": "SYMBOLS must contain 1-20 valid comma-separated symbols"}), 400
+        updates["SYMBOLS"] = ",".join(dict.fromkeys(symbols))
+
+    numeric_limits = {
+        "MIN_SCORE": (1, 20),
+        "POLL_SECONDS": (15, 3600),
+    }
+    for key, (minimum, maximum) in numeric_limits.items():
+        if key not in updates:
+            continue
+        try:
+            value = int(updates[key])
+        except ValueError:
+            return jsonify({"error": f"{key} must be an integer"}), 400
+        if not minimum <= value <= maximum:
+            return jsonify({"error": f"{key} must be between {minimum} and {maximum}"}), 400
+        updates[key] = str(value)
+
+    if "DATA_PROVIDER" in updates:
+        updates["DATA_PROVIDER"] = updates["DATA_PROVIDER"].strip().lower()
+        if updates["DATA_PROVIDER"] not in {"twelvedata", "yfinance"}:
+            return jsonify({"error": "Unsupported DATA_PROVIDER"}), 400
+
     _write_env(updates)
     _audit("config_update", ", ".join(f"{k}={updates[k]}" for k in updates.keys()))
     _invalidate_dashboard_cache()
