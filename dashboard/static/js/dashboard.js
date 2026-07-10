@@ -236,7 +236,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = pageFromPathname() || normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.51", full: "2.51.0", major: 2, minor: 51, patch: 0 };
+  let dashboardVersion = { label: "v2.53", full: "2.53.0", major: 2, minor: 53, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -644,6 +644,24 @@
 
   async function authFetch(path, opts = {}) {
     return fetch(path, { credentials: "same-origin", ...opts });
+  }
+
+  function setExportBusy(button, isBusy, label = "در حال آماده‌سازی...") {
+    if (!button) return;
+    if (isBusy) {
+      if (!button.dataset.originalLabel) button.dataset.originalLabel = button.textContent || "";
+      button.classList.add("loading");
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.textContent = label;
+    } else {
+      button.classList.remove("loading");
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      const original = button.dataset.originalLabel;
+      if (original != null) button.textContent = original;
+      delete button.dataset.originalLabel;
+    }
   }
 
   // ── Auth ──
@@ -4302,8 +4320,26 @@
     });
   });
 
-  async function downloadExport(url) {
+  async function downloadExport(url, { button = null, navigation = false, loadingLabel = "در حال آماده‌سازی..." } = {}) {
+    let releaseBusy = true;
+    let doneTimer = null;
     try {
+      setExportBusy(button, true, loadingLabel);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (navigation) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.rel = "noopener";
+        link.target = "_self";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast("درخواست دانلود ارسال شد");
+        releaseBusy = false;
+        doneTimer = window.setTimeout(() => setExportBusy(button, false), 3000);
+        return;
+      }
       const res = await authFetch(url);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
@@ -4315,22 +4351,24 @@
       toast("فایل دانلود شد");
     } catch {
       toast("خطا در دانلود", "error");
+    } finally {
+      if (releaseBusy) setExportBusy(button, false);
     }
   }
 
-  $("#btnExportExcel")?.addEventListener("click", () => {
+  $("#btnExportExcel")?.addEventListener("click", (e) => {
     const days = $("#reportDays")?.value || 30;
-    downloadExport(`/api/export/signals.xlsx?days=${days}`);
+    downloadExport(`/api/export/signals.xlsx?days=${days}`, { button: e.currentTarget });
   });
 
-  $("#btnExportCsv")?.addEventListener("click", () => {
+  $("#btnExportCsv")?.addEventListener("click", (e) => {
     const days = $("#reportDays")?.value || 30;
-    downloadExport(`/api/export/signals.csv?days=${days}`);
+    downloadExport(`/api/export/signals.csv?days=${days}`, { button: e.currentTarget });
   });
 
-  $("#btnExportTelegram")?.addEventListener("click", () => {
+  $("#btnExportTelegram")?.addEventListener("click", (e) => {
     const days = $("#telegramDays")?.value || 30;
-    downloadExport(`/api/export/telegram.csv?days=${days}`);
+    downloadExport(`/api/export/telegram.csv?days=${days}`, { button: e.currentTarget });
   });
 
   $("#btnExportSimXlsx")?.addEventListener("click", () => {
@@ -4338,7 +4376,12 @@
     const subset = $("#simExportSubset")?.value || "all";
     const symbol = $("#simSymbol")?.value || "all";
     const status = $("#simStatus")?.value || "all";
-    downloadExport(`/api/export/simulation.xlsx?window=${encodeURIComponent(window)}&subset=${encodeURIComponent(subset)}&symbol=${encodeURIComponent(symbol)}&status=${encodeURIComponent(status)}`);
+    const btn = $("#btnExportSimXlsx");
+    downloadExport(`/api/export/simulation.xlsx?window=${encodeURIComponent(window)}&subset=${encodeURIComponent(subset)}&symbol=${encodeURIComponent(symbol)}&status=${encodeURIComponent(status)}`, {
+      button: btn,
+      navigation: true,
+      loadingLabel: "در حال ساخت اکسل...",
+    });
   });
 
   $("#telegramSearch")?.addEventListener("input", () => {
@@ -4395,7 +4438,7 @@
   $("#homeBtnPauseNotif")?.addEventListener("click", () => mgmt("pause_notifications", { confirmMsg: "ارسال نوتیفیکیشن متوقف شود؟" }));
   $("#homeBtnResumeNotif")?.addEventListener("click", () => mgmt("resume_notifications"));
 
-  $("#btnExportMetrics")?.addEventListener("click", () => downloadExport("/api/export/metrics.csv"));
+  $("#btnExportMetrics")?.addEventListener("click", (e) => downloadExport("/api/export/metrics.csv", { button: e.currentTarget }));
   $("#btnSaveOps")?.addEventListener("click", () => saveOpsConfig().catch((e) => toast(e.message, "error")));
   $("#btnWhatsNew")?.addEventListener("click", openChangelogModal);
   $("#sidebarVersionFull")?.addEventListener("click", openChangelogModal);

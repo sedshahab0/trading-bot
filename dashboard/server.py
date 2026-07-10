@@ -198,7 +198,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 51, "patch": 0, "label": "v2.51", "released": "", "history": []}
+    default = {"major": 2, "minor": 53, "patch": 0, "label": "v2.53", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -1559,16 +1559,24 @@ def _build_simulation_xlsx(rows: list[dict], payload: dict, meta: dict) -> io.By
     for item in sorted(daily_map.values(), key=lambda x: x["date"], reverse=True):
         ws5.append([item["date"], item["total"], item["wins"], item["losses"], round(item["r"], 2)])
 
-    for sheet in wb.worksheets:
-        for col in sheet.columns:
-            max_len = 0
-            column = col[0].column_letter
-            for cell in col:
-                try:
-                    max_len = max(max_len, len(str(cell.value)) if cell.value is not None else 0)
-                except Exception:
-                    pass
-            sheet.column_dimensions[column].width = min(max_len + 2, 34)
+    for col, width in {"A": 26, "B": 18}.items():
+        ws.column_dimensions[col].width = width
+
+    trade_widths = {
+        "A": 20, "B": 20, "C": 12, "D": 10, "E": 10, "F": 10,
+        "G": 12, "H": 12, "I": 12, "J": 12, "K": 10, "L": 12,
+        "M": 10, "N": 10, "O": 10, "P": 10, "Q": 10, "R": 14,
+        "S": 16, "T": 16, "U": 12,
+    }
+    for col, width in trade_widths.items():
+        ws2.column_dimensions[col].width = width
+
+    for col, width in {"A": 12, "B": 12, "C": 12, "D": 12, "E": 12, "F": 12, "G": 12}.items():
+        ws3.column_dimensions[col].width = width
+    for col, width in {"A": 20, "B": 14, "C": 14}.items():
+        ws4.column_dimensions[col].width = width
+    for col, width in {"A": 14, "B": 12, "C": 12, "D": 12, "E": 12}.items():
+        ws5.column_dimensions[col].width = width
 
     wb.save(buf)
     buf.seek(0)

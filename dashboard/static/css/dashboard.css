@@ -1159,6 +1159,29 @@ body {
 
 .btn-export svg { width: 18px; height: 18px; }
 
+.btn-export.loading {
+  position: relative;
+  pointer-events: none;
+  opacity: .78;
+}
+
+.btn-export.loading::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  margin-left: .55rem;
+  border: 2px solid currentColor;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: btn-export-spin .75s linear infinite;
+}
+
+@keyframes btn-export-spin {
+  to { transform: rotate(360deg); }
+}
+
 .btn-export.excel {
   background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05));
   border-color: rgba(34,197,94,0.3);
