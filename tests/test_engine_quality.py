@@ -99,6 +99,18 @@ class PersistentMarketCacheTests(unittest.TestCase):
             stale = second._stale_cache("EUR/USD:M5")
             self.assertEqual(stale.attrs["stale_fetched_at"], 123.0)
 
+    def test_budget_mode_reserves_twelve_data_for_metals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(
+                "os.environ",
+                {"MARKET_CACHE_DB": str(Path(tmp) / "market.sqlite3"), "TWELVEDATA_BUDGET_MODE": "1"},
+            ):
+                provider = DataProvider("unused", "twelvedata")
+            self.assertEqual(provider._provider_for_symbol("EUR/USD"), "yfinance")
+            self.assertEqual(provider._provider_for_symbol("USD/JPY"), "yfinance")
+            self.assertEqual(provider._provider_for_symbol("XAU/USD"), "twelvedata")
+            self.assertEqual(provider._provider_for_symbol("XAG/USD"), "twelvedata")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ import os
 import sqlite3
 import time
 from collections import deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict
 
@@ -75,6 +76,10 @@ class DataProvider:
         self.provider = provider
         self._cache: Dict[str, tuple[float, pd.DataFrame]] = {}
         self._limiter = RateLimiter()
+        self.budget_mode = os.environ.get("TWELVEDATA_BUDGET_MODE", "1").lower() in {
+            "1", "true", "yes", "on"
+        }
+        self._twelve_blocked_until = 0.0
         data_root = Path(os.environ.get("BOT_DATA_ROOT", "/var/lib/trading-bot"))
         self._cache_db = Path(os.environ.get("MARKET_CACHE_DB", str(data_root / "market-cache.sqlite3")))
         self._init_persistent_cache()
@@ -149,6 +154,9 @@ class DataProvider:
         key = f"{symbol}:{timeframe}"
         now = time.time()
         ttl = CACHE_TTL.get(timeframe, 300)
+        normalized = symbol.replace("/", "").upper()
+        if self.budget_mode and normalized.startswith(("XAU", "XAG")):
+            ttl = max(ttl, {"M5": 600, "M15": 1800}.get(timeframe, ttl))
 
         if key in self._cache:
             ts, df = self._cache[key]
@@ -162,7 +170,7 @@ class DataProvider:
                 if now - ts < ttl:
                     return df.copy()
 
-        if self.provider == "yfinance":
+        if self._provider_for_symbol(symbol) == "yfinance":
             df = self._fetch_yfinance(symbol, timeframe)
         else:
             df = self._fetch_twelve_data(symbol, timeframe)
@@ -173,12 +181,25 @@ class DataProvider:
         self._write_persistent(key, fetched_at, df)
         return df.copy()
 
+    def _provider_for_symbol(self, symbol: str) -> str:
+        if self.provider == "yfinance":
+            return "yfinance"
+        normalized = symbol.replace("/", "").upper()
+        if self.budget_mode and not normalized.startswith(("XAU", "XAG")):
+            return "yfinance"
+        return "twelvedata"
+
     def _fetch_twelve_data(self, symbol: str, timeframe: str) -> pd.DataFrame:
         if not self.api_key:
             raise RuntimeError(
                 "TWELVE_DATA_API_KEY is required. Get a free key at https://twelvedata.com"
             )
         key = f"{symbol}:{timeframe}"
+        if time.time() < self._twelve_blocked_until:
+            stale = self._stale_cache(key)
+            if stale is not None:
+                return stale
+            raise RuntimeError("Twelve Data daily credit limit reached; waiting for UTC reset")
         normalized_symbol = symbol.replace("/", "").upper()
         provider_symbol = (
             f"{normalized_symbol[:3]}/{normalized_symbol[3:]}"
@@ -200,6 +221,23 @@ class DataProvider:
             try:
                 r = requests.get(url, params=params, timeout=30)
                 if r.status_code == 429:
+                    try:
+                        message = str((r.json() or {}).get("message", ""))
+                    except ValueError:
+                        message = ""
+                    if "credits for the day" in message.lower() or "daily" in message.lower():
+                        now_utc = datetime.now(timezone.utc)
+                        reset = (now_utc + timedelta(days=1)).replace(
+                            hour=0, minute=2, second=0, microsecond=0
+                        )
+                        self._twelve_blocked_until = reset.timestamp()
+                        stale = self._stale_cache(key)
+                        if stale is not None:
+                            logger.warning("Daily credits exhausted; stale cache for %s", key)
+                            return stale
+                        raise RuntimeError(
+                            f"Twelve Data daily credits exhausted until {reset.isoformat()}"
+                        )
                     retry = int(r.headers.get("Retry-After", 60))
                     logger.warning(
                         "Twelve Data 429 for %s %s — wait %ss (attempt %s)",

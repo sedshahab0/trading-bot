@@ -131,7 +131,11 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                 continue
 
             for symbol in cfg.symbols:
-                bar_key = engine.latest_m5_bar(symbol)
+                try:
+                    bar_key = engine.latest_m5_bar(symbol)
+                except Exception:
+                    logger.exception("Market data unavailable for %s", symbol)
+                    continue
                 if not bar_key:
                     continue
 
@@ -141,7 +145,11 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                 last_bars[symbol] = bar_key
 
                 data.prefetch_symbol(symbol)
-                frames = engine.fetch_frames(symbol)
+                try:
+                    frames = engine.fetch_frames(symbol)
+                except Exception:
+                    logger.exception("Incomplete market frames for %s", symbol)
+                    continue
                 simulation.evaluate_symbol(symbol, frames["M5"])
 
                 cross_alert = engine.check_golden_cross(symbol, frames["D1"])
