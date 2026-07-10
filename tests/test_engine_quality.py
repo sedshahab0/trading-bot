@@ -95,6 +95,9 @@ class PersistentMarketCacheTests(unittest.TestCase):
             fetched_at, restored = cached
             self.assertEqual(fetched_at, 123.0)
             self.assertEqual(float(restored.iloc[0]["close"]), 1.1)
+            second._cache["EUR/USD:M5"] = cached
+            stale = second._stale_cache("EUR/USD:M5")
+            self.assertEqual(stale.attrs["stale_fetched_at"], 123.0)
 
 
 if __name__ == "__main__":

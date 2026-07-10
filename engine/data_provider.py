@@ -134,11 +134,15 @@ class DataProvider:
     def _stale_cache(self, key: str) -> pd.DataFrame | None:
         cached = self._cache.get(key)
         if cached:
-            return cached[1].copy()
+            frame = cached[1].copy()
+            frame.attrs["stale_fetched_at"] = cached[0]
+            return frame
         persistent = self._read_persistent(key)
         if persistent:
             self._cache[key] = persistent
-            return persistent[1].copy()
+            frame = persistent[1].copy()
+            frame.attrs["stale_fetched_at"] = persistent[0]
+            return frame
         return None
 
     def get_ohlcv(self, symbol: str, timeframe: str) -> pd.DataFrame:
@@ -163,9 +167,10 @@ class DataProvider:
         else:
             df = self._fetch_twelve_data(symbol, timeframe)
 
+        fetched_at = float(df.attrs.pop("stale_fetched_at", now))
         df = df.sort_index()
-        self._cache[key] = (now, df)
-        self._write_persistent(key, now, df)
+        self._cache[key] = (fetched_at, df)
+        self._write_persistent(key, fetched_at, df)
         return df.copy()
 
     def _fetch_twelve_data(self, symbol: str, timeframe: str) -> pd.DataFrame:
