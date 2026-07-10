@@ -23,6 +23,7 @@
 //|                                                                  |
 //|  SETUP                                                           |
 //|   Tools > Options > Expert Advisors > Allow WebRequest           |
+//|   When attaching EA: Common tab > "Allow Algo Trading" must be ON|
 //|   Add: https://api.telegram.org                                  |
 //|   Add: https://localhost:5005  (Facebook signal server)          |
 //+------------------------------------------------------------------+
@@ -77,6 +78,11 @@ input int     InpMinScore              = 7;     // raised from 5 — more conflu
 input bool    InpAlertFullSignal       = true;
 input int     InpCooldownBars          = 2;
 input bool    InpShowWatchSignals      = true;
+input bool    InpRequireHTFAlignment   = true;
+input int     InpMinStructureScore     = 2;
+input int     InpMinPrecisionScore     = 1;
+input double  InpMinStopATR            = 0.80;
+input double  InpMaxStopATR            = 2.50;
 
 // AMD
 input bool    InpAMDEnable             = true;
@@ -209,9 +215,20 @@ string SEP(){return _EmojiB(0x2015)+_EmojiB(0x2015)+_EmojiB(0x2015)+_EmojiB(0x20
              _EmojiB(0x2015)+_EmojiB(0x2015)+_EmojiB(0x2015)+_EmojiB(0x2015)+
              _EmojiB(0x2015)+_EmojiB(0x2015)+_EmojiB(0x2015);}
 
+bool AlgoTradingAllowed()
+{
+   return (bool)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) && (bool)MQLInfoInteger(MQL_TRADE_ALLOWED);
+}
+
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   if(!AlgoTradingAllowed())
+   {
+      Print("ERROR: Algo Trading is disabled. Enable the MT5 toolbar button and the EA 'Allow Algo Trading' checkbox before attaching this EA.");
+      return(INIT_FAILED);
+   }
+
    h_w_ema  = iMA(_Symbol,PERIOD_W1, InpWeeklyEMA,  0,MODE_EMA,PRICE_CLOSE);
    h_d_ma   = iMA(_Symbol,PERIOD_D1, InpDailyMA,    0,MODE_SMA,PRICE_CLOSE);
    h_d_fast = iMA(_Symbol,PERIOD_D1, InpCrossFastMA,0,MODE_SMA,PRICE_CLOSE);
@@ -258,6 +275,9 @@ void OnDeinit(const int reason)
 
 void OnTick()
 {
+   if(!AlgoTradingAllowed())
+      return;
+
    if(!g_startupSent)
    {
       g_startupSent=true;
@@ -1051,6 +1071,8 @@ void ProcessSignals()
    int wb=WeeklyBias(), db=DailyBias();
    if(db==0) return;
    int trend=db;
+   int h1e=H1EMABias();
+   if(InpRequireHTFAlignment && (wb!=trend || h1e!=trend)) return;
 
    // ── DXY Correlation ───────────────────────────────────────────
    if(!DXYAligned(trend)) return; // NEW 11
@@ -1065,7 +1087,6 @@ void ProcessSignals()
    double fibA,fibB;
    bool fib=FibZone(price,swH,swL,trend,fibA,fibB);
    int  tl =TrendlineOK(trend);
-   int  h1e=H1EMABias();
 
    // ── CHoCH / BOS ───────────────────────────────────────────────
    bool chaoch=false;
@@ -1129,21 +1150,25 @@ void ProcessSignals()
    // Momentum triggers (min 1 required, not scored to avoid inflation)
 
    int score=0;
+   int structureScore=0;
+   int precisionScore=0;
 
    // HTF Alignment
    if(db==trend)   score+=3;
    if(wb==trend)   score+=2;
 
    // Institutional Structure
-   if(bos==trend)  score+=2;
-   if(obOK)        score+=2;
-   if(fvgOK)       score+=2;
+   if(bos==trend)  structureScore+=2;
+   if(obOK)        structureScore+=2;
+   if(fvgOK)       structureScore+=2;
+   score+=structureScore;
 
    // Entry Precision
-   if(sweep)       score+=2;
-   if(kzLabel!="") score+=1;
-   if(amdOK)       score+=1;
-   if(divOK)       score+=1;
+   if(sweep)       precisionScore+=2;
+   if(kzLabel!="") precisionScore+=1;
+   if(amdOK)       precisionScore+=1;
+   if(divOK)       precisionScore+=1;
+   score+=precisionScore;
 
    // Supporting Confluence
    if(h1e==trend)  score+=1;
@@ -1168,6 +1193,7 @@ void ProcessSignals()
    }
 
    if(!trigger||score<InpMinScore) return;
+   if(structureScore<InpMinStructureScore || precisionScore<InpMinPrecisionScore) return;
    if(candlePat!=trend && InpCandleEnable) return; // require candle confirmation
 
    // ── Cooldown ──────────────────────────────────────────────────
@@ -1178,6 +1204,10 @@ void ProcessSignals()
    double entry,sl,tp1,tp2,tp3;
    Levels(trend,entry,sl,tp1,tp2,tp3);
    double slDist=MathAbs(entry-sl);
+   double atrNow=BufVal(h_atr,0,1);
+   if(atrNow==EMPTY_VALUE || atrNow<=0) return;
+   double stopATR=slDist/atrNow;
+   if(stopATR<InpMinStopATR || stopATR>InpMaxStopATR) return;
    double rr2=InpRRRatio;
    double rr3=InpTP3Ratio;
 

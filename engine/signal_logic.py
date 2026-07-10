@@ -138,6 +138,10 @@ class SignalEngine:
             return None
         trend = db
 
+        if cfg.require_weekly_alignment and wb != trend:
+            logger.debug("%s rejected: weekly alignment", symbol)
+            return None
+
         sw = ind.swing_hl(h1, cfg.swing_lookback)
         if not sw:
             return None
@@ -146,6 +150,9 @@ class SignalEngine:
         fib = ind.fib_zone(price, sw_h, sw_l, trend)
         tl = ind.trendline_ok(h1, trend, cfg.fractal_wing, cfg.swing_lookback)
         h1e = ind.bias_vs_ma(h1["close"].iloc[-2], h1_ema.iloc[-2])
+        if cfg.require_h1_alignment and h1e != trend:
+            logger.debug("%s rejected: H1 alignment", symbol)
+            return None
 
         rsi15_s = ind.rsi(m15["close"], cfg.rsi_period)
         macd15, sig15 = ind.macd_line_signal(
@@ -164,6 +171,31 @@ class SignalEngine:
 
         atr_s = ind.atr(m15, cfg.atr_period)
         atr_v = float(atr_s.iloc[-2]) if len(atr_s) >= 2 else 0.0
+        if not pd.notna(atr_v) or atr_v <= 0:
+            logger.debug("%s rejected: invalid ATR", symbol)
+            return None
+        if cfg.volatility_regime_enable:
+            regime_ok, regime_ratio = ind.volatility_regime(
+                atr_s,
+                cfg.volatility_lookback,
+                cfg.volatility_min_ratio,
+                cfg.volatility_max_ratio,
+            )
+            if not regime_ok:
+                logger.debug("%s rejected: volatility ratio=%s", symbol, regime_ratio)
+                return None
+
+        if cfg.candle_confirmation_enable and not ind.directional_candle(
+            m5, trend, cfg.min_trigger_body_ratio
+        ):
+            logger.debug("%s rejected: M5 candle confirmation", symbol)
+            return None
+
+        m15_anchor = ind.ema(m15["close"], cfg.h1_ema).iloc[-2]
+        entry = float(m5["close"].iloc[-2])
+        if not pd.notna(m15_anchor) or abs(entry - float(m15_anchor)) > atr_v * cfg.max_entry_distance_atr:
+            logger.debug("%s rejected: entry extended from M15 mean", symbol)
+            return None
         amd_ok = ind.amd_signal(m15, trend, atr_v, cfg) == trend
 
         score = 0
@@ -200,9 +232,12 @@ class SignalEngine:
         if not trigger or score < cfg.min_score:
             return None
 
-        entry = float(m5["close"].iloc[-1])
         sl = ind.structural_sl(h1, trend, entry, atr_v, cfg)
         sl_dist = abs(entry - sl)
+        stop_atr = sl_dist / atr_v
+        if not cfg.min_stop_atr <= stop_atr <= cfg.max_stop_atr:
+            logger.debug("%s rejected: stop distance %.2f ATR", symbol, stop_atr)
+            return None
         if trend == 1:
             tp1 = entry + sl_dist * cfg.tp1_ratio
             tp2 = entry + sl_dist * cfg.rr_ratio

@@ -99,6 +99,7 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
     simulation = SimulationTracker(
         os.environ.get("SIMULATION_DB", "/var/lib/trading-bot/signal-simulation.sqlite3"),
         expiry_hours=int(os.environ.get("SIMULATION_EXPIRY_HOURS", "72")),
+        cost_r=float(os.environ.get("SIMULATION_COST_R", "0.03")),
     )
     simulation.import_signal_log(
         os.environ.get("SIGNAL_LOG_FILE", "/var/lib/trading-bot/signal_log.txt")

@@ -198,7 +198,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 53, "patch": 0, "label": "v2.53", "released": "", "history": []}
+    default = {"major": 2, "minor": 54, "patch": 0, "label": "v2.54", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -1471,6 +1471,7 @@ def _build_simulation_xlsx(rows: list[dict], payload: dict, meta: dict) -> io.By
         ("Verified Rate", f'{summary.get("verified_rate", 0)}%'),
         ("Ambiguous Rows", summary.get("ambiguous", 0)),
         ("Max Losing Streak", summary.get("max_losing_streak", 0)),
+        ("Estimated Trading Costs R", summary.get("total_cost_r", 0)),
     ]
     for label, value in summary_rows:
         ws.append([label, value])
@@ -1484,7 +1485,8 @@ def _build_simulation_xlsx(rows: list[dict], payload: dict, meta: dict) -> io.By
     headers = [
         "Signal Time", "Closed At", "Symbol", "Direction", "Status", "Active",
         "Entry", "SL", "TP1", "TP2", "RR", "R Multiple", "Score", "Outcome",
-        "MFE R", "MAE R", "Ambiguous", "Data Quality", "Delivery Status", "Expiry At", "ID",
+        "MFE R", "MAE R", "Gross R", "Cost R", "Algorithm", "Ambiguous",
+        "Data Quality", "Delivery Status", "Expiry At", "ID",
     ]
     ws2.append(headers)
     for cell in ws2[1]:
@@ -1509,6 +1511,9 @@ def _build_simulation_xlsx(rows: list[dict], payload: dict, meta: dict) -> io.By
             row.get("outcome", ""),
             row.get("mfe_r", ""),
             row.get("mae_r", ""),
+            row.get("gross_r_multiple", ""),
+            row.get("cost_r", ""),
+            row.get("algorithm_version", ""),
             row.get("ambiguous", ""),
             row.get("data_quality", ""),
             row.get("delivery_status", ""),
@@ -2694,6 +2699,7 @@ def _simulation_rows_since(cutoff_iso: str, symbol: str = "all", status: str = "
             "id", "signal_time", "closed_at", "symbol", "direction", "status", "active",
             "entry", "sl", "tp1", "tp2", "rr", "r_multiple", "score", "outcome",
             "mfe_r", "mae_r", "ambiguous", "data_quality", "delivery_status", "expiry_at",
+            "gross_r_multiple", "cost_r", "algorithm_version",
         ]
         select_clause = ", ".join(
             column if column in available_columns else f"NULL AS {column}"
@@ -2751,6 +2757,7 @@ def _simulation_payload_from_rows(
     breakeven = [row for row in closed if (row.get("r_multiple") or 0) == 0]
     gross_profit = sum(float(row.get("r_multiple") or 0) for row in wins)
     gross_loss = abs(sum(float(row.get("r_multiple") or 0) for row in losses))
+    total_cost_r = sum(float(row.get("cost_r") or 0) for row in closed)
     decided = len(wins) + len(losses)
     if decided:
         observed = len(wins) / decided
@@ -2849,6 +2856,7 @@ def _simulation_payload_from_rows(
             "max_drawdown_r": round(max_drawdown, 2),
             "recovery_factor": round(cumulative / max_drawdown, 2) if max_drawdown else None,
             "max_losing_streak": max_losing_streak,
+            "total_cost_r": round(total_cost_r, 3),
             "ambiguous": ambiguous_count,
             "win_rate_ci95": win_rate_ci,
             "deterministic_rate": deterministic_rate,
@@ -2867,7 +2875,7 @@ def _simulation_payload_from_rows(
             "strategy_version": strategy_meta.get("latest_version") or strategy_meta.get("active_version"),
             "lookahead_protection": "next complete M5 candle",
             "gap_handling": "stop exits at candle open when price gaps beyond SL",
-            "costs": "spread, commission and swap are not included",
+            "costs": f"{_parse_env().get('SIMULATION_COST_R', '0.03')}R estimated round-trip cost per closed trade",
         },
     }
 
@@ -2904,7 +2912,7 @@ def _simulation_payload(
                 "strategy_version": strategy_meta.get("latest_version") or strategy_meta.get("active_version"),
                 "lookahead_protection": "next complete M5 candle",
                 "gap_handling": "stop exits at candle open when price gaps beyond SL",
-                "costs": "spread, commission and swap are not included",
+                "costs": f"{_parse_env().get('SIMULATION_COST_R', '0.03')}R estimated round-trip cost per closed trade",
             },
         }
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()

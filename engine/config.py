@@ -13,6 +13,13 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def _env_float(key: str, default: float) -> float:
+    try:
+        return float(os.environ.get(key, str(default)))
+    except ValueError:
+        return default
+
+
 def _env_bool(key: str, default: bool) -> bool:
     val = os.environ.get(key)
     if val is None:
@@ -88,6 +95,41 @@ class EngineConfig:
     adx_enable: bool = True
     adx_period: int = 14
     adx_min_trend: float = 22.0
+
+    # Quality gates reject weak or late entries before scoring.
+    require_weekly_alignment: bool = field(
+        default_factory=lambda: _env_bool("REQUIRE_WEEKLY_ALIGNMENT", True)
+    )
+    require_h1_alignment: bool = field(
+        default_factory=lambda: _env_bool("REQUIRE_H1_ALIGNMENT", True)
+    )
+    volatility_regime_enable: bool = field(
+        default_factory=lambda: _env_bool("VOLATILITY_REGIME_ENABLE", True)
+    )
+    volatility_lookback: int = field(
+        default_factory=lambda: _env_int("VOLATILITY_LOOKBACK", 20)
+    )
+    volatility_min_ratio: float = field(
+        default_factory=lambda: _env_float("VOLATILITY_MIN_RATIO", 0.80)
+    )
+    volatility_max_ratio: float = field(
+        default_factory=lambda: _env_float("VOLATILITY_MAX_RATIO", 1.80)
+    )
+    candle_confirmation_enable: bool = field(
+        default_factory=lambda: _env_bool("CANDLE_CONFIRMATION_ENABLE", True)
+    )
+    min_trigger_body_ratio: float = field(
+        default_factory=lambda: _env_float("MIN_TRIGGER_BODY_RATIO", 0.35)
+    )
+    max_entry_distance_atr: float = field(
+        default_factory=lambda: _env_float("MAX_ENTRY_DISTANCE_ATR", 1.50)
+    )
+    min_stop_atr: float = field(
+        default_factory=lambda: _env_float("MIN_STOP_ATR", 0.80)
+    )
+    max_stop_atr: float = field(
+        default_factory=lambda: _env_float("MAX_STOP_ATR", 2.50)
+    )
 
     session_enable: bool = True
     session_start_hour: int = 7

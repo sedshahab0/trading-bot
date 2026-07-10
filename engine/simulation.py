@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 
-ALGORITHM_VERSION = 2
+ALGORITHM_VERSION = 3
 SIGNAL_PATTERN = re.compile(r"\[(?P<ts>[^\]]+)\] Signal saved → (?P<data>.+)$")
 
 
@@ -36,9 +36,10 @@ def _utc(value) -> datetime | None:
 
 
 class SimulationTracker:
-    def __init__(self, db_path: str, *, expiry_hours: int = 72):
+    def __init__(self, db_path: str, *, expiry_hours: int = 72, cost_r: float = 0.03):
         self.db_path = Path(db_path)
         self.expiry_hours = expiry_hours
+        self.cost_r = max(0.0, float(cost_r))
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -76,6 +77,8 @@ class SimulationTracker:
                     algorithm_version INTEGER NOT NULL DEFAULT 1,
                     data_quality TEXT NOT NULL DEFAULT 'legacy',
                     first_bar_time TEXT,
+                    gross_r_multiple REAL,
+                    cost_r REAL NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL
                 )
             """)
@@ -84,6 +87,8 @@ class SimulationTracker:
                 "algorithm_version": "INTEGER NOT NULL DEFAULT 1",
                 "data_quality": "TEXT NOT NULL DEFAULT 'legacy'",
                 "first_bar_time": "TEXT",
+                "gross_r_multiple": "REAL",
+                "cost_r": "REAL NOT NULL DEFAULT 0",
             }
             for column, definition in migrations.items():
                 if column not in existing:
@@ -100,15 +105,8 @@ class SimulationTracker:
                 "SELECT value FROM simulation_meta WHERE key='algorithm_version'"
             ).fetchone()
             if not current or int(current[0]) < ALGORITHM_VERSION:
-                conn.execute("""
-                    UPDATE simulated_trades SET
-                        status='open', active=1, tp1_at=NULL, tp2_at=NULL,
-                        closed_at=NULL, close_reason=NULL, exit_price=NULL,
-                        r_multiple=NULL, mfe_r=0, mae_r=0, bars_seen=0,
-                        last_bar_time=NULL, ambiguous=0, first_bar_time=NULL,
-                        algorithm_version=?, data_quality='replay_pending'
-                    WHERE status != 'invalid'
-                """, (ALGORITHM_VERSION,))
+                # Historical outcomes are immutable. Resetting them when the
+                # evaluator changes can silently rewrite the track record.
                 conn.execute(
                     "INSERT OR REPLACE INTO simulation_meta(key, value) VALUES('algorithm_version', ?)",
                     (str(ALGORITHM_VERSION),),
@@ -142,13 +140,13 @@ class SimulationTracker:
             conn.execute("""
                 INSERT OR IGNORE INTO simulated_trades
                     (id, signal_time, symbol, direction, entry, sl, tp1, tp2, score,
-                     status, active, algorithm_version, data_quality, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, active, algorithm_version, data_quality, cost_r, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 self.trade_id({**signal, "timestamp": signal_time.isoformat()}),
                 signal_time.isoformat(), symbol, direction, entry, sl, tp1, tp2,
                 int(signal.get("score") or 0), status, active,
-                ALGORITHM_VERSION, quality, now,
+                ALGORITHM_VERSION, quality, self.cost_r, now,
             ))
             return conn.total_changes > 0
 
@@ -169,11 +167,23 @@ class SimulationTracker:
             added += int(self.register(payload))
         return added
 
-    def evaluate_symbol(self, symbol: str, candles: pd.DataFrame) -> int:
+    def evaluate_symbol(
+        self, symbol: str, candles: pd.DataFrame, *, now: datetime | None = None
+    ) -> int:
         if candles is None or candles.empty:
             return 0
         normalized = symbol.replace("/", "").upper()
-        frame = candles.sort_index()
+        frame = candles.sort_index().copy()
+        if frame.index.tz is None:
+            frame.index = frame.index.tz_localize("UTC")
+        else:
+            frame.index = frame.index.tz_convert("UTC")
+        current_bar = pd.Timestamp(now or datetime.now(timezone.utc)).floor("5min")
+        # The provider includes the currently forming candle. If it is marked as
+        # seen, later TP/SL touches in that same candle are skipped forever.
+        frame = frame[frame.index < current_bar]
+        if frame.empty:
+            return 0
         updates = 0
         with self._connect() as conn:
             trades = conn.execute(
@@ -212,6 +222,7 @@ class SimulationTracker:
         ambiguous = int(trade["ambiguous"])
         bars_seen = int(trade["bars_seen"])
         first_bar_time = trade["first_bar_time"]
+        gross_r_multiple = trade["gross_r_multiple"]
 
         for ts, bar in eligible.iterrows():
             open_price = float(bar["open"])
@@ -307,19 +318,25 @@ class SimulationTracker:
             if not active:
                 break
 
+        if not active and r_multiple is not None:
+            gross_r_multiple = round(float(r_multiple), 3)
+            r_multiple = round(gross_r_multiple - self.cost_r, 3)
+
         last_time = pd.Timestamp(eligible.index[-1]).tz_convert("UTC").isoformat()
         conn.execute("""
             UPDATE simulated_trades SET
                 status=?, active=?, tp1_at=?, tp2_at=?, closed_at=?, close_reason=?,
                 exit_price=?, r_multiple=?, mfe_r=?, mae_r=?, bars_seen=?,
                 last_bar_time=?, ambiguous=?, updated_at=?,
-                algorithm_version=?, data_quality=?, first_bar_time=?
+                algorithm_version=?, data_quality=?, first_bar_time=?,
+                gross_r_multiple=?, cost_r=?
             WHERE id=?
         """, (
             status, int(active), tp1_at, tp2_at, closed_at, close_reason,
             exit_price, r_multiple, round(mfe_r, 3), round(mae_r, 3), bars_seen,
             last_time, ambiguous, datetime.now(timezone.utc).isoformat(),
             ALGORITHM_VERSION, "ambiguous" if ambiguous else "verified_m5",
-            first_bar_time, trade["id"],
+            first_bar_time, gross_r_multiple, self.cost_r,
+            trade["id"],
         ))
         return True

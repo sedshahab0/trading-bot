@@ -235,3 +235,32 @@ def structural_sl(h1: pd.DataFrame, trend: int, entry: float, atr_v: float, cfg)
     if sl > entry and (sl - entry) <= atr_v * 3.0:
         return sl
     return entry + atr_v * cfg.sl_atr_mult
+
+
+def volatility_regime(
+    atr_series: pd.Series, lookback: int, minimum: float, maximum: float
+) -> tuple[bool, float]:
+    """Check the latest closed ATR against its recent average."""
+    closed = atr_series.iloc[:-1].dropna()
+    if len(closed) < lookback:
+        return False, float("nan")
+    current = float(closed.iloc[-1])
+    baseline = float(closed.iloc[-lookback:].mean())
+    if baseline <= 0:
+        return False, float("nan")
+    ratio = current / baseline
+    return minimum <= ratio <= maximum, ratio
+
+
+def directional_candle(df: pd.DataFrame, trend: int, min_body_ratio: float) -> bool:
+    """Require the latest closed candle to have directional conviction."""
+    if len(df) < 2:
+        return False
+    bar = df.iloc[-2]
+    candle_range = float(bar["high"] - bar["low"])
+    if candle_range <= 0:
+        return False
+    body = float(bar["close"] - bar["open"])
+    if abs(body) / candle_range < min_body_ratio:
+        return False
+    return body > 0 if trend == 1 else body < 0
