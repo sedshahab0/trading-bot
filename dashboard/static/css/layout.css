@@ -5328,6 +5328,22 @@ body.auth-pending .app-shell {
 .simulation-pagination span { color: var(--text-muted); font-size: .68rem; text-align: center; }
 .simulation-pagination .btn { min-width: 110px; min-height: 42px; }
 .simulation-pagination .btn:disabled { opacity: .4; cursor: not-allowed; }
+.simulation-export-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+  padding: 0 1rem 1rem;
+}
+.simulation-export-select {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+.simulation-export-select .select-input {
+  min-width: 180px;
+}
 .sim-time, .sim-targets, .sim-excursion { direction: ltr; color: var(--text-muted); font-family: var(--font-mono); }
 .sim-outcome {
   display: inline-flex; align-items: center; min-height: 28px; padding: .25rem .55rem;
@@ -5388,6 +5404,19 @@ body.auth-pending .app-shell {
   }
   .simulation-pagination span { grid-column: 1 / -1; grid-row: 1; }
   .simulation-pagination .btn { width: 100%; min-width: 0; }
+  .simulation-export-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 .75rem .75rem;
+  }
+  .simulation-export-select {
+    justify-content: space-between;
+  }
+  .simulation-export-select .select-input,
+  .simulation-export-bar .btn {
+    width: 100%;
+    min-width: 0;
+  }
 }
 .strategy-perf-summary { margin-bottom: 1rem; }
 .strategy-perf-summary.hidden { display: none; }

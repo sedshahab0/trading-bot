@@ -196,7 +196,7 @@ def _git_revision() -> str | None:
 
 
 def _dashboard_version() -> dict:
-    default = {"major": 2, "minor": 45, "patch": 0, "label": "v2.45", "released": "", "history": []}
+    default = {"major": 2, "minor": 46, "patch": 0, "label": "v2.46", "released": "", "history": []}
     if not VERSION_FILE.exists():
         default["revision"] = _git_revision()
         return default
@@ -1423,6 +1423,155 @@ def _build_xlsx(signals: list[dict], summary: dict) -> io.BytesIO:
     return buf
 
 
+def _build_simulation_xlsx(rows: list[dict], payload: dict, meta: dict) -> io.BytesIO:
+    buf = io.BytesIO()
+    if not HAS_OPENPYXL:
+        return buf
+    wb = Workbook()
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1a2332")
+    sub_fill = PatternFill("solid", fgColor="e8f5f0")
+
+    summary = payload.get("summary") or {}
+    method = payload.get("method") or {}
+    by_symbol = payload.get("by_symbol") or []
+    equity = payload.get("equity") or []
+
+    ws = wb.active
+    ws.title = "Summary"
+    ws.append(["Simulation Replay Export"])
+    ws.append(["Generated", payload.get("generated_at", "")])
+    ws.append(["Window", meta.get("label", "")])
+    ws.append(["Symbol Filter", meta.get("symbol_label", "All")])
+    ws.append(["Status Filter", meta.get("status_label", "All")])
+    ws.append(["Strategy Version", meta.get("strategy_version") or "—"])
+    ws.append(["Algorithm Version", method.get("algorithm_version_label") or method.get("algorithm_version") or "—"])
+    ws.append(["Latest MQ5 Upload", payload.get("strategy_version") or "—"])
+    ws.append([])
+    summary_rows = [
+        ("Total Trades", summary.get("total", 0)),
+        ("Closed", summary.get("closed", 0)),
+        ("Open", summary.get("open", 0)),
+        ("Wins", summary.get("wins", 0)),
+        ("Losses", summary.get("losses", 0)),
+        ("Breakeven", summary.get("breakeven", 0)),
+        ("Win Rate", f'{summary.get("win_rate")}%' if summary.get("win_rate") is not None else "—"),
+        ("Total R", summary.get("total_r", 0)),
+        ("Avg R", summary.get("avg_r", "—")),
+        ("Median R", summary.get("median_r", "—")),
+        ("Profit Factor", summary.get("profit_factor", "—")),
+        ("Payoff Ratio", summary.get("payoff_ratio", "—")),
+        ("Max Drawdown R", summary.get("max_drawdown_r", 0)),
+        ("Recovery Factor", summary.get("recovery_factor", "—")),
+        ("Confidence Score", f'{summary.get("confidence_score", 0)}%'),
+        ("Deterministic Rate", f'{summary.get("deterministic_rate", 0)}%'),
+        ("Verified Rate", f'{summary.get("verified_rate", 0)}%'),
+        ("Ambiguous Rows", summary.get("ambiguous", 0)),
+        ("Max Losing Streak", summary.get("max_losing_streak", 0)),
+    ]
+    for label, value in summary_rows:
+        ws.append([label, value])
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    for row in ws[10:10 + len(summary_rows)]:
+        row[0].fill = sub_fill
+
+    ws2 = wb.create_sheet("Trades")
+    headers = [
+        "Signal Time", "Closed At", "Symbol", "Direction", "Status", "Active",
+        "Entry", "SL", "TP1", "TP2", "RR", "R Multiple", "Score", "Outcome",
+        "MFE R", "MAE R", "Ambiguous", "Data Quality", "Delivery Status", "Expiry At", "ID",
+    ]
+    ws2.append(headers)
+    for cell in ws2[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+    for row in rows:
+        ws2.append([
+            row.get("signal_time", ""),
+            row.get("closed_at", ""),
+            row.get("symbol", ""),
+            row.get("direction", ""),
+            row.get("status", ""),
+            bool(row.get("active")),
+            row.get("entry", ""),
+            row.get("sl", ""),
+            row.get("tp1", ""),
+            row.get("tp2", ""),
+            row.get("rr", ""),
+            row.get("r_multiple", ""),
+            row.get("score", ""),
+            row.get("outcome", ""),
+            row.get("mfe_r", ""),
+            row.get("mae_r", ""),
+            row.get("ambiguous", ""),
+            row.get("data_quality", ""),
+            row.get("delivery_status", ""),
+            row.get("expiry_at", ""),
+            row.get("id", ""),
+        ])
+    ws2.freeze_panes = "A2"
+
+    ws3 = wb.create_sheet("By Symbol")
+    ws3.append(["Symbol", "Total", "Closed", "Wins", "Losses", "Win Rate", "R"])
+    for cell in ws3[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    for item in by_symbol:
+        ws3.append([
+            item.get("symbol", ""),
+            item.get("total", 0),
+            item.get("closed", 0),
+            item.get("wins", 0),
+            item.get("losses", 0),
+            item.get("win_rate", "—"),
+            item.get("r", 0),
+        ])
+
+    ws4 = wb.create_sheet("Equity")
+    ws4.append(["Time", "Cumulative R", "Signal ID"])
+    for cell in ws4[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    for point in equity:
+        ws4.append([point.get("time", ""), point.get("value", ""), point.get("id", "")])
+
+    daily_map: dict[str, dict] = {}
+    for row in rows:
+        date_key = str(row.get("signal_time", "")).split("T")[0].split(" ")[0]
+        bucket = daily_map.setdefault(date_key, {"date": date_key, "total": 0, "wins": 0, "losses": 0, "r": 0.0})
+        bucket["total"] += 1
+        r = row.get("r_multiple")
+        if r is not None:
+            bucket["r"] += float(r)
+            bucket["wins"] += int(float(r) > 0)
+            bucket["losses"] += int(float(r) < 0)
+    ws5 = wb.create_sheet("Daily")
+    ws5.append(["Date", "Total", "Wins", "Losses", "Net R"])
+    for cell in ws5[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    for item in sorted(daily_map.values(), key=lambda x: x["date"], reverse=True):
+        ws5.append([item["date"], item["total"], item["wins"], item["losses"], round(item["r"], 2)])
+
+    for sheet in wb.worksheets:
+        for col in sheet.columns:
+            max_len = 0
+            column = col[0].column_letter
+            for cell in col:
+                try:
+                    max_len = max(max_len, len(str(cell.value)) if cell.value is not None else 0)
+                except Exception:
+                    pass
+            sheet.column_dimensions[column].width = min(max_len + 2, 34)
+
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
 def _signal_stats(signals: list[dict]) -> dict:
     today = datetime.now().strftime("%Y-%m-%d")
     today_count = sum(1 for s in signals if s.get("timestamp", "").startswith(today))
@@ -2480,47 +2629,14 @@ def _facebook_preview(job_file: Path) -> dict:
     return build_templates(load_signal_data(job_file))
 
 
-def _simulation_payload(
-    days: int = 30,
-    symbol: str = "all",
-    status: str = "all",
-    page: int = 1,
-    per_page: int = 20,
-) -> dict:
-    strategy_meta = _strategy_version_meta()
-    settings = _load_bot_settings()
-    configured_algorithm_version = _normalize_strategy_version(
-        settings.get("SIMULATION_ALGORITHM_VERSION")
-        or settings.get("STRATEGY_LATEST_VERSION")
-        or strategy_meta.get("latest_version")
-        or strategy_meta.get("active_version")
-        or "2"
-    )
+def _simulation_rows_since(cutoff_iso: str, symbol: str = "all", status: str = "all") -> tuple[list[dict], list[str]]:
     if not SIMULATION_DB.exists():
-        return {
-            "trades": [], "summary": {"total": 0, "closed": 0},
-            "equity": [], "by_symbol": [], "available_symbols": [],
-            "pagination": {"page": 1, "per_page": per_page, "total": 0, "pages": 1},
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "method": {
-                "timeframe": "M5",
-                "position": "50% TP1 + 50% TP2",
-                "same_bar": "SL first (conservative)",
-                "expiry_hours": int(_parse_env().get("SIMULATION_EXPIRY_HOURS", "72")),
-                "algorithm_version": configured_algorithm_version,
-                "algorithm_version_label": f"v{configured_algorithm_version}" if configured_algorithm_version else "v—",
-                "strategy_version": strategy_meta.get("latest_version") or strategy_meta.get("active_version"),
-                "lookahead_protection": "next complete M5 candle",
-                "gap_handling": "stop exits at candle open when price gaps beyond SL",
-                "costs": "spread, commission and swap are not included",
-            },
-        }
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        return [], []
     with sqlite3.connect(SIMULATION_DB, timeout=3) as conn:
         conn.row_factory = sqlite3.Row
         rows = [dict(row) for row in conn.execute(
             "SELECT * FROM simulated_trades WHERE signal_time >= ? ORDER BY signal_time DESC",
-            (cutoff,),
+            (cutoff_iso,),
         ).fetchall()]
     available_symbols = sorted({row["symbol"] for row in rows})
     if symbol != "all":
@@ -2533,7 +2649,28 @@ def _simulation_payload(
         rows = [row for row in rows if not row["active"] and (row.get("r_multiple") or 0) < 0]
     elif status not in ("all", ""):
         rows = [row for row in rows if row["status"] == status]
+    return rows, available_symbols
 
+
+def _simulation_payload_from_rows(
+    rows: list[dict],
+    available_symbols: list[str],
+    *,
+    days: int,
+    symbol: str,
+    status: str,
+    page: int,
+    per_page: int,
+) -> dict:
+    strategy_meta = _strategy_version_meta()
+    settings = _load_bot_settings()
+    configured_algorithm_version = _normalize_strategy_version(
+        settings.get("SIMULATION_ALGORITHM_VERSION")
+        or settings.get("STRATEGY_LATEST_VERSION")
+        or strategy_meta.get("latest_version")
+        or strategy_meta.get("active_version")
+        or "2"
+    )
     chronological = sorted(rows, key=lambda row: row["signal_time"])
     closed = [row for row in chronological if not row["active"] and row.get("r_multiple") is not None]
     wins = [row for row in closed if row["r_multiple"] > 0]
@@ -2586,8 +2723,8 @@ def _simulation_payload(
     by_symbol = []
     for bucket in symbols.values():
         bucket["r"] = round(bucket["r"], 2)
-        decided = bucket["wins"] + bucket["losses"]
-        bucket["win_rate"] = round(bucket["wins"] / decided * 100, 1) if decided else None
+        decided_bucket = bucket["wins"] + bucket["losses"]
+        bucket["win_rate"] = round(bucket["wins"] / decided_bucket * 100, 1) if decided_bucket else None
         by_symbol.append(bucket)
     by_symbol.sort(key=lambda row: row["r"], reverse=True)
     ambiguous_count = sum(int(row.get("ambiguous") or 0) for row in rows)
@@ -2660,6 +2797,54 @@ def _simulation_payload(
             "costs": "spread, commission and swap are not included",
         },
     }
+
+
+def _simulation_payload(
+    days: int = 30,
+    symbol: str = "all",
+    status: str = "all",
+    page: int = 1,
+    per_page: int = 20,
+) -> dict:
+    strategy_meta = _strategy_version_meta()
+    settings = _load_bot_settings()
+    configured_algorithm_version = _normalize_strategy_version(
+        settings.get("SIMULATION_ALGORITHM_VERSION")
+        or settings.get("STRATEGY_LATEST_VERSION")
+        or strategy_meta.get("latest_version")
+        or strategy_meta.get("active_version")
+        or "2"
+    )
+    if not SIMULATION_DB.exists():
+        return {
+            "trades": [], "summary": {"total": 0, "closed": 0},
+            "equity": [], "by_symbol": [], "available_symbols": [],
+            "pagination": {"page": 1, "per_page": per_page, "total": 0, "pages": 1},
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "method": {
+                "timeframe": "M5",
+                "position": "50% TP1 + 50% TP2",
+                "same_bar": "SL first (conservative)",
+                "expiry_hours": int(_parse_env().get("SIMULATION_EXPIRY_HOURS", "72")),
+                "algorithm_version": configured_algorithm_version,
+                "algorithm_version_label": f"v{configured_algorithm_version}" if configured_algorithm_version else "v—",
+                "strategy_version": strategy_meta.get("latest_version") or strategy_meta.get("active_version"),
+                "lookahead_protection": "next complete M5 candle",
+                "gap_handling": "stop exits at candle open when price gaps beyond SL",
+                "costs": "spread, commission and swap are not included",
+            },
+        }
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    rows, available_symbols = _simulation_rows_since(cutoff, symbol=symbol, status=status)
+    return _simulation_payload_from_rows(
+        rows,
+        available_symbols,
+        days=days,
+        symbol=symbol,
+        status=status,
+        page=page,
+        per_page=per_page,
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────
@@ -3653,6 +3838,72 @@ def export_telegram_csv():
     out = io.BytesIO(buf.getvalue().encode("utf-8-sig"))
     fname = f"telegram-log-{datetime.now().strftime('%Y%m%d')}.csv"
     return send_file(out, as_attachment=True, download_name=fname, mimetype="text/csv")
+
+
+def _simulation_export_window(window: str) -> tuple[datetime, str]:
+    raw = (window or "30d").strip().lower()
+    now = datetime.now(timezone.utc)
+    if raw in {"hour", "1h", "hourly", "saat", "ساعتی"}:
+        return now - timedelta(hours=1), "ساعتی اخیر"
+    if raw in {"today", "day", "0d", "امروز"}:
+        return now.replace(hour=0, minute=0, second=0, microsecond=0), "امروز"
+    if raw in {"7", "7d", "week", "هفت", "هفت‌روز", "7روز"}:
+        return now - timedelta(days=7), "۷ روز اخیر"
+    if raw in {"30", "30d", "month", "month30", "ماه", "۳۰روز"}:
+        return now - timedelta(days=30), "۳۰ روز اخیر"
+    if raw.isdigit():
+        days = max(1, min(int(raw), 365))
+        return now - timedelta(days=days), f"{days} روز اخیر"
+    return now - timedelta(days=30), "۳۰ روز اخیر"
+
+
+@app.route("/api/export/simulation.xlsx")
+@auth_required
+def export_simulation_xlsx():
+    if not HAS_OPENPYXL:
+        return jsonify({"error": "openpyxl not installed"}), 500
+    window = request.args.get("window", "30d")
+    symbol = request.args.get("symbol", "all")
+    status = request.args.get("status", "all")
+    cutoff_dt, label = _simulation_export_window(window)
+    rows, available_symbols = _simulation_rows_since(cutoff_dt.isoformat(), symbol=symbol, status=status)
+    payload = _simulation_payload_from_rows(
+        rows,
+        available_symbols,
+        days=max(1, min(365, int((datetime.now(timezone.utc) - cutoff_dt).total_seconds() // 86400 or 1))),
+        symbol=symbol,
+        status=status,
+        page=1,
+        per_page=max(1, len(rows) or 1),
+    )
+    meta = {
+        "label": label,
+        "window": window,
+        "symbol": symbol,
+        "symbol_label": "همه نمادها" if symbol == "all" else symbol,
+        "status": status,
+        "status_label": {
+            "all": "همه نتایج",
+            "open": "باز",
+            "win": "سودده",
+            "loss": "زیان‌ده",
+            "tp1": "TP1",
+            "tp2": "TP2",
+            "sl": "SL",
+            "expired": "منقضی",
+        }.get(status, status or "همه نتایج"),
+        "strategy_version": payload.get("strategy_version"),
+        "available_symbols": available_symbols,
+    }
+    buf = _build_simulation_xlsx(rows, payload, meta)
+    slug = secure_filename(label.replace(" ", "-")) or "simulation"
+    fname = f"simulation-{slug}-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=fname,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/api/export/signals.xlsx")

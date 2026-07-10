@@ -236,7 +236,7 @@
 
   /** Bump minor (2.1→2.2) for feature releases; major (2→3) for big rewrites. */
   activePage = pageFromPathname() || normalizePage(safeSessionStorageGet(ACTIVE_PAGE_KEY, activePage));
-  let dashboardVersion = { label: "v2.45", full: "2.45.0", major: 2, minor: 45, patch: 0 };
+  let dashboardVersion = { label: "v2.46", full: "2.46.0", major: 2, minor: 46, patch: 0 };
   let signalsSummary = null;
 
   const NAV_ICONS = {
@@ -601,6 +601,10 @@
 
   function logsCacheKey(process) {
     return `logs:${process}`;
+  }
+
+  function getSimulationExportWindow() {
+    return $("#simExportWindow")?.value || "30d";
   }
 
   // ── Toast ──
@@ -4316,6 +4320,13 @@
   $("#btnExportTelegram")?.addEventListener("click", () => {
     const days = $("#telegramDays")?.value || 30;
     downloadExport(`/api/export/telegram.csv?days=${days}`);
+  });
+
+  $("#btnExportSimXlsx")?.addEventListener("click", () => {
+    const window = getSimulationExportWindow();
+    const symbol = $("#simSymbol")?.value || "all";
+    const status = $("#simStatus")?.value || "all";
+    downloadExport(`/api/export/simulation.xlsx?window=${encodeURIComponent(window)}&symbol=${encodeURIComponent(symbol)}&status=${encodeURIComponent(status)}`);
   });
 
   $("#telegramSearch")?.addEventListener("input", () => {
