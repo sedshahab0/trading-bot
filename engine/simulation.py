@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 
-ALGORITHM_VERSION = 3
+ALGORITHM_VERSION = 5
 SIGNAL_PATTERN = re.compile(r"\[(?P<ts>[^\]]+)\] Signal saved → (?P<data>.+)$")
 
 
@@ -89,6 +89,7 @@ class SimulationTracker:
                 "first_bar_time": "TEXT",
                 "gross_r_multiple": "REAL",
                 "cost_r": "REAL NOT NULL DEFAULT 0",
+                "confluence": "TEXT",
             }
             for column, definition in migrations.items():
                 if column not in existing:
@@ -113,9 +114,103 @@ class SimulationTracker:
                 )
 
     @staticmethod
+    def _canonical_parts(signal: dict) -> tuple[str, str, str, str]:
+        signal_time = _utc(
+            signal.get("timestamp") or signal.get("received_at") or signal.get("signal_time")
+        )
+        ts = signal_time.replace(microsecond=0).isoformat() if signal_time else ""
+        symbol = str(signal.get("symbol", "")).replace("/", "").upper()
+        direction = str(signal.get("direction", "")).upper()
+        entry = _number(signal.get("entry"))
+        if entry is None:
+            entry_s = ""
+        elif abs(entry) >= 10:
+            entry_s = f"{round(entry, 2):.2f}"
+        else:
+            entry_s = f"{round(entry, 5):.5f}"
+        return ts, symbol, direction, entry_s
+
+    @staticmethod
     def trade_id(signal: dict) -> str:
-        raw = "|".join(str(signal.get(key, "")) for key in ("timestamp", "symbol", "direction", "entry"))
+        # Live runner timestamps have microseconds and "XAU/USD"; signal_log
+        # replay has whole seconds and "XAUUSD". Hash the canonical form so
+        # both paths land on one row and INSERT OR IGNORE actually dedupes.
+        raw = "|".join(SimulationTracker._canonical_parts(signal))
         return hashlib.sha256(raw.encode()).hexdigest()[:20]
+
+    def _dedupe_key(self, signal: dict, signal_time: datetime) -> str:
+        return self.trade_id({**signal, "timestamp": signal_time})
+
+    @staticmethod
+    def _row_quality(row: sqlite3.Row | dict) -> tuple:
+        get = row.__getitem__
+        bars = int(get("bars_seen") or 0)
+        status = str(get("status") or "")
+        evaluated = 2 if status in ("sl", "tp1", "tp2") else (1 if bars > 0 else 0)
+        return (evaluated, bars, 0 if status == "open" else 1)
+
+    def migrate_legacy_ids(self, *, dry_run: bool = False) -> dict:
+        """Remap historical rows onto the canonical id. Merges duplicates
+        created by the old timestamp/symbol/entry hashing, keeping the
+        evaluated outcome (more bars / sl|tp2) over the empty replay ghost."""
+        with self._connect() as conn:
+            rows = list(conn.execute("SELECT * FROM simulated_trades"))
+            groups: dict[str, list] = {}
+            for row in rows:
+                payload = {k: row[k] for k in row.keys()}
+                payload["timestamp"] = payload.get("signal_time")
+                new_id = self.trade_id(payload)
+                groups.setdefault(new_id, []).append((new_id, row))
+
+            merges = []
+            renames = []
+            unchanged = 0
+            for new_id, members in groups.items():
+                ranked = sorted(members, key=lambda item: self._row_quality(item[1]), reverse=True)
+                winner = ranked[0][1]
+                losers = [item[1] for item in ranked[1:]]
+                if winner["id"] == new_id and not losers:
+                    unchanged += 1
+                    continue
+                merges.append(
+                    {
+                        "new_id": new_id,
+                        "keep": winner["id"],
+                        "drop": [row["id"] for row in losers],
+                        "symbol": winner["symbol"],
+                        "direction": winner["direction"],
+                        "signal_time": winner["signal_time"],
+                        "keep_status": winner["status"],
+                        "keep_bars": winner["bars_seen"],
+                        "drop_status": [row["status"] for row in losers],
+                    }
+                )
+                if not dry_run:
+                    for loser in losers:
+                        conn.execute("DELETE FROM simulated_trades WHERE id=?", (loser["id"],))
+                    if winner["id"] != new_id:
+                        taken = conn.execute(
+                            "SELECT id FROM simulated_trades WHERE id=?", (new_id,)
+                        ).fetchone()
+                        if taken:
+                            conn.execute("DELETE FROM simulated_trades WHERE id=?", (new_id,))
+                        conn.execute(
+                            "UPDATE simulated_trades SET id=? WHERE id=?",
+                            (new_id, winner["id"]),
+                        )
+                        renames.append((winner["id"], new_id))
+
+            return {
+                "total": len(rows),
+                "unchanged": unchanged,
+                "merge_groups": len(merges),
+                "dropped": sum(len(item["drop"]) for item in merges),
+                "renames": len(renames) if not dry_run else sum(
+                    1 for item in merges if item["keep"] != item["new_id"]
+                ),
+                "resulting": len(rows) - sum(len(item["drop"]) for item in merges),
+                "merges": merges,
+            }
 
     def register(self, signal: dict) -> bool:
         entry = _number(signal.get("entry"))
@@ -140,13 +235,13 @@ class SimulationTracker:
             conn.execute("""
                 INSERT OR IGNORE INTO simulated_trades
                     (id, signal_time, symbol, direction, entry, sl, tp1, tp2, score,
-                     status, active, algorithm_version, data_quality, cost_r, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, active, algorithm_version, data_quality, cost_r, confluence, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                self.trade_id({**signal, "timestamp": signal_time.isoformat()}),
+                self._dedupe_key(signal, signal_time),
                 signal_time.isoformat(), symbol, direction, entry, sl, tp1, tp2,
                 int(signal.get("score") or 0), status, active,
-                ALGORITHM_VERSION, quality, self.cost_r, now,
+                ALGORITHM_VERSION, quality, self.cost_r, str(signal.get("confluence") or ""), now,
             ))
             return conn.total_changes > 0
 
@@ -235,11 +330,7 @@ class SimulationTracker:
                     if direction == "BUY"
                     else (entry - open_price) / risk
                 )
-                r_multiple = (
-                    round(0.5 + 0.5 * raw_r, 3)
-                    if status == "tp1"
-                    else round(raw_r, 3)
-                )
+                r_multiple = round(raw_r, 3)
                 status, active, closed_at, close_reason, exit_price = (
                     "expired", False, stamp, "expired_at_bar_open", open_price,
                 )
@@ -249,11 +340,15 @@ class SimulationTracker:
             mfe_r, mae_r = max(mfe_r, favorable), max(mae_r, adverse)
             bars_seen += 1
             sl_hit = low <= sl if direction == "BUY" else high >= sl
-            tp1_hit = high >= tp1 if direction == "BUY" else low <= tp1
             tp2_hit = bool(tp2) and (high >= tp2 if direction == "BUY" else low <= tp2)
 
+            # Donchian strategy runs the FULL position to the target — no
+            # partial at TP1, no breakeven move. So each trade resolves
+            # cleanly to its ~2R target or its ~1R stop, whichever hits
+            # first (matching the validated backtest's exit).
             if status == "open":
-                if sl_hit and (tp1_hit or tp2_hit):
+                if sl_hit and tp2_hit:
+                    # both touched in the same bar — assume the stop hit first
                     ambiguous = 1
                     gap_stop = open_price <= sl if direction == "BUY" else open_price >= sl
                     actual_exit = open_price if gap_stop else sl
@@ -279,40 +374,16 @@ class SimulationTracker:
                         actual_exit, round(actual_r, 3),
                     )
                 elif tp2_hit:
-                    tp1_at = tp1_at or stamp
-                    tp2_at = stamp
-                    status, active, closed_at, close_reason, exit_price, r_multiple = "tp2", False, stamp, "tp2", tp2, 1.5
-                elif tp1_hit:
-                    tp1_at = stamp
-                    status, r_multiple = "tp1", 0.5
-            elif status == "tp1":
-                if tp2_hit and sl_hit:
-                    ambiguous = 1
-                    gap_stop = open_price <= sl if direction == "BUY" else open_price >= sl
-                    actual_exit = open_price if gap_stop else sl
-                    remaining_r = (
+                    gap_tp = open_price >= tp2 if direction == "BUY" else open_price <= tp2
+                    actual_exit = open_price if gap_tp else tp2
+                    actual_r = (
                         (actual_exit - entry) / risk
                         if direction == "BUY"
                         else (entry - actual_exit) / risk
                     )
-                    status, active, closed_at, close_reason, exit_price, r_multiple = (
-                        "tp1_sl", False, stamp, "same_bar_after_tp1",
-                        actual_exit, round(0.5 + 0.5 * remaining_r, 3),
-                    )
-                elif tp2_hit:
                     tp2_at = stamp
-                    status, active, closed_at, close_reason, exit_price, r_multiple = "tp2", False, stamp, "tp2", tp2, 1.5
-                elif sl_hit:
-                    gap_stop = open_price <= sl if direction == "BUY" else open_price >= sl
-                    actual_exit = open_price if gap_stop else sl
-                    remaining_r = (
-                        (actual_exit - entry) / risk
-                        if direction == "BUY"
-                        else (entry - actual_exit) / risk
-                    )
                     status, active, closed_at, close_reason, exit_price, r_multiple = (
-                        "tp1_sl", False, stamp, "gap_sl_after_tp1" if gap_stop else "sl_after_tp1",
-                        actual_exit, round(0.5 + 0.5 * remaining_r, 3),
+                        "tp2", False, stamp, "tp2", actual_exit, round(actual_r, 3),
                     )
 
             if not active:

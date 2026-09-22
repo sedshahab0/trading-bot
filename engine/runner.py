@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import os
+import signal
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
+
 from engine.config import EngineConfig, _env_bool
 from engine.data_provider import DataProvider
-from engine.notifier import send_facebook_bridge, send_telegram, startup_message
+from engine.notifier import (
+    send_facebook_bridge,
+    send_ops_telegram,
+    send_signal_with_chart,
+    send_telegram,
+    startup_message,
+)
 from engine.signal_logic import SignalEngine
 from engine.simulation import SimulationTracker
 
@@ -69,10 +79,115 @@ def _refresh_cfg(cfg: EngineConfig) -> EngineConfig:
     cfg.notifications_paused = _notifications_paused_live()
     cfg.telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", cfg.telegram_bot_token)
     cfg.telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID", cfg.telegram_chat_id)
+    cfg.telegram_ops_chat_id = os.environ.get("TELEGRAM_OPS_CHAT_ID", cfg.telegram_ops_chat_id)
+    cfg.twelve_data_api_key = os.environ.get("TWELVE_DATA_API_KEY", cfg.twelve_data_api_key)
     cfg.min_score = int(os.environ.get("MIN_SCORE", str(cfg.min_score)))
     cfg.poll_seconds = int(os.environ.get("POLL_SECONDS", str(cfg.poll_seconds)))
     cfg.debug = _env_bool("ENGINE_DEBUG", cfg.debug)
+    cfg.crisis_mode = _env_bool("CRISIS_MODE", cfg.crisis_mode)
+    cfg.breaking_news_enable = _env_bool("BREAKING_NEWS_ENABLE", cfg.breaking_news_enable)
     return cfg
+
+
+# ── v6.13 Fix 2/6, adapted: Duplicate-Instance Guard ─────────────────
+# mq5 guards against two EAs running on the same MT5 symbol/terminal via a
+# GlobalVariable heartbeat. This engine normally runs as a single pm2
+# process, but the same failure mode (someone manually starting a second
+# `python run_engine.py` alongside the pm2-managed one) would double-fire
+# every signal — so the same heartbeat-lockfile pattern applies here.
+def _claim_singleton(cfg: EngineConfig) -> bool:
+    if not cfg.dup_guard_enable:
+        return True
+    lock_path = Path(cfg.dup_guard_lock_file)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    if lock_path.exists():
+        try:
+            held = json.loads(lock_path.read_text())
+            if held.get("pid") != os.getpid() and (now - float(held.get("heartbeat", 0))) < cfg.dup_guard_stale_secs:
+                return False
+        except Exception:
+            pass
+    lock_path.write_text(json.dumps({"pid": os.getpid(), "heartbeat": now}))
+    return True
+
+
+def _update_heartbeat(cfg: EngineConfig) -> None:
+    if not cfg.dup_guard_enable:
+        return
+    try:
+        Path(cfg.dup_guard_lock_file).write_text(
+            json.dumps({"pid": os.getpid(), "heartbeat": time.time()})
+        )
+    except Exception:
+        pass
+
+
+def _release_singleton(cfg: EngineConfig) -> None:
+    """mq5's OnDeinit -> ReleaseSingleton(): free the lock on a clean exit
+    (pm2 restart/stop sends SIGTERM) so the next start doesn't mistake the
+    just-exited process's still-fresh heartbeat for a genuine duplicate."""
+    if not cfg.dup_guard_enable:
+        return
+    try:
+        lock_path = Path(cfg.dup_guard_lock_file)
+        if lock_path.exists():
+            held = json.loads(lock_path.read_text())
+            if held.get("pid") == os.getpid():
+                lock_path.unlink()
+    except Exception:
+        pass
+
+
+def _handle_shutdown_signal(signum, frame) -> None:
+    raise SystemExit(0)
+
+
+def _install_singleton_release(cfg: EngineConfig) -> None:
+    atexit.register(_release_singleton, cfg)
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+
+
+# ── v6.13 Fix 9: Breaking News Auto-Detection ────────────────────────
+# Optional, OFF by default (matching mq5) — polls a user-supplied URL for
+# high-severity keywords and pauses ALL signal generation globally for a
+# cooldown period on a match. Requires BREAKING_NEWS_URL to be set.
+_news_check_state = {"last_check": 0.0, "last_alert": 0.0}
+
+
+def _breaking_news_paused(cfg: EngineConfig) -> bool:
+    if not cfg.breaking_news_enable or not cfg.breaking_news_url:
+        return False
+    now = time.time()
+    still_cooling = (now - _news_check_state["last_alert"]) < cfg.breaking_news_cooldown_mins * 60
+    if (now - _news_check_state["last_check"]) < cfg.breaking_news_check_mins * 60:
+        return still_cooling
+    _news_check_state["last_check"] = now
+    try:
+        r = requests.get(cfg.breaking_news_url, timeout=10)
+        body = r.text.lower()
+    except Exception as exc:
+        logger.debug("Breaking news fetch failed: %s", exc)
+        return still_cooling
+    for kw in cfg.breaking_news_keywords.split(","):
+        kw = kw.strip().lower()
+        if kw and kw in body:
+            _news_check_state["last_alert"] = now
+            logger.warning(
+                "Breaking news keyword match: '%s' — pausing signals for %s min",
+                kw,
+                cfg.breaking_news_cooldown_mins,
+            )
+            send_telegram(
+                cfg,
+                f"⚠️ <b>Breaking News Alert</b>\nKeyword match: {kw}\n"
+                f"Signals paused {cfg.breaking_news_cooldown_mins} min",
+                message_type="alert",
+                direction="ALERT",
+            )
+            return True
+    return still_cooling
 
 
 def run_forever(cfg: EngineConfig | None = None) -> None:
@@ -86,15 +201,42 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
     if cfg.notifications_paused:
         logger.warning("NOTIFICATIONS_PAUSED=1 — engine idle until resumed")
 
-    if cfg.data_provider == "twelvedata" and not cfg.twelve_data_api_key:
+    has_twelve_key = bool(
+        cfg.twelve_data_api_key or os.environ.get("TWELVE_DATA_API_KEYS", "").strip()
+    )
+    if cfg.data_provider == "twelvedata" and not has_twelve_key:
         raise SystemExit(
-            "Set TWELVE_DATA_API_KEY (free at https://twelvedata.com) "
-            "or DATA_PROVIDER=yfinance for limited demo mode."
+            "Set TWELVE_DATA_API_KEY / TWELVE_DATA_API_KEYS (free at https://twelvedata.com)."
         )
     if not cfg.telegram_bot_token or not cfg.telegram_chat_id:
         raise SystemExit("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
 
-    data = DataProvider(cfg.twelve_data_api_key, cfg.data_provider)
+    if not _claim_singleton(cfg):
+        logger.error(
+            "Another live instance holds the duplicate-guard lock (%s) — this instance will "
+            "idle and retry rather than double-fire signals. Remove the duplicate process.",
+            cfg.dup_guard_lock_file,
+        )
+        while not _claim_singleton(cfg):
+            time.sleep(cfg.dup_guard_stale_secs)
+        logger.info("Duplicate-guard lock acquired — resuming normal operation")
+    _install_singleton_release(cfg)
+
+    data = DataProvider(cfg.twelve_data_api_key, "twelvedata")
+
+    def _on_pool_change(usable: int, total: int, _status: dict) -> None:
+        if usable == 0:
+            send_ops_telegram(
+                cfg,
+                f"Twelve Data: هر {total} کلید بسته است تا ریست نیمه‌شب UTC. تا آن موقع سیگنال ساخته نمی‌شود.",
+            )
+        elif usable == 1:
+            send_ops_telegram(
+                cfg,
+                f"Twelve Data: فقط ۱ کلید از {total} مانده.",
+            )
+
+    data.on_pool_change = _on_pool_change
     engine = SignalEngine(cfg, data)
     simulation = SimulationTracker(
         os.environ.get("SIMULATION_DB", "/var/lib/trading-bot/signal-simulation.sqlite3"),
@@ -120,21 +262,34 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
 
     last_bars: dict[str, str] = state.get("last_bars", {})
     last_signal_at: dict[str, float] = state.get("last_signal_at", {})
+    last_signal_dir: dict[str, int] = state.get("last_signal_dir", {})
+    last_signal_entry: dict[str, float] = state.get("last_signal_entry", {})
     last_cross: dict[str, int] = state.get("last_cross", {})
+    last_spike: dict[str, list] = state.get("last_spike", {})
+    spike_state = {sym: tuple(v) for sym, v in last_spike.items()}
 
     while True:
         try:
             cfg = _refresh_cfg(cfg)
+            data.reload_keys_from_env()
+            _update_heartbeat(cfg)
             if cfg.notifications_paused:
                 logger.info("Notifications paused — engine idle (no signals sent)")
+                time.sleep(cfg.poll_seconds)
+                continue
+
+            if _breaking_news_paused(cfg):
                 time.sleep(cfg.poll_seconds)
                 continue
 
             for symbol in cfg.symbols:
                 try:
                     bar_key = engine.latest_m5_bar(symbol)
-                except Exception:
-                    logger.exception("Market data unavailable for %s", symbol)
+                except Exception as exc:
+                    if "on this plan" in str(exc):
+                        logger.error("Market data unavailable for %s: %s", symbol, exc)
+                    else:
+                        logger.exception("Market data unavailable for %s", symbol)
                     continue
                 if not bar_key:
                     continue
@@ -142,6 +297,7 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                 prev = last_bars.get(symbol)
                 if prev == bar_key:
                     continue
+                logger.info("New H1 bar %s %s (was %s)", symbol, bar_key, prev)
                 last_bars[symbol] = bar_key
 
                 data.prefetch_symbol(symbol)
@@ -164,7 +320,17 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                         )
                         last_cross[symbol] = cross_alert.cross
 
-                sig = engine.evaluate(symbol, frames=frames)
+                recent_signals = {
+                    sym: (
+                        last_signal_at.get(sym, 0),
+                        last_signal_dir.get(sym, 0),
+                        last_signal_entry.get(sym, 0.0),
+                    )
+                    for sym in cfg.symbols
+                }
+                sig = engine.evaluate(
+                    symbol, frames=frames, recent_signals=recent_signals, spike_state=spike_state
+                )
                 if not sig:
                     continue
 
@@ -173,26 +339,26 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                 if time.time() - last_ts < cool_secs:
                     continue
 
-                if send_telegram(
-                    cfg,
-                    sig.message_html,
-                    symbol=sig.symbol,
-                    direction=sig.direction,
-                    score=sig.score,
-                    entry=sig.entry,
-                ):
-                    last_signal_at[symbol] = time.time()
-                    simulation.register({
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "symbol": sig.symbol,
-                        "direction": sig.direction,
-                        "entry": sig.entry,
-                        "sl": sig.sl,
-                        "tp1": sig.tp1,
-                        "tp2": sig.tp2,
-                        "score": sig.score,
-                    })
-                    send_facebook_bridge(cfg, sig)
+                # Tracking is independent of Telegram. A dead bot token used
+                # to skip simulation.register and the Facebook/dashboard
+                # bridge, so the track record went silent for weeks.
+                last_signal_at[symbol] = time.time()
+                last_signal_dir[symbol] = sig.trend
+                last_signal_entry[symbol] = sig.entry
+                simulation.register({
+                    "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                    "symbol": sig.symbol,
+                    "direction": sig.direction,
+                    "entry": sig.entry,
+                    "sl": sig.sl,
+                    "tp1": sig.tp1,
+                    "tp2": sig.tp2,
+                    "score": sig.score,
+                    "confluence": sig.confluence,
+                })
+                send_facebook_bridge(cfg, sig, frames["H1"])
+                delivered = send_signal_with_chart(cfg, sig, frames["H1"])
+                if delivered:
                     logger.info(
                         "Signal sent %s %s score=%s entry=%s",
                         symbol,
@@ -200,10 +366,20 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                         sig.score,
                         sig.entry,
                     )
+                else:
+                    logger.error(
+                        "Signal tracked but Telegram delivery failed for %s %s entry=%s",
+                        symbol,
+                        sig.direction,
+                        sig.entry,
+                    )
 
             state["last_bars"] = last_bars
             state["last_signal_at"] = last_signal_at
+            state["last_signal_dir"] = last_signal_dir
+            state["last_signal_entry"] = last_signal_entry
             state["last_cross"] = last_cross
+            state["last_spike"] = {sym: list(v) for sym, v in spike_state.items()}
             state["updated_at"] = datetime.now(timezone.utc).isoformat()
             _save_state(cfg.state_file, state)
 

@@ -1,4 +1,18 @@
-"""Core signal detection — port of SignalBot MQ5 v5 ProcessSignals()."""
+"""Core signal detection — Donchian breakout on trending metals (H1).
+
+This replaced the earlier multi-indicator SMC stack, which backtested at
+break-even/negative on FX majors. The Donchian breakout on gold & silver (H1)
+validated across 2 instruments, 4 parameter settings, and both halves of the
+clean-data window (Profit Factor ~1.2-1.3). See the MT5 EdgeTest results.
+
+Entry logic (per validated backtest, no ADX filter — it tested worse):
+  - Trend filter: last closed H1 close vs the EMA(trend) on H1.
+  - Fresh Donchian breakout: last closed H1 bar closes beyond the N-bar
+    channel, and the bar before it did NOT (so we signal the break, not
+    every bar of an extended run).
+  - Risk: structural ATR stop; target = TP_R * risk (validated at 1:2,
+    full position to target — no premature break-even).
+"""
 
 from __future__ import annotations
 
@@ -26,6 +40,10 @@ class SignalResult:
     score: int
     message_html: str
     direction: str
+    confluence: str = ""
+    entry_low: float = 0.0
+    entry_high: float = 0.0
+    max_score: int = 0
 
 
 @dataclass
@@ -52,19 +70,18 @@ E = {
     "skull": "💀",
     "fire": "🔥",
     "warn": "⚠️",
+    "chart": "📊",
 }
 
 
-def _score_label(score: int) -> str:
-    if score >= 10:
-        return f"{E['fire']} STRONG  ({score}/12)"
-    if score >= 7:
-        return f"{E['check']} MODERATE ({score}/12)"
-    return f"{E['warn']} WATCH   ({score}/12)"
+def discretionary_max_score(cfg: EngineConfig) -> int:
+    """Retained so notifier.startup_message keeps importing cleanly. The
+    Donchian strategy has no confluence score, so this is 0."""
+    return 0
 
 
 def _fmt_price(symbol: str, price: float) -> str:
-    digits = 2 if "XAU" in symbol or "JPY" in symbol else 5
+    digits = 2 if "XAU" in symbol or "JPY" in symbol else 3 if "XAG" in symbol else 5
     return f"{price:.{digits}f}"
 
 
@@ -74,13 +91,24 @@ class SignalEngine:
         self.data = data
 
     def fetch_frames(self, symbol: str) -> dict[str, pd.DataFrame]:
-        return {
-            "W1": self.data.get_ohlcv(symbol, "W1"),
-            "D1": self.data.get_ohlcv(symbol, "D1"),
-            "H1": self.data.get_ohlcv(symbol, "H1"),
-            "M15": self.data.get_ohlcv(symbol, "M15"),
-            "M5": self.data.get_ohlcv(symbol, "M5"),
-        }
+        # H1 is the ONLY essential feed — it drives every signal and the chart
+        # image. If it fails, the caller skips this cycle (we can't signal
+        # without it). M5 (simulation outcome tracking) and D1 (the optional
+        # golden-cross alert) are non-essential: a transient data hiccup on
+        # either — e.g. yfinance returning an empty daily series for gold —
+        # must NEVER block a breakout signal, so they fail soft to an empty
+        # frame. (M15 is no longer fetched; the chart now renders from H1.
+        # Daily/M5 come from Twelve Data too — not yfinance.)
+        h1 = self.data.get_ohlcv(symbol, "H1")
+
+        def _soft(tf: str) -> pd.DataFrame:
+            try:
+                return self.data.get_ohlcv(symbol, tf)
+            except Exception as exc:
+                logger.warning("%s %s unavailable (non-essential, continuing): %s", symbol, tf, exc)
+                return pd.DataFrame(columns=["open", "high", "low", "close"])
+
+        return {"H1": h1, "M5": _soft("M5"), "D1": _soft("D1")}
 
     def check_golden_cross(self, symbol: str, d1: pd.DataFrame) -> CrossAlert | None:
         if not self.cfg.alert_golden_death_cross or len(d1) < self.cfg.cross_slow_ma + 3:
@@ -103,191 +131,151 @@ class SignalEngine:
         return CrossAlert(symbol=symbol, cross=cross, message_html=msg)
 
     def in_session(self) -> bool:
-        if not self.cfg.session_enable:
-            return True
-        h = datetime.now(timezone.utc).hour
-        return self.cfg.session_start_hour <= h < self.cfg.session_end_hour
+        return True  # breakout strategy trades around the clock
+
+    def latest_h1_bar(self, symbol: str) -> str | None:
+        h1 = self.data.get_ohlcv(symbol, "H1")
+        if h1.empty:
+            return None
+        return str(h1.index[-1])
+
+    # kept as an alias so any older caller still works
+    def latest_m5_bar(self, symbol: str) -> str | None:
+        return self.latest_h1_bar(symbol)
 
     def evaluate(
-        self, symbol: str, frames: dict[str, pd.DataFrame] | None = None
+        self,
+        symbol: str,
+        frames: dict[str, pd.DataFrame] | None = None,
+        recent_signals=None,
+        spike_state=None,
     ) -> SignalResult | None:
         cfg = self.cfg
-        if not cfg.alert_full_signal:
-            return None
-        if not self.in_session():
-            return None
-
         if frames is None:
             frames = self.fetch_frames(symbol)
-        w1, d1, h1, m15, m5 = frames["W1"], frames["D1"], frames["H1"], frames["M15"], frames["M5"]
+        h1 = frames["H1"]
 
-        # ADX regime on D1
-        if cfg.adx_enable:
-            adx_s = ind.adx(d1, cfg.adx_period)
-            adx_v = adx_s.iloc[-2] if len(adx_s) >= 2 else float("nan")
-            if not pd.isna(adx_v) and adx_v < cfg.adx_min_trend:
-                return None
-
-        w_ema = ind.ema(w1["close"], cfg.weekly_ema)
-        d_ma = ind.sma(d1["close"], cfg.daily_ma)
-        h1_ema = ind.ema(h1["close"], cfg.h1_ema)
-
-        wb = ind.bias_vs_ma(w1["close"].iloc[-2], w_ema.iloc[-2])
-        db = ind.bias_vs_ma(d1["close"].iloc[-2], d_ma.iloc[-2])
-        if db == 0:
-            return None
-        trend = db
-
-        if cfg.require_weekly_alignment and wb != trend:
-            logger.debug("%s rejected: weekly alignment", symbol)
+        n = cfg.donchian_n
+        ema_period = cfg.donchian_trend_ema
+        if len(h1) < ema_period + n + 5:
             return None
 
-        sw = ind.swing_hl(h1, cfg.swing_lookback)
-        if not sw:
+        close = h1["close"]
+        ema = ind.ema(close, ema_period)
+
+        # iloc[-1] may be a still-forming bar; iloc[-2] is the last CLOSED bar.
+        c1 = float(close.iloc[-2])   # last closed bar
+        c2 = float(close.iloc[-3])   # bar before it
+        ema1 = ema.iloc[-2]
+        if pd.isna(ema1):
             return None
-        sw_h, sw_l = sw
-        price = h1["close"].iloc[-2]
-        fib = ind.fib_zone(price, sw_h, sw_l, trend)
-        tl = ind.trendline_ok(h1, trend, cfg.fractal_wing, cfg.swing_lookback)
-        h1e = ind.bias_vs_ma(h1["close"].iloc[-2], h1_ema.iloc[-2])
-        if cfg.require_h1_alignment and h1e != trend:
-            logger.debug("%s rejected: H1 alignment", symbol)
+        ema1 = float(ema1)
+
+        trend_up = c1 > ema1
+        trend_dn = c1 < ema1
+
+        # Donchian channel = highest high / lowest low of the N bars BEFORE
+        # the bar in question (excludes the bar itself).
+        win_now = h1.iloc[-(n + 2):-2]    # N bars before the last closed bar
+        win_prev = h1.iloc[-(n + 3):-3]   # N bars before the one before that
+        if len(win_now) < n or len(win_prev) < n:
+            return None
+        hh_now = float(win_now["high"].max())
+        ll_now = float(win_now["low"].min())
+        hh_prev = float(win_prev["high"].max())
+        ll_prev = float(win_prev["low"].min())
+
+        # Fresh breakout only: the last closed bar breaks the channel and the
+        # prior bar did not (prevents re-signalling every bar of a long run).
+        direction = 0
+        if cfg.donchian_require_trend and not (trend_up or trend_dn):
+            return None
+        if (not cfg.donchian_require_trend or trend_up) and c1 > hh_now and c2 <= hh_prev:
+            direction = 1
+        elif (not cfg.donchian_require_trend or trend_dn) and c1 < ll_now and c2 >= ll_prev:
+            direction = -1
+        if direction == 0:
             return None
 
-        rsi15_s = ind.rsi(m15["close"], cfg.rsi_period)
-        macd15, sig15 = ind.macd_line_signal(
-            m15["close"], cfg.macd_fast, cfg.macd_slow, cfg.macd_signal
-        )
-        rsi15 = ind.rsi_signal(rsi15_s, cfg.rsi_oversold, cfg.rsi_overbought, 10)
-        mac15 = ind.macd_signal(macd15, sig15)
-
-        m5_ef = ind.ema(m5["close"], cfg.m5_ema_fast)
-        m5_es = ind.ema(m5["close"], cfg.m5_ema_slow)
-        m5_rsi_s = ind.rsi(m5["close"], cfg.m5_rsi_period)
-        ema_cross = ind.ema_cross(m5_ef, m5_es)
-        rsi5 = ind.rsi_signal(
-            m5_rsi_s, cfg.m5_rsi_oversold, cfg.m5_rsi_overbought, 8
-        )
-
-        atr_s = ind.atr(m15, cfg.atr_period)
+        atr_s = ind.atr(h1, cfg.atr_period)
         atr_v = float(atr_s.iloc[-2]) if len(atr_s) >= 2 else 0.0
         if not pd.notna(atr_v) or atr_v <= 0:
-            logger.debug("%s rejected: invalid ATR", symbol)
-            return None
-        if cfg.volatility_regime_enable:
-            regime_ok, regime_ratio = ind.volatility_regime(
-                atr_s,
-                cfg.volatility_lookback,
-                cfg.volatility_min_ratio,
-                cfg.volatility_max_ratio,
-            )
-            if not regime_ok:
-                logger.debug("%s rejected: volatility ratio=%s", symbol, regime_ratio)
-                return None
-
-        if cfg.candle_confirmation_enable and not ind.directional_candle(
-            m5, trend, cfg.min_trigger_body_ratio
-        ):
-            logger.debug("%s rejected: M5 candle confirmation", symbol)
             return None
 
-        m15_anchor = ind.ema(m15["close"], cfg.h1_ema).iloc[-2]
-        entry = float(m5["close"].iloc[-2])
-        if not pd.notna(m15_anchor) or abs(entry - float(m15_anchor)) > atr_v * cfg.max_entry_distance_atr:
-            logger.debug("%s rejected: entry extended from M15 mean", symbol)
-            return None
-        amd_ok = ind.amd_signal(m15, trend, atr_v, cfg) == trend
-
-        score = 0
-        if db == trend:
-            score += 3
-        if wb == trend:
-            score += 2
-        if h1e == trend:
-            score += 2
-        if tl == trend:
-            score += 1
-        if fib:
-            score += 1
-        if rsi15 == trend or mac15 == trend:
-            score += 1
-        if ema_cross == trend or rsi5 == trend:
-            score += 1
-        if amd_ok:
-            score += 1
-
-        trigger = rsi15 == trend or mac15 == trend or ema_cross == trend or rsi5 == trend
-
-        if cfg.debug:
-            logger.info(
-                "%s trend=%s score=%s trigger=%s wb=%s db=%s",
-                symbol,
-                trend,
-                score,
-                trigger,
-                wb,
-                db,
-            )
-
-        if not trigger or score < cfg.min_score:
-            return None
-
-        sl = ind.structural_sl(h1, trend, entry, atr_v, cfg)
-        sl_dist = abs(entry - sl)
-        stop_atr = sl_dist / atr_v
-        if not cfg.min_stop_atr <= stop_atr <= cfg.max_stop_atr:
-            logger.debug("%s rejected: stop distance %.2f ATR", symbol, stop_atr)
-            return None
-        if trend == 1:
-            tp1 = entry + sl_dist * cfg.tp1_ratio
-            tp2 = entry + sl_dist * cfg.rr_ratio
+        risk = atr_v * cfg.donchian_sl_mult
+        entry = c1
+        if direction == 1:
+            sl = entry - risk
+            tp1 = entry + risk * cfg.tp1_ratio
+            tp2 = entry + risk * cfg.donchian_tp_r
         else:
-            tp1 = entry - sl_dist * cfg.tp1_ratio
-            tp2 = entry - sl_dist * cfg.rr_ratio
+            sl = entry + risk
+            tp1 = entry - risk * cfg.tp1_ratio
+            tp2 = entry - risk * cfg.donchian_tp_r
 
-        label = _score_label(score)
-        now = datetime.now(timezone.utc).strftime("%Y.%m.%d %H:%M")
-        direction = "BUY" if trend == 1 else "SELL"
+        zone_half = risk * cfg.entry_zone_pct
+        entry_low = entry - zone_half
+        entry_high = entry + zone_half
 
-        if trend == 1:
-            msg = (
-                f"{E['green']*3}  <b>B U Y  S I G N A L</b>  {E['green']*3}\n{SEP}\n"
-                f"{E['money']}  <b>{symbol}</b>\n"
-                f"{E['up']}  <b>BUY</b>     {label}\n{SEP}\n"
-                f"{E['target']}  Entry  :  <b>{_fmt_price(symbol, entry)}</b>\n"
-                f"{E['stop']}  SL     :  {_fmt_price(symbol, sl)}\n"
-                f"{E['check']}  TP1    :  {_fmt_price(symbol, tp1)}  (1:{cfg.tp1_ratio:.1f})\n"
-                f"{E['check']}  TP2    :  {_fmt_price(symbol, tp2)}  (1:{cfg.rr_ratio:.1f})\n"
-                f"{E['ruler']}  R : R  :  1 : {cfg.rr_ratio:.1f}\n{SEP}\n"
-                f"{E['clock']}  {now}"
-            )
-        else:
-            msg = (
-                f"{E['red']*3}  <b>S E L L  S I G N A L</b>  {E['red']*3}\n{SEP}\n"
-                f"{E['money']}  <b>{symbol}</b>\n"
-                f"{E['down']}  <b>SELL</b>   {label}\n{SEP}\n"
-                f"{E['target']}  Entry  :  <b>{_fmt_price(symbol, entry)}</b>\n"
-                f"{E['stop']}  SL     :  {_fmt_price(symbol, sl)}\n"
-                f"{E['check']}  TP1    :  {_fmt_price(symbol, tp1)}  (1:{cfg.tp1_ratio:.1f})\n"
-                f"{E['check']}  TP2    :  {_fmt_price(symbol, tp2)}  (1:{cfg.rr_ratio:.1f})\n"
-                f"{E['ruler']}  R : R  :  1 : {cfg.rr_ratio:.1f}\n{SEP}\n"
-                f"{E['clock']}  {now}"
-            )
+        direction_str = "BUY" if direction == 1 else "SELL"
+        msg = self._build_message(
+            symbol, direction, entry, entry_low, entry_high, sl, tp2, atr_v
+        )
 
+        logger.info(
+            "Donchian breakout %s %s entry=%s sl=%s tp=%s",
+            symbol, direction_str, entry, sl, tp2,
+        )
         return SignalResult(
             symbol=symbol,
-            trend=trend,
+            trend=direction,
             entry=entry,
             sl=sl,
             tp1=tp1,
             tp2=tp2,
-            score=score,
+            score=0,
             message_html=msg,
-            direction=direction,
+            direction=direction_str,
+            confluence="Donchian Breakout (H1)",
+            entry_low=entry_low,
+            entry_high=entry_high,
+            max_score=0,
         )
 
-    def latest_m5_bar(self, symbol: str) -> str | None:
-        m5 = self.data.get_ohlcv(symbol, "M5")
-        if m5.empty:
-            return None
-        return str(m5.index[-1])
+    def _build_message(
+        self, symbol, direction, entry, entry_low, entry_high, sl, tp, atr_v
+    ) -> str:
+        now = datetime.now(timezone.utc).strftime("%Y.%m.%d %H:%M")
+        rr = self.cfg.donchian_tp_r
+        zone = f"{_fmt_price(symbol, entry_low)} – {_fmt_price(symbol, entry_high)}"
+        # Stop distance = the risk (in price) for this trade. Followers plug
+        # it into: position size = (account × risk%) ÷ (stop distance × value/pt).
+        stop_dist = _fmt_price(symbol, abs(entry - sl))
+        if direction == 1:
+            head = f"{E['green']*3}  <b>B U Y — {symbol}</b>  {E['green']*3}"
+            arrow = E["up"]
+            label = "BUY"
+        else:
+            head = f"{E['red']*3}  <b>S E L L — {symbol}</b>  {E['red']*3}"
+            arrow = E["down"]
+            label = "SELL"
+        return (
+            f"{head}\n{SEP}\n"
+            f"{E['chart']}  <b>Donchian Breakout · H1</b>\n"
+            f"{arrow}  <b>{label}</b>\n{SEP}\n"
+            f"{E['target']}  Entry  :  <b>{_fmt_price(symbol, entry)}</b>\n"
+            f"{E['target']}  Zone   :  {zone}\n"
+            f"{E['stop']}  SL     :  {_fmt_price(symbol, sl)}\n"
+            f"{E['check']}  TP     :  {_fmt_price(symbol, tp)}   (1:{rr:.0f})\n"
+            f"{E['ruler']}  R : R  :  1 : {rr:.0f}\n"
+            f"{E['ruler']}  Stop size : {stop_dist}  (risk this to size your lot)\n{SEP}\n"
+            f"{E['warn']}  Risk 0.5–1% per trade · enter within the zone, "
+            f"don't chase if price already left it.\n"
+            f"{E['warn']}  Spread check: skip this signal if your spread is "
+            f"over 5% of the stop size.\n"
+            f"{E['money']}  TP is a target, not a promise — banking profit "
+            f"early is always OK.\n"
+            f"{E['warn']}  Trend-following: ~37% win rate — expect losing "
+            f"streaks; profit comes from the occasional big run.\n{SEP}\n"
+            f"{E['clock']}  {now}"
+        )
