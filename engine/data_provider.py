@@ -750,7 +750,7 @@ class DataProvider:
                     lowered = msg.lower()
                     if r.status_code == 404 or "grow" in lowered or "venture" in lowered:
                         self._block_symbol(symbol, timeframe, _next_utc_reset().timestamp(), msg[:180])
-                        logger.error("Twelve Data has no %s %s on this plan: %s", symbol, timeframe, msg[:180])
+                        logger.warning("Twelve Data has no %s %s on this plan: %s", symbol, timeframe, msg[:180])
                         raise _SymbolUnavailable(msg)
                     if 400 <= r.status_code < 500:
                         raise RuntimeError(

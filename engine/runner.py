@@ -261,6 +261,7 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
     )
 
     last_bars: dict[str, str] = state.get("last_bars", {})
+    off_plan: set[str] = set()
     last_signal_at: dict[str, float] = state.get("last_signal_at", {})
     last_signal_dir: dict[str, int] = state.get("last_signal_dir", {})
     last_signal_entry: dict[str, float] = state.get("last_signal_entry", {})
@@ -287,9 +288,14 @@ def run_forever(cfg: EngineConfig | None = None) -> None:
                     bar_key = engine.latest_m5_bar(symbol)
                 except Exception as exc:
                     if "on this plan" in str(exc):
-                        logger.error("Market data unavailable for %s: %s", symbol, exc)
-                    else:
-                        logger.exception("Market data unavailable for %s", symbol)
+                        if symbol not in off_plan:
+                            off_plan.add(symbol)
+                            logger.warning(
+                                "%s is not on this Twelve Data plan; skipping until the next UTC day",
+                                symbol,
+                            )
+                        continue
+                    logger.exception("Market data unavailable for %s", symbol)
                     continue
                 if not bar_key:
                     continue
