@@ -733,9 +733,9 @@
             <input type="search" id="signalSearch" class="search-input" placeholder="جستجو نماد..." />
             <select id="signalDays" class="select-input">
               <option value="7">۷ روز</option>
-              <option value="30" selected>۳۰ روز</option>
+              <option value="30">۳۰ روز</option>
               <option value="90">۹۰ روز</option>
-              <option value="365">۱ سال</option>
+              <option value="365" selected>همه تاریخچه</option>
             </select>
             <select id="signalDelivery" class="select-input">
               <option value="all">همه وضعیت‌ها</option>
@@ -874,7 +874,7 @@
           </section>
 
           <div class="page-toolbar simulation-toolbar">
-            <select id="simDays" class="select-input" aria-label="بازه شبیه‌سازی"><option value="7">۷ روز</option><option value="30" selected>۳۰ روز</option><option value="90">۹۰ روز</option><option value="365">همه سال</option></select>
+            <select id="simDays" class="select-input" aria-label="بازه شبیه‌سازی"><option value="7">۷ روز</option><option value="30">۳۰ روز</option><option value="90">۹۰ روز</option><option value="365" selected>همه تاریخچه</option></select>
             <select id="simSymbol" class="select-input" aria-label="نماد شبیه‌سازی"><option value="all">همه نمادها</option></select>
             <select id="simStatus" class="select-input" aria-label="نتیجه شبیه‌سازی"><option value="all">همه نتایج</option><option value="win">سودده</option><option value="loss">زیان‌ده</option><option value="open">باز</option><option value="tp1">TP1</option><option value="tp2">TP2</option><option value="sl">SL</option><option value="expired">منقضی</option></select>
             <button class="btn btn-secondary" id="btnSimRefresh">
@@ -928,7 +928,8 @@
                   <option value="hour">ساعتی اخیر</option>
                   <option value="today">امروز</option>
                   <option value="7d">۷ روز اخیر</option>
-                  <option value="30d" selected>۳۰ روز اخیر</option>
+                  <option value="30d">۳۰ روز اخیر</option>
+                  <option value="365" selected>همه تاریخچه</option>
                 </select>
               </div>
               <div class="simulation-export-select">
@@ -957,9 +958,9 @@
               </label>
               <select id="reportDays" class="select-input">
                 <option value="7">۷ روز اخیر</option>
-                <option value="30" selected>۳۰ روز اخیر</option>
+                <option value="30">۳۰ روز اخیر</option>
                 <option value="90">۹۰ روز اخیر</option>
-                <option value="365">۱ سال کامل</option>
+                <option value="365" selected>همه تاریخچه</option>
               </select>
             </div>
             <div class="reports-toolbar-exports">
@@ -1185,8 +1186,9 @@
                 <svg class="select-prefix-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 <select id="telegramDays" class="select-input">
                   <option value="7">۷ روز</option>
-                  <option value="30" selected>۳۰ روز</option>
+                  <option value="30">۳۰ روز</option>
                   <option value="90">۹۰ روز</option>
+                  <option value="365" selected>همه تاریخچه</option>
                 </select>
               </div>
             </div>
@@ -2298,6 +2300,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=2.56.0"></script>
+  <script src="/static/js/dashboard.js?v=2.56.1"></script>
 </body>
 </html>

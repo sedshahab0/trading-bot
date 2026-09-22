@@ -1682,7 +1682,7 @@
 
   function getSignalsFilterParams() {
     return {
-      days: Number($("#signalDays")?.value || 30),
+      days: Number($("#signalDays")?.value || 365),
       delivery: $("#signalDelivery")?.value || "all",
       direction: $("#signalDirection")?.value || "all",
       outcome: $("#signalOutcome")?.value || "all",
@@ -2300,9 +2300,10 @@
       syncMonitorHero();
     }
     if (payload.signals) {
-      const sigKey = signalsCacheKey(30, "all", "all", "all");
+      const days = Number(payload.signals.days || 365);
+      const sigKey = signalsCacheKey(days, "all", "all", "all");
       DataCache.set(sigKey, payload.signals);
-      applySignalsPayload(payload.signals);
+      if (Number($("#signalDays")?.value || days) === days) applySignalsPayload(payload.signals);
     }
     if (payload.report_7) {
       DataCache.set("report:7", payload.report_7);
@@ -2315,8 +2316,8 @@
       const tgPayload = payload.telegram.entries
         ? payload.telegram
         : { summary: payload.telegram, entries: [] };
-      DataCache.set("telegram:30:all", tgPayload);
-      applyTelegramData(tgPayload);
+      DataCache.set(telegramCacheKey(Number(tgPayload.days || 30), "all"), tgPayload);
+      if (Number($("#telegramDays")?.value || 365) === Number(tgPayload.days || 30)) applyTelegramData(tgPayload);
     }
     if (payload.ops) {
       DataCache.set("ops", payload.ops);
@@ -2332,7 +2333,7 @@
     }
     if (payload.analytics_30) {
       DataCache.set("analytics:30", payload.analytics_30);
-      if (activePage === "reports" && Number($("#reportDays")?.value || 30) === 30) {
+      if (activePage === "reports" && Number($("#reportDays")?.value || 365) === 30) {
         applyAnalyticsPayload(payload.analytics_30, 30);
       }
     }
@@ -2380,7 +2381,7 @@
         break;
       }
       case "simulation": {
-        const days = Number($("#simDays")?.value || 30);
+        const days = Number($("#simDays")?.value || 365);
         const symbol = $("#simSymbol")?.value || "all";
         const status = $("#simStatus")?.value || "all";
         const cached = DataCache.get(`simulation:${days}:${symbol}:${status}:${simulationPage}`);
@@ -2388,7 +2389,7 @@
         break;
       }
       case "reports": {
-        const days = Number($("#reportDays")?.value || 30);
+        const days = Number($("#reportDays")?.value || 365);
         const report = DataCache.get(reportCacheKey(days));
         const analytics = DataCache.get(`analytics:${days}`);
         if (report) applyReportData(report, days);
@@ -2404,7 +2405,7 @@
         break;
       }
       case "telegram": {
-        const days = Number($("#telegramDays")?.value || 30);
+        const days = Number($("#telegramDays")?.value || 365);
         const status = $("#telegramStatus")?.value || "all";
         const cached = DataCache.get(telegramCacheKey(days, status));
         if (cached) applyTelegramData(cached);
@@ -2669,7 +2670,7 @@
     await waitForBootstrap();
     const data = await DataCache.load(
       key,
-      () => api(`/api/signals?days=${days}&delivery=${delivery}&direction=${direction}&outcome=${outcome}&limit=100`),
+      () => api(`/api/signals?days=${days}&delivery=${delivery}&direction=${direction}&outcome=${outcome}&limit=500`),
       CACHE_TTL.signals,
       { force, onStale: (d) => applySignalsPayload(d) }
     );
@@ -3010,7 +3011,7 @@
   }
 
   async function fetchSimulation({ force = false } = {}) {
-    const days = Number($("#simDays")?.value || 30);
+    const days = Number($("#simDays")?.value || 365);
     const symbol = $("#simSymbol")?.value || "all";
     const status = $("#simStatus")?.value || "all";
     const key = `simulation:${days}:${symbol}:${status}:${simulationPage}`;
@@ -3030,7 +3031,7 @@
   }
 
   async function fetchTelegram({ force = false } = {}) {
-    const days = Number($("#telegramDays")?.value || 30);
+    const days = Number($("#telegramDays")?.value || 365);
     const status = $("#telegramStatus")?.value || "all";
     const key = telegramCacheKey(days, status);
     if (!force && days === 30 && status === "all" && isBootstrapFresh()) {
@@ -3119,7 +3120,7 @@
     if (needs.includes("audit")) tasks.push(fetchAuditLog({ force }));
     if (needs.includes("report:7")) tasks.push(fetchReport(7, { force }));
     if (page === "reports" || needs.includes("report")) {
-      const days = Number($("#reportDays")?.value || 30);
+      const days = Number($("#reportDays")?.value || 365);
       tasks.push(fetchReport(days, { force }));
       tasks.push(fetchReportAnalytics(days, { force }));
     }
@@ -4425,7 +4426,7 @@
   }
 
   async function refreshReports({ force = false } = {}) {
-    const days = Number($("#reportDays")?.value || 30);
+    const days = Number($("#reportDays")?.value || 365);
     try {
       await Promise.all([fetchReport(days, { force }), fetchReportAnalytics(days, { force })]);
     } catch {}

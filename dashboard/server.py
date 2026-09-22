@@ -3211,30 +3211,32 @@ def api_client_log():
 def api_bootstrap():
     """Single payload for fast dashboard boot — parse signal log once."""
     def _load():
-        enriched_30 = _get_enriched_signals(days=30)
+        enriched_all = _get_enriched_signals(days=365)
         enriched_7d = _get_enriched_signals(days=7)
         signals_7d = _parse_all_signals(days=7)
-        telegram_30 = _parse_telegram_deliveries(days=30, limit=3000)
+        telegram_all = _parse_telegram_deliveries(days=365, limit=3000)
 
         return {
             "version": _dashboard_version(),
-            "status": _build_status_payload(enriched_recent=enriched_7d or enriched_30[:10]),
+            "status": _build_status_payload(enriched_recent=enriched_7d or enriched_all[:10]),
             "system": _system_stats_with_ops(),
             "signals": {
-                "signals": enriched_30[:50],
-                "summary": _signals_page_summary(enriched_30),
+                "signals": enriched_all[:500],
+                "summary": _signals_page_summary(enriched_all),
+                "days": 365,
             },
             "report_7": _report_summary(signals_7d, 7),
             "telegram": {
-                "summary": _telegram_summary(telegram_30, 30),
-                "entries": telegram_30[:100],
+                "summary": _telegram_summary(telegram_all, 365),
+                "entries": telegram_all[:500],
+                "days": 365,
             },
             "ops": _ops_config(),
             "cooldowns": _cooldown_status(),
             "uptime": _pm2_restarts_24h(),
         }
 
-    return jsonify(_cache_json("bootstrap:v1", 10, _load))
+    return jsonify(_cache_json("bootstrap:v2", 10, _load))
 
 
 @app.after_request
@@ -3266,8 +3268,8 @@ def api_system():
 @app.route("/api/signals")
 @auth_required
 def api_signals():
-    days = request.args.get("days", 30, type=int)
-    limit = request.args.get("limit", 100, type=int)
+    days = request.args.get("days", 365, type=int)
+    limit = request.args.get("limit", 500, type=int)
     delivery = request.args.get("delivery", "all")
     direction = request.args.get("direction", "all")
     outcome = request.args.get("outcome", "all")
@@ -3315,7 +3317,7 @@ def api_signals():
 @app.route("/api/simulation")
 @auth_required
 def api_simulation():
-    days = min(max(request.args.get("days", 30, type=int), 1), 365)
+    days = min(max(request.args.get("days", 365, type=int), 1), 365)
     symbol = request.args.get("symbol", "all").strip()
     status = request.args.get("status", "all").strip().lower()
     page = max(1, request.args.get("page", 1, type=int))
