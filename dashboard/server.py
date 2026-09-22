@@ -591,7 +591,7 @@ def _get_enriched_all() -> list[dict]:
     ):
         return cached["enriched"]
     all_signals = _get_all_signals_full()
-    telegram = _parse_telegram_deliveries(days=None, limit=5000)
+    telegram = _parse_telegram_deliveries(days=30, limit=5000)
     enriched = _enrich_signals(all_signals, telegram)
     cached["sig_mtime"] = sig_m
     cached["tg_mtime"] = tg_m
