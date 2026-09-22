@@ -68,7 +68,7 @@ _signals_full_cache: dict = {"mtime": 0.0, "signals": []}
 _telegram_cache: dict = {"mtime": 0.0, "days": 0, "limit": 0, "entries": []}
 _pm2_cache: dict = {"ts": 0.0, "data": []}
 _system_micro_cache: dict = {"ts": 0.0, "data": None}
-_enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "enriched": []}
+_enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "sim_mtime": 0.0, "enriched": []}
 _simulation_index_ready = False
 _simulation_schema_cache: dict = {"mtime": 0.0, "columns": set()}
 _cpu_primed = False
@@ -572,23 +572,30 @@ def _mask(val: str) -> str:
     return val[:4] + "•" * (len(val) - 8) + val[-4:]
 
 
-def _enriched_source_mtime() -> tuple[float, float]:
+def _enriched_source_mtime() -> tuple[float, float, float]:
     sig = SIGNAL_LOG.stat().st_mtime if SIGNAL_LOG.exists() else 0.0
     tg = TELEGRAM_DELIVERY_LOG.stat().st_mtime if TELEGRAM_DELIVERY_LOG.exists() else 0.0
-    return sig, tg
+    sim = SIMULATION_DB.stat().st_mtime if SIMULATION_DB.exists() else 0.0
+    return sig, tg, sim
 
 
 def _get_enriched_all() -> list[dict]:
-    """Enrich full signal log once; reuse until signal or telegram log changes."""
-    sig_m, tg_m = _enriched_source_mtime()
+    """Enrich full signal log once; reuse until signal, telegram, or simulation data changes."""
+    sig_m, tg_m, sim_m = _enriched_source_mtime()
     cached = _enriched_full_cache
-    if cached["sig_mtime"] == sig_m and cached["tg_mtime"] == tg_m and cached["enriched"]:
+    if (
+        cached["sig_mtime"] == sig_m
+        and cached["tg_mtime"] == tg_m
+        and cached.get("sim_mtime") == sim_m
+        and cached["enriched"]
+    ):
         return cached["enriched"]
     all_signals = _get_all_signals_full()
-    telegram = _parse_telegram_deliveries(days=30, limit=5000)
+    telegram = _parse_telegram_deliveries(days=None, limit=5000)
     enriched = _enrich_signals(all_signals, telegram)
     cached["sig_mtime"] = sig_m
     cached["tg_mtime"] = tg_m
+    cached["sim_mtime"] = sim_m
     cached["enriched"] = enriched
     return enriched
 
@@ -958,8 +965,95 @@ def _enrich_signals(signals: list[dict], telegram_entries: list[dict]) -> list[d
         enriched.append(row)
 
     enriched.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
-    outcomes = _parse_outcomes(days=90)
-    return _attach_outcomes(enriched, outcomes)
+    outcomes = _parse_outcomes(days=None)
+    enriched = _attach_outcomes(enriched, outcomes)
+    return _attach_simulation_outcomes(enriched)
+
+
+def _simulation_closed_rows() -> list[dict]:
+    """Closed paper-trades already stored on this server. Open rows stay open."""
+    if not SIMULATION_DB.exists():
+        return []
+    status_map = {
+        "sl": "sl",
+        "tp1": "tp1",
+        "tp2": "tp2",
+        "expired": "expired",
+        "tp1_sl": "tp1",
+        "tp2_sl": "tp2",
+    }
+    try:
+        with sqlite3.connect(f"file:{SIMULATION_DB}?mode=ro", uri=True, timeout=3) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT signal_time, symbol, direction, status, exit_price, entry
+                FROM simulated_trades
+                WHERE status IS NOT NULL AND status != 'open'
+                """
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    closed = []
+    for row in rows:
+        outcome = status_map.get(str(row["status"] or "").lower())
+        if not outcome:
+            continue
+        closed.append({
+            "signal_time": str(row["signal_time"] or ""),
+            "symbol": row["symbol"],
+            "direction": row["direction"],
+            "outcome": outcome,
+            "exit_price": row["exit_price"],
+            "entry": row["entry"],
+        })
+    return closed
+
+
+def _attach_simulation_outcomes(signals: list[dict]) -> list[dict]:
+    rows = _simulation_closed_rows()
+    if not rows:
+        return signals
+    for sig in signals:
+        if sig.get("outcome") not in (None, "open"):
+            continue
+        sym = _normalize_symbol(str(sig.get("symbol", "")))
+        direction = str(sig.get("direction", "")).upper()
+        ts = _parse_ts(sig.get("timestamp", ""))
+        if not ts:
+            continue
+        try:
+            entry = float(sig["entry"]) if sig.get("entry") not in (None, "") else None
+        except (TypeError, ValueError):
+            entry = None
+        best = None
+        best_delta = 10**9
+        for row in rows:
+            if _normalize_symbol(str(row.get("symbol", ""))) != sym:
+                continue
+            if str(row.get("direction", "")).upper() != direction:
+                continue
+            rts = _parse_ts(str(row.get("signal_time", "")).replace("T", " "))
+            if not rts:
+                continue
+            delta = abs((ts - rts).total_seconds())
+            if delta > 180:
+                continue
+            if entry is not None and row.get("entry") is not None:
+                try:
+                    other = float(row["entry"])
+                    if abs(other - entry) / max(abs(entry), 1e-9) > 0.003:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            if delta < best_delta:
+                best_delta = delta
+                best = row
+        if best:
+            sig["outcome"] = best["outcome"]
+            sig["outcome_source"] = "simulation"
+            sig["exit_price"] = best["exit_price"]
+    return signals
 
 
 def _signals_page_summary(enriched: list[dict]) -> dict:
