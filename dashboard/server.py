@@ -72,7 +72,7 @@ _enriched_full_cache: dict = {"sig_mtime": 0.0, "tg_mtime": 0.0, "enriched": []}
 _simulation_index_ready = False
 _simulation_schema_cache: dict = {"mtime": 0.0, "columns": set()}
 _cpu_primed = False
-PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", "/root/.pm2/logs"))
+PM2_LOG_DIR = Path(os.environ.get("PM2_LOG_DIR", str(Path.home() / ".pm2" / "logs") if (Path.home() / ".pm2" / "logs").exists() else "/root/.pm2/logs"))
 ENGINE_LOG = PM2_LOG_DIR / "signal-engine-error.log"
 ENGINE_OUT_LOG = PM2_LOG_DIR / "signal-engine-out.log"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -96,8 +96,10 @@ PROCESSES = ("signal-engine", "signal-server")
 DISPLAY_PROCESSES = ("signal-engine", "signal-server", "dashboard")
 SECRET_KEYS = (
     "TWELVE_DATA_API_KEY",
+    "TWELVE_DATA_API_KEYS",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
+    "TELEGRAM_OPS_CHAT_ID",
     "DASHBOARD_PASSWORD",
     "DASHBOARD_TOKEN",
     "GH_PAT",
@@ -3059,7 +3061,16 @@ def _build_status_payload(
             else None,
         },
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "twelve_pool": _twelve_pool_status(),
     }
+
+
+def _twelve_pool_status() -> dict:
+    path = DATA_ROOT / "twelve-pool.json"
+    payload = _read_json(path)
+    if not payload:
+        return {"total": 0, "usable": 0, "sticky": "", "keys": [], "updated_at": None}
+    return payload
 
 
 def _signal_after(s: dict, cutoff: datetime) -> bool:
@@ -3283,7 +3294,9 @@ def api_config_patch():
         updates["SYMBOLS"] = ",".join(dict.fromkeys(symbols))
 
     numeric_limits = {
-        "MIN_SCORE": (1, 20),
+        # Discretionary-confluence score, max ~16 with default gates
+        # (divergence weighted +3, candle/premium-discount now scored).
+        "MIN_SCORE": (1, 16),
         "POLL_SECONDS": (15, 3600),
     }
     for key, (minimum, maximum) in numeric_limits.items():
@@ -3354,29 +3367,70 @@ def api_facebook_history():
 @auth_required
 def api_facebook_group_create():
     data = request.get_json(silent=True) or {}
-    name = str(data.get("name", "")).strip()
-    url = str(data.get("url", "")).strip().rstrip("/")
     language = str(data.get("language", "English"))
     template = str(data.get("template", "1"))
-    if not name or not re.match(r"^https://(?:www\.)?facebook\.com/groups/[^/?#]+", url, re.I):
-        return jsonify({"error": "نام و لینک معتبر گروه فیسبوک الزامی است"}), 400
     if language not in ("English", "Persian", "Russian") or template not in ("1", "2", "3"):
         return jsonify({"error": "زبان یا قالب نامعتبر است"}), 400
+
+    # Bulk paste: "urls" can be a list, or a single string with one URL per
+    # line (also accepts commas) — the dashboard's Add Group field now
+    # accepts pasting many links at once instead of requiring a file upload
+    # or one-at-a-time entry. "url" (singular) is still accepted for any
+    # older caller.
+    raw_urls = data.get("urls")
+    if raw_urls is None:
+        raw_urls = [data.get("url", "")]
+    if isinstance(raw_urls, str):
+        raw_urls = re.split(r"[\n,]+", raw_urls)
+    cleaned_urls = [str(u).strip().rstrip("/") for u in raw_urls]
+    cleaned_urls = [u for u in cleaned_urls if u]
+    if not cleaned_urls:
+        return jsonify({"error": "لینک گروه فیسبوک الزامی است"}), 400
+
+    # A custom name only makes sense when adding exactly one group; for a
+    # multi-URL paste each group gets an auto-generated placeholder name
+    # from its URL (editable afterward from the group list).
+    custom_name = str(data.get("name", "")).strip() if len(cleaned_urls) == 1 else ""
+
     groups = _facebook_groups()
-    if any(group["url"].lower() == url.lower() for group in groups):
-        return jsonify({"error": "این گروه قبلاً اضافه شده است"}), 409
-    group = {
-        "id": secrets.token_hex(6),
-        "name": name,
-        "url": url,
-        "language": language,
-        "template": template,
-        "enabled": bool(data.get("enabled", True)),
-    }
-    groups.append(group)
+    existing_urls = {g["url"].lower() for g in groups}
+    seen_in_batch = set()
+    added, duplicates, invalid = [], [], []
+
+    for url in cleaned_urls:
+        if not re.match(r"^https://(?:www\.)?facebook\.com/groups/[^/?#]+", url, re.I):
+            invalid.append(url)
+            continue
+        if url.lower() in existing_urls or url.lower() in seen_in_batch:
+            duplicates.append(url)
+            continue
+        seen_in_batch.add(url.lower())
+        name = custom_name or f"Group {url.rstrip('/').split('/')[-1]}"
+        group = {
+            "id": secrets.token_hex(6),
+            "name": name,
+            "url": url,
+            "language": language,
+            "template": template,
+            "enabled": bool(data.get("enabled", True)),
+        }
+        groups.append(group)
+        added.append(group)
+
+    if not added:
+        if invalid and not duplicates:
+            return jsonify({"error": "هیچ لینک معتبری یافت نشد", "invalid": invalid}), 400
+        return jsonify({"error": "این گروه(ها) قبلاً اضافه شده‌اند", "duplicates": duplicates, "invalid": invalid}), 409
+
     _save_facebook_groups(groups)
-    _audit("facebook_group_add", f"{name} {url}")
-    return jsonify({"ok": True, "group": group, "status": _facebook_preflight()})
+    _audit("facebook_group_add", f"{len(added)} group(s): " + ", ".join(g["url"] for g in added))
+    return jsonify({
+        "ok": True,
+        "added": added,
+        "duplicates": duplicates,
+        "invalid": invalid,
+        "status": _facebook_preflight(),
+    })
 
 
 @app.route("/api/facebook/groups/<group_id>", methods=["PATCH", "DELETE"])
@@ -3497,6 +3551,27 @@ def api_facebook_job_preview(signal_id: str):
     if not job.exists():
         return jsonify({"error": "سیگنال پیدا نشد"}), 404
     return jsonify({"signal": _read_json(job), "templates": _facebook_preview(job)})
+
+
+@app.route("/api/facebook/jobs/<signal_id>/chart-image")
+@auth_required
+def api_facebook_job_chart_image(signal_id: str):
+    job = FACEBOOK_JOBS_DIR / f"{secure_filename(signal_id)}.json"
+    if not job.exists():
+        abort(404)
+    signal = _read_json(job) or {}
+    image_path = signal.get("chart_image")
+    if not image_path:
+        abort(404)
+    resolved = Path(image_path).resolve()
+    # Only ever serve files signal_server.py actually wrote for this signal,
+    # not whatever path a tampered job file might point at.
+    expected_dir = Path(
+        os.environ.get("FACEBOOK_CHART_IMAGES_DIR", "/var/lib/trading-bot/facebook/chart-images")
+    ).resolve()
+    if expected_dir not in resolved.parents or not resolved.is_file():
+        abort(404)
+    return send_file(resolved, mimetype="image/png")
 
 
 @app.route("/api/facebook/jobs/<signal_id>/dry-run", methods=["POST"])
@@ -4172,24 +4247,18 @@ def api_management():
 
 
 def _git_deploy(branch: str) -> dict:
+    """Pull the dashboard from GitHub. Does not reset the engine or .env."""
     git_dir = BOT_ROOT
     if not (git_dir / ".git").exists():
         return {"ok": False, "error": "Not a git repository"}
-    token = os.environ.get("GH_PAT") or os.environ.get("GITHUB_TOKEN", "")
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", branch or ""):
+        return {"ok": False, "error": "Invalid branch"}
+    remote = "https://github.com/sedshahab0/trading-bot.git"
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    git_prefix = ["git"]
-    if token:
-        git_prefix = [
-            "git",
-            "-c",
-            "credential.helper=!f() { echo username=sedshahab0; echo password=${GITHUB_TOKEN}; }; f",
-        ]
-        env["GITHUB_TOKEN"] = token
     steps = [
-        git_prefix + ["-C", str(git_dir), "fetch", "origin", branch],
-        git_prefix + ["-C", str(git_dir), "checkout", branch],
-        git_prefix + ["-C", str(git_dir), "reset", "--hard", f"origin/{branch}"],
+        ["git", "-C", str(git_dir), "fetch", remote, branch],
+        ["git", "-C", str(git_dir), "checkout", "FETCH_HEAD", "--", "dashboard"],
     ]
     outputs = []
     for cmd in steps:
@@ -4533,7 +4602,15 @@ def api_telegram_webhook():
 @auth_required
 def api_stream():
     def generate():
-        while True:
+        # Bounded, not `while True`: this holds one of gunicorn's fixed
+        # worker threads for its entire lifetime. An unbounded loop only
+        # ends when the client disconnects and the server notices — which
+        # doesn't always happen promptly (backgrounded tabs, sleeping
+        # laptops, network changes), so stale connections accumulate and
+        # eventually exhaust the whole thread pool, wedging the dashboard
+        # for every user. Ending after ~10 minutes forces a clean handoff;
+        # the browser's EventSource auto-reconnects transparently.
+        for _ in range(200):
             procs = []
             all_procs = []
             for name in PROCESSES:

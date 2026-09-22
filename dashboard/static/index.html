@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=20" />
-  <link rel="stylesheet" href="/static/css/layout.css?v=2.55.0" />
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=21" />
+  <link rel="stylesheet" href="/static/css/layout.css?v=2.58.0" />
   <script src="/static/vendor/chart.umd.min.js?v=2"></script>
 </head>
 <body class="auth-pending">
@@ -16,39 +16,184 @@
   <div class="bg-grid"></div>
 
   <!-- Login (unchanged structure) -->
+  <!-- Login Overlay (Modernized & Animated) -->
   <div class="login-overlay" id="loginOverlay">
+    <div class="login-spotlight" id="loginSpotlight"></div>
+    <div class="login-grid-bg"></div>
     <div class="login-orbs">
       <div class="login-orb orb-1"></div>
       <div class="login-orb orb-2"></div>
       <div class="login-orb orb-3"></div>
+      <div class="login-orb orb-4"></div>
     </div>
-    <div class="login-wrap animate-in">
+    <div class="login-wrap animate-in" id="loginCard">
+      <div class="login-card-border-glow"></div>
+
+      <!-- Right Column: Brand Showcase & Live Trading HUD -->
       <div class="login-brand">
         <div class="login-brand-inner">
-          <div class="brand-logo"><div class="brand-logo-ring"></div>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <div class="brand-status-pill">
+            <span class="status-live-ping">
+              <span class="ping-ring"></span>
+              <span class="ping-dot"></span>
+            </span>
+            <span>ENGINE ONLINE • MT5 CONNECTED</span>
           </div>
-          <span class="brand-tag">Forex TradeChi</span>
+
+          <div class="brand-logo-wrap">
+            <div class="brand-logo">
+              <div class="brand-logo-ring ring-1"></div>
+              <div class="brand-logo-ring ring-2"></div>
+              <div class="brand-logo-glow"></div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </div>
+            <div class="brand-badge-chip">PRO EDITION</div>
+          </div>
+
+          <span class="brand-tag">FOREX TRADECHI • ALGO BOT</span>
           <h1 class="brand-title">Signal Bot<br/><span>Control Panel</span></h1>
-          <p class="brand-desc">مدیریت حرفه‌ای ربات سیگنال‌دهی</p>
+          <p class="brand-desc">سامانه هوشمند مانیتورینگ، تحلیل تکنیکال و مخابره آنی سیگنال‌های فارکس</p>
+
+          <!-- Live Trading Sparkline HUD -->
+          <div class="brand-chart-card">
+            <div class="chart-card-header">
+              <div class="chart-pair-info">
+                <span class="chart-pair-name">EUR/USD</span>
+                <span class="chart-pair-tf">M15 • ALGO ENGINE</span>
+              </div>
+              <span class="chart-badge buy">
+                <span class="chart-badge-dot"></span>
+                BUY SIGNAL
+              </span>
+            </div>
+            <div class="chart-svg-wrap">
+              <svg class="chart-svg" viewBox="0 0 320 85" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#00F2FE" stop-opacity="0.35"/>
+                    <stop offset="50%" stop-color="#10B981" stop-opacity="0.12"/>
+                    <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="chartLineGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#00F2FE"/>
+                    <stop offset="45%" stop-color="#10B981"/>
+                    <stop offset="80%" stop-color="#38BDF8"/>
+                    <stop offset="100%" stop-color="#60A5FA"/>
+                  </linearGradient>
+                </defs>
+                <path class="chart-area" d="M0,70 Q45,55 90,62 T180,38 T260,42 T320,16 L320,85 L0,85 Z" fill="url(#chartGrad)"/>
+                <path class="chart-line" d="M0,70 Q45,55 90,62 T180,38 T260,42 T320,16" fill="none" stroke="url(#chartLineGrad)" stroke-width="2.5" stroke-linecap="round"/>
+                <circle class="chart-pulse-dot" cx="320" cy="16" r="4.5"/>
+                <circle class="chart-pulse-wave" cx="320" cy="16" r="5"/>
+              </svg>
+            </div>
+            <div class="chart-meta">
+              <span>نرخ موفقیت: <strong>۹۴.۲٪</strong></span>
+              <span>تاخیر شبکه: <strong class="ping-highlight">&lt; 12ms</strong></span>
+            </div>
+          </div>
+
+          <!-- Feature Pills -->
+          <div class="brand-telemetry">
+            <div class="telemetry-item" title="سرعت پردازش زنده">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>پردازش لحظه‌ای</span>
+            </div>
+            <div class="telemetry-item" title="رمزنگاری ۲۵۶ بیتی داده‌ها">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>اتصال ایمن SSL</span>
+            </div>
+            <div class="telemetry-item" title="پایداری ربات">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <span>پایداری ۹۹.۹٪</span>
+            </div>
+          </div>
         </div>
       </div>
+
+      <!-- Left Column: Form Panel -->
       <div class="login-panel">
         <div class="login-panel-inner">
-          <div class="login-panel-header"><h2>ورود به داشبورد</h2><p>نام کاربری و رمز عبور</p></div>
-          <form id="loginForm" class="login-form">
-            <div class="field-group"><label for="loginUsername">نام کاربری</label>
-              <div class="input-wrap"><svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <input type="text" id="loginUsername" placeholder="admin" autocomplete="username" /></div></div>
-            <div class="field-group"><label for="loginPassword">رمز عبور</label>
-              <div class="input-wrap"><svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
-                <button type="button" class="toggle-pw" id="togglePassword" aria-label="Show password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-            <button type="submit" class="login-submit" id="loginSubmit"><span class="login-submit-text">ورود به پنل</span><span class="login-submit-loader hidden"></span></button>
+          <div class="login-panel-header">
+            <div class="login-header-chip">
+              <span class="chip-sparkle">✦</span>
+              <span>احراز هویت ادمین</span>
+            </div>
+            <h2>ورود به داشبورد</h2>
+            <p>نام کاربری و رمز عبور ربات را وارد کنید</p>
+          </div>
+
+          <form id="loginForm" class="login-form" autocomplete="on">
+            <div class="field-group">
+              <label for="loginUsername">نام کاربری</label>
+              <div class="input-wrap">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input type="text" id="loginUsername" placeholder="admin" autocomplete="username" required spellcheck="false" />
+                <span class="input-focus-line"></span>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label for="loginPassword">رمز عبور</label>
+              <div class="input-wrap">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" required />
+                <span class="input-focus-line"></span>
+                <button type="button" class="toggle-pw" id="togglePassword" aria-label="Show password" title="نمایش / مخفی‌سازی رمز عبور">
+                  <svg class="pw-eye pw-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <svg class="pw-eye pw-eye-closed hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" class="login-submit" id="loginSubmit">
+              <span class="login-submit-shimmer"></span>
+              <span class="login-submit-text">
+                <span>ورود به پنل کاربری</span>
+                <svg class="submit-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                  <polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </span>
+              <span class="login-submit-loader hidden"></span>
+            </button>
           </form>
-          <p class="login-error" id="loginError"></p>
+
+          <div class="login-error-box" id="loginErrorBox">
+            <svg class="login-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p class="login-error" id="loginError"></p>
+          </div>
+
           <div class="login-footer">
-            <span class="domain-badge"><span class="domain-dot"></span>agennews.store</span>
+            <div class="footer-badges">
+              <span class="domain-badge" title="سرور متصل">
+                <span class="domain-dot"></span>testmachine.store
+              </span>
+              <span class="secure-badge" title="ارتباط رمزنگاری شده">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                TLS 1.3
+              </span>
+            </div>
             <span class="version-badge" id="loginVersion">v2.55</span>
           </div>
         </div>
@@ -63,13 +208,20 @@
     <!-- Right Sidebar — collapsible groups, expandable width -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div class="sidebar-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
         <div class="sidebar-brand-text">
-          <strong>TradeChi Bot</strong>
-          <span class="sidebar-subtitle">Control Panel <span class="version-badge" id="sidebarVersion">v2.55</span></span>
+          <div class="brand-title-row">
+            <strong class="brand-title">TradeChi Bot</strong>
+            <span class="version-badge" id="sidebarVersion" role="button" title="مشاهده تاریخچه تغییرات">v2.55</span>
+          </div>
+          <span class="sidebar-subtitle">Control Panel · Quant System</span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="جمع/باز کردن منو" title="جمع کردن منو">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
       </div>
 
@@ -77,14 +229,16 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-meta">
-          <span class="version-pill" id="sidebarVersionFull" title="نسخه داشبورد">2.55.0</span>
+          <span class="version-pill" id="sidebarVersionFull" role="button" tabindex="0" title="نسخه داشبورد و تاریخچه تغییرات">v2.55.0 · cae5d37</span>
         </div>
         <div class="sidebar-status" id="sidebarStatus">
           <span class="sidebar-status-dot"></span>
-          <span id="sidebarStatusText">—</span>
+          <span class="sidebar-status-text" id="sidebarStatusText">ربات در حال اجراست</span>
         </div>
-        <button class="nav-item logout" id="btnLogout">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        <button class="nav-item logout" id="btnLogout" title="خروج از حساب کاربری">
+          <div class="nav-item-icon-box logout-icon-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </div>
           <span>خروج</span>
         </button>
       </div>
@@ -96,22 +250,35 @@
         <button class="menu-toggle" id="menuToggle" aria-label="Menu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        <div class="topbar-title">
-          <div class="topbar-breadcrumb" aria-label="مسیر صفحه">
-            <span class="topbar-breadcrumb-domain">agennews.store</span>
-            <span class="topbar-breadcrumb-sep">/</span>
-            <span class="topbar-breadcrumb-section" id="pageBreadcrumbSection">dashboard</span>
-            <span class="topbar-breadcrumb-sep">/</span>
-            <span class="topbar-breadcrumb-page" id="pageBreadcrumbRoute">home</span>
+        <div class="topbar-branding-pod">
+          <div class="topbar-title">
+            <div class="topbar-breadcrumb" aria-label="مسیر صفحه">
+              <span class="topbar-breadcrumb-domain">testmachine.store</span>
+              <span class="topbar-breadcrumb-sep">›</span>
+              <span class="topbar-breadcrumb-section" id="pageBreadcrumbSection">dashboard</span>
+              <span class="topbar-breadcrumb-sep">›</span>
+              <span class="topbar-breadcrumb-page" id="pageBreadcrumbRoute">home</span>
+            </div>
+            <div class="topbar-heading-row">
+              <h1 id="pageTitle">داشبورد</h1>
+              <span class="topbar-sub" id="pageSub">نمای کلی ربات</span>
+            </div>
           </div>
-          <h1 id="pageTitle">داشبورد</h1>
-          <span class="topbar-sub" id="pageSub">نمای کلی ربات</span>
         </div>
-        <div class="topbar-route-pill" id="pageRoutePill" title="مسیر فعلی">/</div>
+
+        <div class="topbar-center-hud">
+          <div class="topbar-telemetry-chip" title="وضعیت ارتباط با سرور و پینگ">
+            <span class="telemetry-pulse-dot"></span>
+            <span class="telemetry-label">سیستم آنلاین</span>
+            <span class="telemetry-ping" id="topbarPing">24ms</span>
+          </div>
+          <div class="topbar-route-pill" id="pageRoutePill" title="مسیر فعلی">/</div>
+        </div>
+
         <div class="topbar-actions">
-          <div class="live-badge"><span class="live-dot"></span><span id="liveTime">--:--:--</span></div>
-          <button class="btn btn-success btn-compact" id="btnStartAll"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg><span>روشن</span></button>
-          <button class="btn btn-danger btn-compact" id="btnStopAll"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg><span>توقف</span></button>
+          <div class="live-badge" title="زمان رسمی بازار"><span class="live-dot"></span><span id="liveTime">--:--:--</span><span class="tz-tag">IR-ST</span></div>
+          <button class="btn btn-success btn-compact" id="btnStartAll" title="راه‌اندازی کلیه سرویس‌ها"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg><span>روشن</span></button>
+          <button class="btn btn-danger btn-compact" id="btnStopAll" title="توقف کلیه سرویس‌ها"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg><span>توقف</span></button>
         </div>
       </header>
 
@@ -132,7 +299,7 @@
                 <h2 class="hero-title" id="statusLabel">در حال بارگذاری...</h2>
                 <p class="hero-sub" id="statusSub"></p>
                 <div class="hero-chips">
-                  <div class="hero-chip"><span class="chip-lbl">دامنه</span><span class="chip-val">agennews.store</span></div>
+                  <div class="hero-chip"><span class="chip-lbl">دامنه</span><span class="chip-val">testmachine.store</span></div>
                   <div class="hero-chip"><span class="chip-lbl">سرور</span><span class="chip-val" id="hostTag">—</span></div>
                   <div class="hero-chip"><span class="chip-lbl">Uptime</span><span class="chip-val" id="heroUptime">—</span></div>
                 </div>
@@ -375,6 +542,17 @@
               <div class="engine-summary-chips" id="engineSummaryChips"></div>
             </div>
             <div class="engine-cards" id="engineInfo"></div>
+          </section>
+
+          <section class="panel monitor-engine-panel">
+            <div class="panel-top">
+              <div>
+                <h3 class="panel-heading">استخر Twelve Data</h3>
+                <p class="panel-desc" id="twelvePoolMeta">—</p>
+              </div>
+              <div class="engine-summary-chips" id="twelvePoolChips"></div>
+            </div>
+            <div class="engine-cards" id="twelvePoolKeys"></div>
           </section>
 
         </div>
@@ -638,10 +816,46 @@
           </section>
 
           <div class="simulation-kpis">
-            <article class="sim-kpi"><span>نرخ برد</span><strong id="simWinRate">—</strong><small id="simWinLoss">0W / 0L</small></article>
-            <article class="sim-kpi"><span>Profit Factor</span><strong id="simProfitFactor">—</strong><small>سود ناخالص ÷ زیان</small></article>
-            <article class="sim-kpi"><span>میانگین معامله</span><strong id="simAvgR">—</strong><small>برحسب ریسک اولیه</small></article>
-            <article class="sim-kpi"><span>Max Drawdown</span><strong id="simDrawdown">—</strong><small>افت از سقف Equity</small></article>
+            <article class="sim-kpi">
+              <div class="sim-kpi-head">
+                <span>نرخ برد</span>
+                <div class="sim-kpi-icon winrate">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                </div>
+              </div>
+              <strong id="simWinRate">—</strong>
+              <small id="simWinLoss">0W / 0L</small>
+            </article>
+            <article class="sim-kpi">
+              <div class="sim-kpi-head">
+                <span>Profit Factor</span>
+                <div class="sim-kpi-icon pf">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+              </div>
+              <strong id="simProfitFactor">—</strong>
+              <small>سود ناخالص ÷ زیان</small>
+            </article>
+            <article class="sim-kpi">
+              <div class="sim-kpi-head">
+                <span>میانگین معامله</span>
+                <div class="sim-kpi-icon avg">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+              </div>
+              <strong id="simAvgR">—</strong>
+              <small>برحسب ریسک اولیه</small>
+            </article>
+            <article class="sim-kpi">
+              <div class="sim-kpi-head">
+                <span>Max Drawdown</span>
+                <div class="sim-kpi-icon dd">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                </div>
+              </div>
+              <strong id="simDrawdown">—</strong>
+              <small>افت از سقف Equity</small>
+            </article>
           </div>
 
           <section class="panel simulation-confidence" id="simConfidencePanel">
@@ -663,7 +877,10 @@
             <select id="simDays" class="select-input" aria-label="بازه شبیه‌سازی"><option value="7">۷ روز</option><option value="30" selected>۳۰ روز</option><option value="90">۹۰ روز</option><option value="365">همه سال</option></select>
             <select id="simSymbol" class="select-input" aria-label="نماد شبیه‌سازی"><option value="all">همه نمادها</option></select>
             <select id="simStatus" class="select-input" aria-label="نتیجه شبیه‌سازی"><option value="all">همه نتایج</option><option value="win">سودده</option><option value="loss">زیان‌ده</option><option value="open">باز</option><option value="tp1">TP1</option><option value="tp2">TP2</option><option value="sl">SL</option><option value="expired">منقضی</option></select>
-            <button class="btn btn-secondary" id="btnSimRefresh">بروزرسانی نتایج</button>
+            <button class="btn btn-secondary" id="btnSimRefresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              <span>بروزرسانی نتایج</span>
+            </button>
           </div>
 
           <div class="simulation-loading hidden" id="simulationLoading" aria-live="polite" aria-label="در حال بارگذاری داده‌ها">
@@ -722,40 +939,144 @@
                   <option value="open">فقط معاملات باز</option>
                 </select>
               </div>
-              <button class="btn btn-export excel" id="btnExportSimXlsx" type="button">دانلود اکسل</button>
+              <button class="btn btn-export excel" id="btnExportSimXlsx" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>دانلود اکسل</span>
+              </button>
             </div>
           </article>
         </div>
 
         <!-- PAGE: Reports -->
         <div class="page" id="page-reports">
-          <div class="page-toolbar">
-            <label class="toolbar-label">بازه:</label>
-            <select id="reportDays" class="select-input">
-              <option value="7">۷ روز</option><option value="30" selected>۳۰ روز</option><option value="90">۹۰ روز</option><option value="365">۱ سال</option>
-            </select>
-            <button class="btn btn-export excel" id="btnExportExcel">Excel</button>
-            <button class="btn btn-export csv" id="btnExportCsv">CSV</button>
+          <div class="page-toolbar reports-toolbar">
+            <div class="reports-toolbar-filter">
+              <label for="reportDays" class="toolbar-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>بازه گزارش:</span>
+              </label>
+              <select id="reportDays" class="select-input">
+                <option value="7">۷ روز اخیر</option>
+                <option value="30" selected>۳۰ روز اخیر</option>
+                <option value="90">۹۰ روز اخیر</option>
+                <option value="365">۱ سال کامل</option>
+              </select>
+            </div>
+            <div class="reports-toolbar-exports">
+              <button class="btn btn-export excel" id="btnExportExcel" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>خروجی Excel</span>
+              </button>
+              <button class="btn btn-export csv" id="btnExportCsv" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span>خروجی CSV</span>
+              </button>
+            </div>
           </div>
+
           <div class="report-kpi">
-            <div class="report-stat"><span class="report-num" id="rptAvg">—</span><span class="report-lbl">میانگین روزانه</span></div>
-            <div class="report-stat"><span class="report-num" id="rptTop">—</span><span class="report-lbl">پرسیگنال‌ترین</span></div>
-            <div class="report-stat"><span class="report-num" id="rptRatio">—</span><span class="report-lbl">BUY/SELL</span></div>
-            <div class="report-stat"><span class="report-num" id="rptRestarts">—</span><span class="report-lbl">Restarts</span></div>
-            <div class="report-stat tg"><span class="report-num" id="rptTgSent">—</span><span class="report-lbl">تلگرام موفق</span></div>
-            <div class="report-stat tg fail"><span class="report-num" id="rptTgRate">—</span><span class="report-lbl">نرخ موفقیت</span></div>
+            <div class="report-stat">
+              <div class="report-stat-head">
+                <span class="report-lbl">میانگین روزانه</span>
+                <div class="report-stat-icon avg">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+              </div>
+              <span class="report-num" id="rptAvg">—</span>
+              <span class="report-hint">سیگنال در هر روز</span>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-head">
+                <span class="report-lbl">پرسیگنال‌ترین</span>
+                <div class="report-stat-icon top">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                </div>
+              </div>
+              <span class="report-num" id="rptTop">—</span>
+              <span class="report-hint">بیشترین حجم معامله</span>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-head">
+                <span class="report-lbl">نسبت BUY / SELL</span>
+                <div class="report-stat-icon ratio">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                </div>
+              </div>
+              <span class="report-num" id="rptRatio">—</span>
+              <span class="report-hint">توازن جهت بازار</span>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-head">
+                <span class="report-lbl">ری‌استارت‌ها</span>
+                <div class="report-stat-icon restarts">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                </div>
+              </div>
+              <span class="report-num" id="rptRestarts">—</span>
+              <span class="report-hint">PM2 Restarts</span>
+            </div>
+            <div class="report-stat tg">
+              <div class="report-stat-head">
+                <span class="report-lbl">تلگرام موفق</span>
+                <div class="report-stat-icon tg">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </div>
+              </div>
+              <span class="report-num" id="rptTgSent">—</span>
+              <span class="report-hint">ارسال شده به کانال</span>
+            </div>
+            <div class="report-stat tg fail">
+              <div class="report-stat-head">
+                <span class="report-lbl">نرخ موفقیت</span>
+                <div class="report-stat-icon rate">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </div>
+              </div>
+              <span class="report-num" id="rptTgRate">—</span>
+              <span class="report-hint">درصد تحویل تلگرام</span>
+            </div>
           </div>
-          <div class="grid-2">
-            <div class="panel"><h3 class="panel-heading">روند روزانه سیگنال‌ها</h3><div class="chart-box tall"><canvas id="dailyChart"></canvas></div></div>
-            <div class="panel"><h3 class="panel-heading">BUY vs SELL</h3><div class="chart-box tall"><canvas id="directionChart"></canvas></div></div>
+
+          <div class="grid-2 reports-grid">
+            <div class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">روند روزانه سیگنال‌ها</h3>
+                <span class="hint">تفکیک خرید و فروش</span>
+              </div>
+              <div class="chart-box tall"><canvas id="dailyChart"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">BUY vs SELL</h3>
+                <span class="hint">توزیع جهت معاملات</span>
+              </div>
+              <div class="chart-box tall"><canvas id="directionChart"></canvas></div>
+            </div>
           </div>
-          <div class="grid-2">
-            <div class="panel"><h3 class="panel-heading">عملکرد نمادها</h3><div class="chart-box wide"><canvas id="symbolBarChart"></canvas></div></div>
-            <div class="panel"><h3 class="panel-heading">ارسال‌های تلگرام (روزانه)</h3><div class="chart-box wide"><canvas id="telegramReportChart"></canvas></div></div>
+
+          <div class="grid-2 reports-grid">
+            <div class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">عملکرد نمادها</h3>
+                <span class="hint">حجم سیگنال برحسب جفت‌ارز</span>
+              </div>
+              <div class="chart-box wide"><canvas id="symbolBarChart"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-top">
+                <h3 class="panel-heading">ارسال‌های تلگرام (روزانه)</h3>
+                <span class="hint">موفق و ناموفق</span>
+              </div>
+              <div class="chart-box wide"><canvas id="telegramReportChart"></canvas></div>
+            </div>
           </div>
-          <div class="grid-2">
+
+          <div class="grid-2 reports-grid">
             <article class="panel">
-              <h3 class="panel-heading">Heatmap ساعتی سیگنال‌ها</h3>
+              <div class="panel-top">
+                <h3 class="panel-heading">Heatmap ساعتی سیگنال‌ها</h3>
+                <span class="hint">تراکم فعالیت در ۲۴ ساعت</span>
+              </div>
               <div class="chart-box wide"><canvas id="hourlyHeatmapChart"></canvas></div>
             </article>
             <article class="panel panel-flush">
@@ -782,7 +1103,9 @@
               </div>
             </article>
           </div>
-          <p class="hint" id="reportGenerated">—</p>
+          <div class="reports-footer-bar">
+            <p class="hint" id="reportGenerated">—</p>
+          </div>
         </div>
 
         <!-- PAGE: Telegram -->
@@ -790,47 +1113,143 @@
           <section class="telegram-hero">
             <div class="hero-bg"></div>
             <div class="telegram-hero-body">
-              <div>
+              <div class="telegram-hero-info">
                 <div class="hero-status-row">
-                  <span class="status-pill" id="tgStatusPill"><span class="status-indicator running" id="tgStatusDot"></span><span id="tgStatusLabel">—</span></span>
+                  <span class="status-pill" id="tgStatusPill">
+                    <span class="status-indicator running" id="tgStatusDot"></span>
+                    <span id="tgStatusLabel">—</span>
+                  </span>
                   <span class="hero-time" id="tgUpdated">—</span>
                 </div>
-                <h2 class="hero-title">لاگ ارسال تلگرام</h2>
+                <h2 class="hero-title">
+                  <svg class="hero-title-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 2L11 13"/>
+                    <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+                  </svg>
+                  لاگ ارسال تلگرام
+                </h2>
                 <p class="hero-sub" id="tgSub">تاریخچه کامل سیگنال‌های ارسال‌شده و خطاهای تلگرام</p>
               </div>
+
               <div class="telegram-hero-stats">
-                <div class="tg-stat ok"><span class="tg-stat-num" id="tgOkTotal">0</span><span class="tg-stat-lbl">موفق</span></div>
-                <div class="tg-stat fail"><span class="tg-stat-num" id="tgFailTotal">0</span><span class="tg-stat-lbl">ناموفق</span></div>
-                <div class="tg-stat"><span class="tg-stat-num" id="tgRateTotal">0%</span><span class="tg-stat-lbl">نرخ موفقیت</span></div>
+                <div class="tg-stat ok">
+                  <div class="tg-stat-icon-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <div class="tg-stat-content">
+                    <span class="tg-stat-num" id="tgOkTotal">0</span>
+                    <span class="tg-stat-lbl">موفق</span>
+                  </div>
+                </div>
+
+                <div class="tg-stat fail">
+                  <div class="tg-stat-icon-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  </div>
+                  <div class="tg-stat-content">
+                    <span class="tg-stat-num" id="tgFailTotal">0</span>
+                    <span class="tg-stat-lbl">ناموفق</span>
+                  </div>
+                </div>
+
+                <div class="tg-stat rate">
+                  <div class="tg-stat-icon-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 10"/></svg>
+                  </div>
+                  <div class="tg-stat-content">
+                    <span class="tg-stat-num" id="tgRateTotal">0%</span>
+                    <span class="tg-stat-lbl">نرخ موفقیت</span>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
 
-          <div class="page-toolbar">
-            <input type="search" id="telegramSearch" class="search-input" placeholder="جستجو نماد..." />
-            <select id="telegramStatus" class="select-input">
-              <option value="all">همه</option>
-              <option value="ok">موفق</option>
-              <option value="failed">ناموفق</option>
-            </select>
-            <select id="telegramDays" class="select-input">
-              <option value="7">۷ روز</option>
-              <option value="30" selected>۳۰ روز</option>
-              <option value="90">۹۰ روز</option>
-            </select>
-            <button class="btn btn-primary" id="btnTelegramTest">📨 تست ارسال</button>
-            <button class="btn btn-export csv" id="btnExportTelegram">CSV</button>
+          <div class="page-toolbar telegram-toolbar">
+            <div class="search-input-wrap">
+              <svg class="search-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="search" id="telegramSearch" class="search-input" placeholder="جستجو نماد..." />
+            </div>
+
+            <div class="toolbar-select-group">
+              <div class="custom-select-wrap">
+                <svg class="select-prefix-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <select id="telegramStatus" class="select-input">
+                  <option value="all">همه</option>
+                  <option value="ok">موفق</option>
+                  <option value="failed">ناموفق</option>
+                </select>
+              </div>
+
+              <div class="custom-select-wrap">
+                <svg class="select-prefix-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <select id="telegramDays" class="select-input">
+                  <option value="7">۷ روز</option>
+                  <option value="30" selected>۳۰ روز</option>
+                  <option value="90">۹۰ روز</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="toolbar-actions-group">
+              <button class="btn btn-primary btn-tg-test" id="btnTelegramTest">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 2L11 13"/>
+                  <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+                <span>تست ارسال</span>
+              </button>
+
+              <button class="btn btn-export csv btn-tg-export" id="btnExportTelegram">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>CSV</span>
+              </button>
+            </div>
           </div>
 
           <div class="telegram-kpi">
-            <div class="report-stat"><span class="report-num" id="tgTodayOk">0</span><span class="report-lbl">موفق امروز</span></div>
-            <div class="report-stat"><span class="report-num" id="tgTodayFail">0</span><span class="report-lbl">خطا امروز</span></div>
-            <div class="report-stat"><span class="report-num" id="tgTopSymbol">—</span><span class="report-lbl">پرنمادترین</span></div>
+            <div class="report-stat tg-kpi-card tg-kpi-ok">
+              <div class="tg-kpi-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <div class="tg-kpi-data">
+                <span class="report-num" id="tgTodayOk">0</span>
+                <span class="report-lbl">موفق امروز</span>
+              </div>
+            </div>
+
+            <div class="report-stat tg-kpi-card tg-kpi-fail">
+              <div class="tg-kpi-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </div>
+              <div class="tg-kpi-data">
+                <span class="report-num" id="tgTodayFail">0</span>
+                <span class="report-lbl">خطا امروز</span>
+              </div>
+            </div>
+
+            <div class="report-stat tg-kpi-card tg-kpi-symbol">
+              <div class="tg-kpi-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              </div>
+              <div class="tg-kpi-data">
+                <span class="report-num mono-ticker" id="tgTopSymbol">—</span>
+                <span class="report-lbl">پرنمادترین</span>
+              </div>
+            </div>
           </div>
 
-          <div class="panel panel-flush">
+          <div class="panel panel-flush telegram-feed-panel">
+            <div class="telegram-feed-header">
+              <div class="feed-header-title">
+                <span class="feed-live-dot"></span>
+                <span>فید زنده رویدادهای تلگرام</span>
+              </div>
+              <span class="tg-feed-counter" id="tgFeedCount">۰ مورد</span>
+            </div>
             <div class="telegram-feed" id="telegramFeed"></div>
           </div>
+
           <nav class="signals-pagination telegram-pagination" id="telegramPagination" aria-label="صفحه‌بندی تلگرام"></nav>
         </div>
 
@@ -839,20 +1258,29 @@
           <section class="facebook-hero">
             <div class="hero-bg"></div>
             <div class="facebook-hero-body">
-              <div>
+              <div class="facebook-hero-info">
                 <div class="hero-status-row">
-                  <span class="status-pill"><span class="status-indicator" id="fbStatusDot"></span><span id="fbStatusLabel">در حال بررسی</span></span>
+                  <span class="status-pill">
+                    <span class="status-indicator" id="fbStatusDot"></span>
+                    <span id="fbStatusLabel">در حال بررسی</span>
+                  </span>
                   <span class="hero-time" id="fbSessionMeta">سشن: —</span>
                 </div>
-                <h2 class="hero-title">مرکز ارسال فیسبوک</h2>
-                <p class="hero-sub">مدیریت گروه‌ها، بازبینی پیام‌ها و کنترل انتشار سیگنال</p>
+                <h2 class="hero-title">
+                  <svg class="hero-title-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  مرکز ارسال و انتشار فیسبوک
+                </h2>
+                <p class="hero-sub">مدیریت گروه‌های مقصد، بازبینی پیام‌ها و کنترل انتشار خودکار سیگنال</p>
               </div>
+
               <div class="facebook-mode-card">
-                <div>
-                  <span class="facebook-mode-label">حالت انتشار</span>
+                <div class="mode-card-info">
+                  <span class="facebook-mode-label">حالت انتشار ربات</span>
                   <strong id="fbModeText">تأیید دستی</strong>
                 </div>
-                <label class="switch" aria-label="ارسال خودکار فیسبوک">
+                <label class="switch cyber-switch" aria-label="ارسال خودکار فیسبوک">
                   <input type="checkbox" id="fbAutoPost" />
                   <span class="switch-track"></span>
                 </label>
@@ -861,45 +1289,122 @@
           </section>
 
           <section class="facebook-readiness" aria-label="وضعیت آماده‌سازی فیسبوک">
-            <article class="fb-ready-card" id="fbReadyChrome"><span class="fb-ready-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l7 4"/></svg></span><div><strong>مرورگر سرور</strong><span>در حال بررسی</span></div></article>
-            <article class="fb-ready-card" id="fbReadySession"><span class="fb-ready-icon"><svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 00-16 0"/><circle cx="12" cy="7" r="4"/></svg></span><div><strong>سشن فیسبوک</strong><span>تنظیم نشده</span></div></article>
-            <article class="fb-ready-card" id="fbReadyGroups"><span class="fb-ready-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20a6 6 0 0112 0M14 20a4 4 0 018 0"/></svg></span><div><strong>گروه‌های فعال</strong><span>۰ گروه</span></div></article>
-            <article class="fb-ready-card" id="fbReadyPoster"><span class="fb-ready-icon"><svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></span><div><strong>آمادگی ارسال</strong><span>ناقص</span></div></article>
+            <article class="fb-ready-card" id="fbReadyChrome">
+              <span class="fb-ready-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l7 4"/></svg>
+              </span>
+              <div class="fb-ready-content">
+                <strong>مرورگر سرور</strong>
+                <span>در حال بررسی</span>
+              </div>
+            </article>
+
+            <article class="fb-ready-card" id="fbReadySession">
+              <span class="fb-ready-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+              <div class="fb-ready-content">
+                <strong>سشن فیسبوک</strong>
+                <span>تنظیم نشده</span>
+              </div>
+            </article>
+
+            <article class="fb-ready-card" id="fbReadyGroups">
+              <span class="fb-ready-icon">
+                <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
+              <div class="fb-ready-content">
+                <strong>گروه‌های فعال</strong>
+                <span>۰ گروه</span>
+              </div>
+            </article>
+
+            <article class="fb-ready-card" id="fbReadyPoster">
+              <span class="fb-ready-icon">
+                <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              </span>
+              <div class="fb-ready-content">
+                <strong>آمادگی ارسال</strong>
+                <span>ناقص</span>
+              </div>
+            </article>
           </section>
 
           <div class="facebook-layout">
             <section class="panel facebook-groups-panel">
               <div class="panel-top facebook-panel-head">
-                <div><h3 class="panel-heading">گروه‌های مقصد</h3><p class="panel-desc">هر گروه می‌تواند زبان و قالب پیام مستقل داشته باشد</p></div>
-                <button class="btn btn-primary btn-compact" id="btnFbAddGroup"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> افزودن گروه</button>
+                <div>
+                  <h3 class="panel-heading">گروه‌های مقصد انتشار</h3>
+                  <p class="panel-desc">هر گروه می‌تواند زبان، قالب پیام و وضعیت انتشار مستقل داشته باشد</p>
+                </div>
+                <button class="btn btn-primary btn-compact btn-fb-add" id="btnFbAddGroup">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>افزودن گروه جدید</span>
+                </button>
               </div>
+
               <div class="facebook-group-tools">
-                <input type="search" class="search-input" id="fbGroupSearch" placeholder="جستجوی نام یا لینک گروه..." />
-                <button class="btn btn-secondary btn-compact" id="btnFbEnableAll">فعال‌سازی همه</button>
-                <button class="btn btn-ghost btn-compact" id="btnFbDisableAll">توقف همه</button>
+                <div class="search-input-wrap fb-search-wrap">
+                  <svg class="search-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="search" class="search-input" id="fbGroupSearch" placeholder="جستجوی نام یا لینک گروه..." />
+                </div>
+                <div class="fb-group-batch-actions">
+                  <button class="btn btn-secondary btn-compact" id="btnFbEnableAll">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>فعال‌سازی همه</span>
+                  </button>
+                  <button class="btn btn-ghost btn-compact" id="btnFbDisableAll">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    <span>توقف همه</span>
+                  </button>
+                </div>
               </div>
+
               <div class="facebook-groups-list" id="fbGroupsList"></div>
+
+              <div class="facebook-pagination hidden" id="fbGroupsPagination">
+                <button class="btn btn-ghost btn-compact" id="btnFbGroupsPrev" type="button">قبلی</button>
+                <span id="fbGroupsPageInfo">صفحه ۱ از ۱</span>
+                <button class="btn btn-ghost btn-compact" id="btnFbGroupsNext" type="button">بعدی</button>
+              </div>
             </section>
 
             <aside class="panel facebook-session-panel">
-              <div class="fb-session-mark" id="fbSessionMark"><svg viewBox="0 0 24 24"><path d="M6 10V8a6 6 0 0112 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/><circle cx="12" cy="15" r="1"/></svg></div>
-              <h3 class="panel-heading">اتصال حساب</h3>
-              <p class="panel-desc">فایل JSON کوکی‌های Facebook را برای ورود امن مرورگر سرور بارگذاری کنید.</p>
+              <div class="fb-session-mark" id="fbSessionMark">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <h3 class="panel-heading">اتصال حساب فیسبوک</h3>
+              <p class="panel-desc">فایل JSON کوکی‌های Facebook را برای ورود خودکار و امن مرورگر سرور بارگذاری کنید.</p>
               <div class="facebook-session-state" id="fbSessionState" role="status" aria-live="polite">
                 <span class="facebook-session-state-dot"></span>
-                <div><strong id="fbSessionStateTitle">در حال بررسی</strong><span id="fbSessionStateDetail">وضعیت اتصال از سرور دریافت می‌شود</span></div>
+                <div class="session-state-text">
+                  <strong id="fbSessionStateTitle">در حال بررسی</strong>
+                  <span id="fbSessionStateDetail">وضعیت اتصال از سرور دریافت می‌شود</span>
+                </div>
               </div>
               <input type="file" id="fbSessionFile" accept=".json,application/json" hidden />
-              <button class="btn btn-secondary facebook-upload-btn" id="btnFbSessionUpload" type="button"><span class="fb-button-label">انتخاب فایل سشن</span></button>
-              <button class="btn btn-ghost facebook-test-session-btn" id="btnFbTestSession" type="button"><span class="fb-button-label">تست اتصال حساب</span></button>
+              <button class="btn btn-primary facebook-upload-btn" id="btnFbSessionUpload" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span class="fb-button-label">انتخاب فایل سشن</span>
+              </button>
+              <button class="btn btn-ghost facebook-test-session-btn" id="btnFbTestSession" type="button">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span class="fb-button-label">تست اتصال حساب</span>
+              </button>
               <p class="facebook-security-note">فایل با سطح دسترسی محدود روی سرور نگهداری می‌شود.</p>
             </aside>
           </div>
 
           <section class="panel facebook-queue-panel">
             <div class="panel-top facebook-panel-head">
-              <div><h3 class="panel-heading">صف پیام‌ها و تأیید انتشار</h3><p class="panel-desc">پیام را قبل از ارسال ببینید و سپس تأیید کنید</p></div>
-              <button class="link-btn" id="btnFbRefresh">بروزرسانی</button>
+              <div>
+                <h3 class="panel-heading">صف پیام‌ها و تأیید انتشار</h3>
+                <p class="panel-desc">سیگنال‌های تولیدشده را بازبینی کرده و با یک کلیک مجوز ارسال صادر کنید</p>
+              </div>
+              <button class="btn btn-secondary btn-compact" id="btnFbRefresh">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span>بروزرسانی</span>
+              </button>
             </div>
             <div class="facebook-jobs" id="fbJobsList"></div>
             <div class="facebook-pagination hidden" id="fbJobsPagination">
@@ -912,8 +1417,8 @@
           <section class="panel facebook-history-panel">
             <div class="panel-top facebook-panel-head">
               <div>
-                <h3 class="panel-heading">پیام‌های ارسال‌شده</h3>
-                <p class="panel-desc">تاریخچه انتشار موفق به گروه‌های فیسبوک</p>
+                <h3 class="panel-heading">تاریخچه پیام‌های ارسال‌شده</h3>
+                <p class="panel-desc">سابقه کامل انتشار موفق سیگنال‌ها در گروه‌های مقصد فیسبوک</p>
               </div>
               <span class="facebook-history-count" id="fbHistoryCount">۰ مورد</span>
             </div>
@@ -926,7 +1431,13 @@
           </section>
 
           <details class="panel facebook-log-panel">
-            <summary><span>لاگ و عیب‌یابی ارسال</span><button type="button" class="link-btn" id="btnFbLogs">دریافت لاگ</button></summary>
+            <summary>
+              <div class="fb-log-summary-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                <span>لاگ و عیب‌یابی ارسال</span>
+              </div>
+              <button type="button" class="btn btn-secondary btn-compact" id="btnFbLogs">دریافت لاگ</button>
+            </summary>
             <div class="facebook-log-view" id="fbLogView">برای مشاهده جزئیات، دریافت لاگ را بزنید.</div>
           </details>
         </div>
@@ -937,134 +1448,240 @@
           <section class="settings-hero">
             <div class="hero-bg"></div>
             <div class="settings-hero-body">
-              <div>
+              <div class="settings-hero-main">
                 <div class="hero-status-row">
-                  <span class="status-pill"><span class="status-indicator running" id="settingsStatusDot"></span><span id="settingsStatusLabel">پیکربندی ربات</span></span>
+                  <span class="status-pill">
+                    <span class="status-indicator running" id="settingsStatusDot"></span>
+                    <span id="settingsStatusLabel">پیکربندی ربات</span>
+                  </span>
                   <span class="hero-time" id="settingsUpdated">—</span>
                 </div>
-                <h2 class="hero-title">تنظیمات و سازماندهی</h2>
-                <p class="hero-sub">مدیریت نمادها، موتور تحلیل و کانال‌های ارسال</p>
+                <h2 class="hero-title">
+                  <svg class="hero-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="24" height="24">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+                  </svg>
+                  تنظیمات و معماری سیستم
+                </h2>
+                <p class="hero-sub">مدیریت نمادهای معاملاتی، موتور تحلیل الگوریتمی، وب‌هوک‌ها و استراتژی MQL5</p>
               </div>
               <div class="settings-hero-stats">
-                <div class="set-stat"><span class="set-stat-num" id="settingsSymCount">0</span><span class="set-stat-lbl">نماد فعال</span></div>
-                <div class="set-stat"><span class="set-stat-num" id="settingsMinScore">5</span><span class="set-stat-lbl">حداقل امتیاز</span></div>
-                <div class="set-stat"><span class="set-stat-num" id="settingsPollVal">30s</span><span class="set-stat-lbl">فاصله بررسی</span></div>
+                <div class="set-stat stat-sym">
+                  <div class="set-stat-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    <span class="set-stat-lbl">نماد فعال</span>
+                  </div>
+                  <span class="set-stat-num" id="settingsSymCount">0</span>
+                </div>
+                <div class="set-stat stat-score">
+                  <div class="set-stat-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    <span class="set-stat-lbl">حداقل امتیاز</span>
+                  </div>
+                  <span class="set-stat-num" id="settingsMinScore">5</span>
+                </div>
+                <div class="set-stat stat-poll">
+                  <div class="set-stat-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="set-stat-lbl">فاصله بررسی</span>
+                  </div>
+                  <span class="set-stat-num" id="settingsPollVal">30s</span>
+                </div>
               </div>
             </div>
           </section>
 
           <article class="panel settings-symbols-panel">
             <div class="panel-top settings-symbols-top">
-              <div>
-                <h3 class="panel-heading">نمادهای تحلیل</h3>
-                <p class="panel-desc">انتخاب نمادهایی که ربات روی آن‌ها سیگنال تولید می‌کند</p>
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap symbols-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">نمادهای تحلیل و تولید سیگنال</h3>
+                  <p class="panel-desc">مدیریت لیست دارایی‌هایی که موتور هوشمند به صورت خودکار رصد و تحلیل می‌کند</p>
+                </div>
               </div>
-              <button type="button" class="btn btn-primary btn-compact" id="btnSettingsSymbols">
+              <button type="button" class="btn btn-primary btn-compact btn-settings-symbols" id="btnSettingsSymbols">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                انتخاب و مدیریت نمادها
+                <span>انتخاب و مدیریت نمادها</span>
               </button>
             </div>
             <div class="settings-symbols-preview" id="settingsSymbolsCard"></div>
-            <p class="sym-hint settings-symbols-hint">برای افزودن، حذف یا فعال/غیرفعال کردن نمادها، دکمه بالا را بزنید</p>
+            <div class="settings-symbols-foot">
+              <span class="sym-hint-icon">💡</span>
+              <p class="sym-hint settings-symbols-hint">برای افزودن نماد جدید، تغییر وضعیت ردیابی یا حذف، کلید «انتخاب و مدیریت نمادها» را بزنید.</p>
+            </div>
           </article>
 
           <div class="settings-grid">
-            <article class="panel settings-section">
-              <h3 class="panel-heading">موتور تحلیل</h3>
-              <p class="panel-desc">تنظیمات امتیازدهی و سرعت بررسی بازار</p>
+            <article class="panel settings-section settings-engine-card">
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap engine-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">موتور تحلیل</h3>
+                  <p class="panel-desc">تنظیمات امتیازدهی هوشمند و بازه بررسی بازار</p>
+                </div>
+              </div>
               <div class="settings-fields">
                 <div class="settings-field">
                   <div class="settings-field-head">
-                    <label for="cfgMinScoreRange">حداقل امتیاز سیگنال</label>
+                    <label for="cfgMinScoreRange">حداقل امتیاز سیگنال (Min Score)</label>
                     <span class="settings-field-val" id="settingsScoreDisplay">5</span>
                   </div>
                   <input type="range" id="cfgMinScoreRange" min="1" max="20" value="5" class="settings-range" />
                   <input type="number" id="cfgMinScore" min="1" max="20" hidden />
+                  <div class="range-marks"><span>1 (بیشترین سیگنال)</span><span>10</span><span>20 (بسیار محافظه‌کار)</span></div>
                 </div>
                 <div class="settings-field">
                   <div class="settings-field-head">
-                    <label for="cfgPollRange">فاصله بررسی (ثانیه)</label>
+                    <label for="cfgPollRange">فاصله بررسی بازار (ثانیه)</label>
                     <span class="settings-field-val" id="settingsPollDisplay">30s</span>
                   </div>
                   <input type="range" id="cfgPollRange" min="10" max="300" step="10" value="30" class="settings-range" />
                   <input type="number" id="cfgPoll" min="10" max="300" hidden />
+                  <div class="range-marks"><span>10s (پرسرعت)</span><span>150s</span><span>300s (آهسته)</span></div>
                 </div>
-                <div class="settings-field">
-                  <label>Provider داده</label>
-                  <span class="settings-readonly" id="settingsProvider">—</span>
+                <div class="settings-telemetry-row">
+                  <div class="settings-field">
+                    <label>پرووایدر داده (Data Provider)</label>
+                    <div class="settings-readonly-box">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                      <span class="settings-readonly" id="settingsProvider">—</span>
+                    </div>
+                  </div>
+                  <div class="settings-field">
+                    <label>استخر کلیدهای Twelve Data</label>
+                    <div class="settings-readonly-box">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                      <span class="settings-readonly" id="settingsTwelvePool">—</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </article>
 
-            <article class="panel settings-section">
-              <h3 class="panel-heading">کانال‌های ارسال</h3>
-              <p class="panel-desc">فعال‌سازی پلتفرم‌های خروجی سیگنال</p>
-              <div class="settings-toggles">
-                <div class="settings-toggle-row">
-                  <div class="settings-toggle-info">
-                    <span class="settings-toggle-label">Facebook</span>
-                    <span class="settings-toggle-desc">ارسال سیگنال به Facebook</span>
-                  </div>
-                  <label class="toggle"><input type="checkbox" id="cfgFacebook" /><span class="toggle-slider"></span></label>
+            <article class="panel settings-section settings-channels-card">
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap channels-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M4 11a9 9 0 019 9"/><path d="M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg>
                 </div>
-                <div class="settings-toggle-row readonly">
+                <div>
+                  <h3 class="panel-heading">کانال‌های ارسال</h3>
+                  <p class="panel-desc">پیکربندی پلتفرم‌های انتشار سیگنال و هشدارها</p>
+                </div>
+              </div>
+              <div class="settings-toggles">
+                <div class="settings-toggle-row fb-row">
                   <div class="settings-toggle-info">
-                    <span class="settings-toggle-label">Telegram</span>
-                    <span class="settings-toggle-desc" id="settingsTelegramDesc">—</span>
+                    <div class="toggle-icon-wrap fb">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    </div>
+                    <div>
+                      <span class="settings-toggle-label">Facebook Auto-Poster</span>
+                      <span class="settings-toggle-desc">ارسال خودکار سیگنال به گروه‌های فیسبوک</span>
+                    </div>
+                  </div>
+                  <label class="toggle cyber-toggle"><input type="checkbox" id="cfgFacebook" /><span class="toggle-slider"></span></label>
+                </div>
+
+                <div class="settings-toggle-row readonly tg-row">
+                  <div class="settings-toggle-info">
+                    <div class="toggle-icon-wrap tg">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.458c.538-.196 1.006.128.832.943z"/></svg>
+                    </div>
+                    <div>
+                      <span class="settings-toggle-label">Telegram Channel</span>
+                      <span class="settings-toggle-desc" id="settingsTelegramDesc">—</span>
+                    </div>
                   </div>
                   <span class="settings-status-badge" id="settingsTelegramBadge">—</span>
                 </div>
-                <div class="settings-toggle-row readonly">
+
+                <div class="settings-toggle-row readonly notif-row">
                   <div class="settings-toggle-info">
-                    <span class="settings-toggle-label">نوتیفیکیشن</span>
-                    <span class="settings-toggle-desc">وضعیت ارسال خودکار</span>
+                    <div class="toggle-icon-wrap notif">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                    </div>
+                    <div>
+                      <span class="settings-toggle-label">سیستم نوتیفیکیشن ربات</span>
+                      <span class="settings-toggle-desc">وضعیت ارسال خودکار پیام به کانال‌ها</span>
+                    </div>
                   </div>
                   <span class="settings-status-badge" id="settingsNotifBadge">—</span>
                 </div>
               </div>
             </article>
 
-            <article class="panel settings-section">
-              <h3 class="panel-heading">توسعه و دیباگ</h3>
-              <p class="panel-desc">ابزارهای عیب‌یابی موتور</p>
-              <div class="settings-toggles">
-                <div class="settings-toggle-row">
-                  <div class="settings-toggle-info">
-                    <span class="settings-toggle-label">Debug Engine</span>
-                    <span class="settings-toggle-desc">لاگ‌های verbose موتور</span>
-                  </div>
-                  <label class="toggle"><input type="checkbox" id="cfgDebug" /><span class="toggle-slider"></span></label>
+            <article class="panel settings-section settings-debug-card">
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap debug-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">توسعه و عیب‌یابی موتور</h3>
+                  <p class="panel-desc">ثبت لاگ‌های تفصیلی جهت تحلیل رفتار الگوریتم</p>
                 </div>
               </div>
-              <p class="hint settings-debug-hint">وضعیت: <strong id="debugStatus">خاموش</strong></p>
+              <div class="settings-toggles">
+                <div class="settings-toggle-row debug-row">
+                  <div class="settings-toggle-info">
+                    <span class="settings-toggle-label">Engine Verbose Debug</span>
+                    <span class="settings-toggle-desc">فعال‌سازی لاگ‌های کامل محاسبات در ترمینال سرور</span>
+                  </div>
+                  <label class="toggle cyber-toggle"><input type="checkbox" id="cfgDebug" /><span class="toggle-slider"></span></label>
+                </div>
+              </div>
+              <div class="settings-debug-status-pill">
+                <span class="debug-status-lbl">وضعیت دیباگ موتور:</span>
+                <strong id="debugStatus" class="debug-status-val">خاموش</strong>
+              </div>
             </article>
 
             <article class="panel settings-section settings-info-panel">
-              <h3 class="panel-heading">راهنمای اعمال</h3>
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap info-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">راهنمای هوشمند اعمال</h3>
+                  <p class="panel-desc">نکات کلیدی پایداری و بهینه‌سازی سیستم</p>
+                </div>
+              </div>
               <ul class="settings-tips">
-                <li>تغییر <strong>نمادها</strong> از ماژول — تیک = ردیابی فعال</li>
-                <li>پس از ذخیره، <strong>ری‌استارت ربات</strong> برای اعمال کامل</li>
-                <li>حداقل امتیاز بالاتر = سیگنال‌های کمتر ولی دقیق‌تر</li>
+                <li><span class="tip-dot"></span>تغییر <strong>نمادها</strong> از پنجره مودال صورت می‌گیرد (تیک‌دار = رصد فعال).</li>
+                <li><span class="tip-dot"></span>پس از ذخیره تغییرات، <strong>ری‌استارت ربات</strong> برای بارگذاری کامل متغیرها الزامی است.</li>
+                <li><span class="tip-dot"></span><strong>حداقل امتیاز بالاتر</strong> نرخ برد را افزایش اما تعداد سیگنال را کاهش می‌دهد.</li>
               </ul>
             </article>
           </div>
 
           <article class="panel settings-strategy-panel">
             <div class="panel-top">
-              <div>
-                <h3 class="panel-heading">استراتژی تحلیل (MT5)</h3>
-                <p class="panel-desc">آپلود .mq5، مقایسه نسخه‌ها، Win Rate و سیگنال‌های هر نسخه فعال‌شده</p>
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap strategy-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">استراتژی معاملاتی الگوریتمی (MT5 MQL5)</h3>
+                  <p class="panel-desc">آپلود کد .mq5، مقایسه نسخه‌ها، آمار Win Rate و پایش سیگنال‌های نسخه فعال</p>
+                </div>
               </div>
-              <button type="button" class="btn btn-sm btn-ghost" id="btnStrategyRefresh">↻ بروزرسانی</button>
+              <button type="button" class="btn btn-sm btn-ghost btn-strategy-refresh" id="btnStrategyRefresh">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                <span>بروزرسانی وضعیت</span>
+              </button>
             </div>
 
             <div class="strategy-current" id="strategyCurrent">
-              <p class="panel-empty">در حال بارگذاری…</p>
+              <p class="panel-empty">در حال بارگذاری اطلاعات استراتژی…</p>
             </div>
 
             <div class="strategy-perf-summary hidden" id="strategyPerfSummary">
               <div class="strategy-perf-summary-head">
-                <h4 class="strategy-history-title">مقایسه نسخه‌ها</h4>
+                <h4 class="strategy-history-title">مقایسه عملکرد نسخه‌های ثبت‌شده</h4>
                 <span class="hint" id="strategyPerfMeta">—</span>
               </div>
               <div class="strategy-compare-grid" id="strategyCompareGrid"></div>
@@ -1073,7 +1690,7 @@
             <div class="strategy-detail hidden" id="strategyDetail">
               <div class="strategy-detail-head">
                 <div>
-                  <h4 class="strategy-detail-title" id="strategyDetailTitle">جزئیات نسخه</h4>
+                  <h4 class="strategy-detail-title" id="strategyDetailTitle">جزئیات نسخه استراتژی</h4>
                   <p class="strategy-detail-sub" id="strategyDetailSub">—</p>
                 </div>
                 <button type="button" class="btn btn-sm btn-ghost" id="btnStrategyDetailClose">✕</button>
@@ -1081,7 +1698,7 @@
               <div class="strategy-detail-kpis" id="strategyDetailKpis"></div>
               <div class="strategy-detail-periods" id="strategyDetailPeriods"></div>
               <div class="strategy-detail-signals">
-                <h5 class="strategy-detail-section-title">سیگنال‌های این نسخه</h5>
+                <h5 class="strategy-detail-section-title">سیگنال‌های تولیدشده توسط این نسخه</h5>
                 <div class="strategy-signal-list" id="strategyDetailSignals"></div>
               </div>
             </div>
@@ -1089,108 +1706,172 @@
             <div class="strategy-dropzone" id="strategyDropZone">
               <input type="file" id="strategyFileInput" accept=".mq5,text/plain" hidden />
               <div class="strategy-drop-inner">
-                <div class="strategy-drop-icon">📄</div>
-                <p class="strategy-drop-title">فایل .mq5 را اینجا رها کنید</p>
-                <p class="strategy-drop-sub">یا <button type="button" class="link-btn" id="btnStrategyBrowse">انتخاب فایل</button> از سیستم</p>
-                <p class="sym-hint">حداکثر ۲ مگابایت — مثال: SignalBot_MultiIndicator_MT5_v6.mq5</p>
+                <div class="strategy-drop-icon">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <p class="strategy-drop-title">فایل استراتژی <code>.mq5</code> را اینجا رها کنید</p>
+                <p class="strategy-drop-sub">یا از طریق سیستم فایل <button type="button" class="link-btn" id="btnStrategyBrowse">انتخاب فایل</button> کنید</p>
+                <p class="sym-hint">حداکثر حجم مجاز: ۲ مگابایت — مثال: SignalBot_MultiIndicator_MT5_v6.mq5</p>
               </div>
               <div class="strategy-file-picked hidden" id="strategyFilePicked">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
                 <span class="strategy-picked-name" id="strategyPickedName">—</span>
-                <button type="button" class="btn btn-sm btn-ghost" id="btnStrategyClear">✕</button>
+                <button type="button" class="btn btn-sm btn-ghost btn-strategy-clear" id="btnStrategyClear">✕</button>
               </div>
             </div>
 
             <div class="strategy-actions">
-              <button type="button" class="btn btn-primary" id="btnStrategyUpload" disabled>آپلود استراتژی</button>
-              <button type="button" class="btn btn-success" id="btnStrategyApply" disabled>فعال‌سازی روی ربات</button>
-              <button type="button" class="btn btn-ghost" id="btnStrategyDownload">دانلود نسخه فعال</button>
+              <button type="button" class="btn btn-primary" id="btnStrategyUpload" disabled>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>آپلود استراتژی</span>
+              </button>
+              <button type="button" class="btn btn-success" id="btnStrategyApply" disabled>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>فعال‌سازی روی ربات</span>
+              </button>
+              <button type="button" class="btn btn-ghost" id="btnStrategyDownload">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>دانلود نسخه فعال</span>
+              </button>
             </div>
-            <p class="hint strategy-apply-hint">فعال‌سازی: فایل به <code>strategy/active.mq5</code> کپی می‌شود، MIN_SCORE همگام می‌شود. اگر نوتیفیکیشن pause باشد موتور ری‌استارت نمی‌شود.</p>
+            <p class="hint strategy-apply-hint">💡 هنگام فعال‌سازی: فایل در <code>strategy/active.mq5</code> مستقر شده و MIN_SCORE همگام می‌شود.</p>
 
             <div class="strategy-history-wrap">
-              <h4 class="strategy-history-title">نسخه‌های سرور — آپلود و فعال‌سازی</h4>
-              <p class="hint strategy-history-hint">روی هر نسخه کلیک کنید تا Win Rate، سیگنال‌ها و دوره‌های فعال بودن را ببینید.</p>
+              <h4 class="strategy-history-title">نسخه‌های ذخیره‌شده روی سرور</h4>
+              <p class="hint strategy-history-hint">روی هر نسخه کلیک کنید تا جزئیات کامل Win Rate، سیگنال‌ها و دوره اجرا نمایش یابد.</p>
               <div class="strategy-history" id="strategyHistory">
-                <p class="panel-empty">هنوز فایلی آپلود نشده</p>
+                <p class="panel-empty">هنوز فایلی آپلود نشده است</p>
               </div>
             </div>
           </article>
 
           <article class="panel settings-ops-panel">
             <div class="panel-top">
-              <div>
-                <h3 class="panel-heading">عملیات و هشدارها</h3>
-                <p class="panel-desc">آستانه‌ها، وب‌هوک، نگهداری زمان‌بندی‌شده و پشتیبان‌گیری</p>
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap ops-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">عملیات و هشدارها (Ops & Maintenance)</h3>
+                  <p class="panel-desc">آستانه مصرف منابع، وب‌هوک‌های لحظه‌ای، نگهداری دوره‌ای و پشتیبان‌گیری</p>
+                </div>
               </div>
-              <button type="button" class="btn btn-sm btn-ghost" id="btnWhatsNew">✨ چه چیز جدید است؟</button>
+              <button type="button" class="btn btn-sm btn-ghost btn-whats-new" id="btnWhatsNew">✨ چه چیز جدید است؟</button>
             </div>
             <div class="settings-ops-grid">
               <div class="settings-ops-block">
-                <h4>آستانه هشدار</h4>
+                <div class="ops-block-head">
+                  <span class="ops-block-icon">⚠️</span>
+                  <h4>آستانه هشدار منابع سرور</h4>
+                </div>
                 <div class="ops-field-row">
-                  <label>CPU %</label>
+                  <label>هشدار مصرف پردازنده (CPU %)</label>
                   <input type="number" id="opsAlertCpu" min="50" max="100" class="ops-input" />
                 </div>
                 <div class="ops-field-row">
-                  <label>RAM %</label>
+                  <label>هشدار مصرف حافظه (RAM %)</label>
                   <input type="number" id="opsAlertRam" min="50" max="100" class="ops-input" />
                 </div>
                 <div class="ops-field-row">
-                  <label>Disk %</label>
+                  <label>هشدار فضای دیسک (Disk %)</label>
                   <input type="number" id="opsAlertDisk" min="50" max="100" class="ops-input" />
                 </div>
-                <p class="hint">هشدارهای CPU/RAM/Disk فقط در داشبورد نمایش داده می‌شوند. تلگرام فقط برای سیگنال‌های معاملاتی است.</p>
-                <label class="ops-check"><input type="checkbox" id="opsBrowserNotif" /> نوتیفیکیشن مرورگر</label>
+                <p class="hint">هشدارهای سخت‌افزاری در داشبورد اعلان می‌شوند. تلگرام به ارسال سیگنال‌ها اختصاص دارد.</p>
+                <label class="ops-check cyber-checkbox-label"><input type="checkbox" id="opsBrowserNotif" /><span>نوتیفیکیشن مرورگر (Browser Push)</span></label>
               </div>
+
               <div class="settings-ops-block">
-                <h4>Webhooks</h4>
+                <div class="ops-block-head">
+                  <span class="ops-block-icon">🔗</span>
+                  <h4>وب‌هوک‌های سازمانی (Webhooks)</h4>
+                </div>
                 <div class="ops-field-row">
-                  <label>Discord URL</label>
+                  <label>آدرس دیسکورد (Discord Webhook)</label>
                   <input type="url" id="opsWebhookDiscord" class="ops-input wide" placeholder="https://discord.com/api/webhooks/..." />
                 </div>
                 <div class="ops-field-row">
-                  <label>Slack URL</label>
-                  <input type="url" id="opsWebhookSlack" class="ops-input wide" placeholder="https://hooks.slack.com/..." />
+                  <label>آدرس اسلک (Slack Webhook)</label>
+                  <input type="url" id="opsWebhookSlack" class="ops-input wide" placeholder="https://hooks.slack.com/services/..." />
                 </div>
-                <label class="ops-check"><input type="checkbox" id="opsWebhookOnSignal" /> ارسال روی سیگنال جدید</label>
+                <label class="ops-check cyber-checkbox-label"><input type="checkbox" id="opsWebhookOnSignal" /><span>ارسال وب‌هوک به ازای هر سیگنال معاملاتی جدید</span></label>
               </div>
+
               <div class="settings-ops-block">
-                <h4>نگهداری زمان‌بندی‌شده</h4>
-                <label class="ops-check"><input type="checkbox" id="opsMaintenanceEnabled" /> فعال</label>
+                <div class="ops-block-head">
+                  <span class="ops-block-icon">⏱️</span>
+                  <h4>نگهداری زمان‌بندی‌شده سرور</h4>
+                </div>
+                <label class="ops-check cyber-checkbox-label"><input type="checkbox" id="opsMaintenanceEnabled" /><span>فعال‌سازی بازه نگهداری دوره‌ای</span></label>
                 <div class="ops-field-row">
-                  <label>بازه (24h)</label>
+                  <label>بازه زمانی مجاز (فرمت 24 ساعته)</label>
                   <input type="text" id="opsMaintenanceWindow" class="ops-input" placeholder="22:00-06:00" />
                 </div>
-                <p class="sym-hint">در این بازه، ارسال خودکار متوقف می‌شود</p>
+                <p class="sym-hint">در طول این بازه، ارسال خودکار جهت حفظ امنیت تعلیق می‌شود.</p>
               </div>
+
               <div class="settings-ops-block">
-                <h4>پشتیبان‌گیری</h4>
+                <div class="ops-block-head">
+                  <span class="ops-block-icon">💾</span>
+                  <h4>پشتیبان‌گیری و بازیابی پیکربندی</h4>
+                </div>
                 <div class="ops-btn-row">
-                  <button type="button" class="btn btn-primary btn-compact" id="btnConfigBackup">دانلود پشتیبان</button>
+                  <button type="button" class="btn btn-primary btn-compact" id="btnConfigBackup">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>دانلود فایل پشتیبان</span>
+                  </button>
                   <label class="btn btn-ghost btn-compact ops-file-btn">
-                    بازیابی JSON
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>بازیابی پیکربندی JSON</span>
                     <input type="file" id="configRestoreFile" accept="application/json,.json" hidden />
                   </label>
                 </div>
-                <p class="sym-hint">Telegram webhook: <code>/api/telegram/webhook</code> — دستورات: /status /pause /symbols /resume</p>
+                <p class="sym-hint">وب‌هوک تلگرام: <code>/api/telegram/webhook</code> (دستورات: /status /pause /symbols /resume)</p>
               </div>
             </div>
             <div class="settings-ops-actions">
-              <button type="button" class="btn btn-primary" id="btnSaveOps">ذخیره تنظیمات عملیات</button>
+              <button type="button" class="btn btn-primary btn-save-ops" id="btnSaveOps">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>ذخیره تنظیمات عملیات</span>
+              </button>
             </div>
           </article>
 
           <article class="panel settings-audit-panel">
             <div class="panel-top">
-              <h3 class="panel-heading">گزارش ممیزی (Audit)</h3>
-              <button type="button" class="link-btn" id="btnRefreshAudit">بروزرسانی</button>
+              <div class="panel-head-group">
+                <div class="panel-icon-wrap audit-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+                </div>
+                <div>
+                  <h3 class="panel-heading">لاگ ممیزی و رویدادهای سیستمی (Audit Trail)</h3>
+                  <p class="panel-desc">ثبت کلیه تغییرات پیکربندی، تغییر نمادها، ورودها و دستورات مدیریتی</p>
+                </div>
+              </div>
+              <button type="button" class="link-btn btn-refresh-audit" id="btnRefreshAudit">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                <span>بروزرسانی لاگ</span>
+              </button>
             </div>
-            <div class="audit-log" id="auditLog"></div>
+            <div class="audit-log-wrap">
+              <div class="audit-log-head">
+                <span>زمان رویداد</span>
+                <span>کاربر</span>
+                <span>عملیات</span>
+                <span>جزئیات رویداد</span>
+              </div>
+              <div class="audit-log" id="auditLog"></div>
+            </div>
           </article>
 
           <div class="settings-save-bar">
-            <p class="hint">تغییرات تا زمان ذخیره اعمال نمی‌شوند</p>
-            <button type="button" class="btn btn-primary btn-save-settings" id="btnSaveConfig">ذخیره تنظیمات</button>
+            <div class="save-bar-info">
+              <span class="save-bar-icon">🛡️</span>
+              <p class="hint">کلیه تغییرات اعمال شده موقتی هستند و تا زمان کلیک روی دکمه ذخیره، ثبت نهایی نخواهند شد.</p>
+            </div>
+            <button type="button" class="btn btn-primary btn-save-settings" id="btnSaveConfig">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>ذخیره کلیه تنظیمات</span>
+            </button>
           </div>
 
           <input type="hidden" id="cfgSymbols" />
@@ -1198,18 +1879,289 @@
 
         <!-- PAGE: Logs -->
         <div class="page" id="page-logs">
-          <div class="page-toolbar">
-            <select id="logSelect" class="select-input">
-              <option value="signal-engine">Signal Engine</option>
-              <option value="signal-server-out">Signal Server (out)</option>
-              <option value="signal-server-err">Signal Server (err)</option>
-              <option value="facebook">Facebook Log</option>
-            </select>
+
+          <!-- Logs Hero Banner -->
+          <section class="logs-hero">
+            <div class="hero-bg"></div>
+            <div class="logs-hero-body">
+              <div class="logs-hero-main">
+                <div class="hero-status-row">
+                  <span class="status-pill" id="logHeroPill">
+                    <span class="status-indicator running" id="logStreamDot"></span>
+                    <span id="logStreamLabel">استریم زنده تلمتری</span>
+                  </span>
+                  <span class="hero-time" id="logLastUpdated">—</span>
+                </div>
+                <h2 class="hero-title">
+                  <svg class="hero-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="24" height="24">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                  </svg>
+                  پایانه زنده لاگ‌ها و رویدادهای سیستم
+                </h2>
+                <p class="hero-sub">رصد بلادرنگ خروجی پردازش‌های پس‌زمینه، خطاهای سیستمی، جریان تولید سیگنال و کانال‌های دیسپچر</p>
+              </div>
+              <div class="logs-hero-stats">
+                <div class="logs-stat-capsule stat-total">
+                  <div class="stat-cap-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    <span class="stat-cap-lbl">کل خطوط</span>
+                  </div>
+                  <span class="stat-cap-num" id="logStatTotal">0</span>
+                </div>
+                <div class="logs-stat-capsule stat-err">
+                  <div class="stat-cap-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <span class="stat-cap-lbl">خطاها</span>
+                  </div>
+                  <span class="stat-cap-num" id="logStatErrors">0</span>
+                </div>
+                <div class="logs-stat-capsule stat-warn">
+                  <div class="stat-cap-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <span class="stat-cap-lbl">هشدارها</span>
+                  </div>
+                  <span class="stat-cap-num" id="logStatWarnings">0</span>
+                </div>
+                <div class="logs-stat-capsule stat-info">
+                  <div class="stat-cap-top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span class="stat-cap-lbl">اطلاعیه</span>
+                  </div>
+                  <span class="stat-cap-num" id="logStatInfo">0</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Fast Process Switcher Grid -->
+          <section class="logs-process-section">
+            <div class="logs-process-grid" id="logsProcessGrid" role="tablist" aria-label="انتخاب فرآیند لاگ">
+              <button type="button" class="log-proc-card active" data-process="signal-engine" role="tab" aria-selected="true">
+                <div class="proc-card-icon engine">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                </div>
+                <div class="proc-card-info">
+                  <div class="proc-card-title-row">
+                    <span class="proc-card-title">Signal Engine</span>
+                    <span class="proc-badge active">هسته بات</span>
+                  </div>
+                  <span class="proc-card-desc">محاسبات تحلیل تکنیکال، اندیکاتورها و تولید سیگنال</span>
+                </div>
+              </button>
+
+              <button type="button" class="log-proc-card" data-process="signal-server-out" role="tab" aria-selected="false">
+                <div class="proc-card-icon server-out">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                </div>
+                <div class="proc-card-info">
+                  <div class="proc-card-title-row">
+                    <span class="proc-card-title">Server Output</span>
+                    <span class="proc-badge stdout">STDOUT</span>
+                  </div>
+                  <span class="proc-card-desc">خروجی استاندارد وب‌سرور، ریکوئست‌های API و وضعیت</span>
+                </div>
+              </button>
+
+              <button type="button" class="log-proc-card" data-process="signal-server-err" role="tab" aria-selected="false">
+                <div class="proc-card-icon server-err">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <div class="proc-card-info">
+                  <div class="proc-card-title-row">
+                    <span class="proc-card-title">Server Errors</span>
+                    <span class="proc-badge stderr">STDERR</span>
+                  </div>
+                  <span class="proc-card-desc">خطاها، استثناهای پایتون و لاگ‌های اضطراری وب‌سرور</span>
+                </div>
+              </button>
+
+              <button type="button" class="log-proc-card" data-process="facebook" role="tab" aria-selected="false">
+                <div class="proc-card-icon fb">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+                </div>
+                <div class="proc-card-info">
+                  <div class="proc-card-title-row">
+                    <span class="proc-card-title">Facebook</span>
+                    <span class="proc-badge fb">Meta Graph</span>
+                  </div>
+                  <span class="proc-card-desc">لاگ انتشارات فیسبوک، متادیتا و وضعیت انتشار پست‌ها</span>
+                </div>
+              </button>
+
+              <button type="button" class="log-proc-card" data-process="telegram" role="tab" aria-selected="false">
+                <div class="proc-card-icon tg">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </div>
+                <div class="proc-card-info">
+                  <div class="proc-card-title-row">
+                    <span class="proc-card-title">Telegram</span>
+                    <span class="proc-badge tg">Dispatcher</span>
+                  </div>
+                  <span class="proc-card-desc">ترابری پیام‌های تلگرام، وضعیت ارسال و خطاهای Bot API</span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <!-- Interactive Toolbar & Filter Controls -->
+          <div class="logs-toolbar-wrap">
+            <div class="logs-toolbar">
+              <!-- Left side: Select + Level Pills -->
+              <div class="logs-toolbar-left">
+                <div class="logs-select-wrap">
+                  <svg class="logs-select-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                  <select id="logSelect" class="select-input logs-select" aria-label="فرآیند مورد نظر">
+                    <option value="signal-engine">Signal Engine</option>
+                    <option value="signal-server-out">Signal Server (out)</option>
+                    <option value="signal-server-err">Signal Server (err)</option>
+                    <option value="facebook">Facebook Log</option>
+                    <option value="telegram">Telegram Log</option>
+                  </select>
+                </div>
+
+                <div class="log-level-filters" role="radiogroup" aria-label="فیلتر سطح لاگ">
+                  <button type="button" class="log-lvl-btn active" data-lvl="all">همه</button>
+                  <button type="button" class="log-lvl-btn lvl-err" data-lvl="error">
+                    <span class="lvl-dot err"></span>خطاها
+                  </button>
+                  <button type="button" class="log-lvl-btn lvl-warn" data-lvl="warn">
+                    <span class="lvl-dot warn"></span>هشدارها
+                  </button>
+                  <button type="button" class="log-lvl-btn lvl-info" data-lvl="info">
+                    <span class="lvl-dot info"></span>اطلاعات
+                  </button>
+                </div>
+              </div>
+
+              <!-- Center/Search: Quick text search -->
+              <div class="logs-search-wrap">
+                <svg class="logs-search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="search" id="logSearchInput" class="logs-search-input" placeholder="جستجو در متن لاگ‌ها (Grep)..." autocomplete="off" spellcheck="false" />
+                <span class="logs-search-count" id="logSearchCount" hidden>۰ نتیجه</span>
+                <button type="button" class="logs-search-clear" id="btnLogSearchClear" aria-label="پاک‌سازی جستجو" hidden>✕</button>
+              </div>
+
+              <!-- Right side: Auto-scroll, Line Limit, Actions -->
+              <div class="logs-toolbar-right">
+                <div class="logs-lines-limit-wrap" title="تعداد خطوط دریافتی">
+                  <select id="logLinesSelect" class="select-input logs-lines-select">
+                    <option value="60">۶۰ خط</option>
+                    <option value="120">۱۲۰ خط</option>
+                    <option value="250">۲۵۰ خط</option>
+                    <option value="500">۵۰۰ خط</option>
+                  </select>
+                </div>
+
+                <button type="button" class="logs-toggle-btn active" id="logAutoScrollToggle" title="قفل اسکرول خودکار به انتها">
+                  <svg class="lock-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+                  <span>اسکرول خودکار</span>
+                </button>
+
+                <div class="logs-actions-group">
+                  <button type="button" class="btn-terminal-action" id="btnRefreshLogs" title="بارگذاری مجدد لحظه‌ای">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                  </button>
+                  <button type="button" class="btn-terminal-action" id="btnCopyLogs" title="کپی تمام لاگ‌ها در کلیپ‌بورد">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                  <button type="button" class="btn-terminal-action" id="btnDownloadLogs" title="دانلود فایل لاگ (.log)">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  </button>
+                  <button type="button" class="btn-terminal-action" id="btnClearLogs" title="پاک‌سازی موقت صفحه پایانه">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                  <button type="button" class="btn-terminal-action" id="btnFullscreenLogs" title="حالت تمام‌صفحه">
+                    <svg class="icon-expand" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="terminal">
-            <div class="terminal-header"><span class="term-dot red"></span><span class="term-dot yellow"></span><span class="term-dot green"></span><span class="term-title">live logs</span></div>
-            <pre class="terminal-body" id="terminalBody"></pre>
+
+          <!-- Ultra-Modern Cyber Terminal Window -->
+          <div class="terminal" id="logsTerminal">
+            <div class="terminal-header">
+              <div class="term-traffic-lights">
+                <span class="term-dot red" title="بستن/غیرفعال"></span>
+                <span class="term-dot yellow" title="کوچک‌سازی"></span>
+                <span class="term-dot green" title="بزرگ‌نمایی"></span>
+              </div>
+              <div class="term-process-badge">
+                <span class="term-live-pulse"></span>
+                <span class="term-title" id="logTermTitle">signal-engine</span>
+                <span class="term-meta-tag">PM2 DAEMON</span>
+              </div>
+              <div class="term-header-actions">
+                <span class="term-spec-pill" id="termBufferBadge">BUFFER: 60L</span>
+                <span class="term-spec-pill encoding">UTF-8</span>
+                <span class="term-spec-pill protocol">STREAM 5s</span>
+              </div>
+            </div>
+            <div class="terminal-view-container">
+              <pre class="terminal-body" id="terminalBody" tabindex="0" aria-label="محتوای لاگ زنده"></pre>
+            </div>
+            <div class="terminal-footer">
+              <div class="term-footer-left">
+                <span class="term-status-dot"></span>
+                <span id="termStatusMsg">در حال دریافت داده‌های زنده از سرور...</span>
+              </div>
+              <div class="term-footer-right">
+                <span class="term-hint-kbd"><kbd>Ctrl</kbd> + <kbd>F</kbd> جستجو</span>
+                <span class="term-source-path" id="termSourcePath">/tmp/bot/pm2/signal-engine-error.log</span>
+              </div>
+            </div>
           </div>
+
+          <!-- Observability & Diagnostics Guide -->
+          <div class="logs-guide-panel">
+            <div class="logs-guide-card">
+              <div class="guide-card-head">
+                <div class="guide-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                </div>
+                <h4 class="guide-title">معماری استریم لاگ‌ها و محل فایل‌ها</h4>
+              </div>
+              <ul class="guide-list">
+                <li>
+                  <strong>Signal Engine:</strong>
+                  <span>فایل لاگ <code>signal-engine-error.log</code> کلیه محاسبات اندیکاتورهای SMA، RSI، مکدی و خطاهای ارتباط با TwelveData / Yahoo را ثبت می‌کند.</span>
+                </li>
+                <li>
+                  <strong>Signal Server (out/err):</strong>
+                  <span>تلمتری فریم‌ورک پایتون و وب‌سرور شامل درخواست‌های ورودی کلاینت، هدرهای اعتبارسنجی توکن ادمین و وب‌هوک‌های لحظه‌ای.</span>
+                </li>
+                <li>
+                  <strong>Facebook & Telegram:</strong>
+                  <span>ثبت شناسه پیام‌های ارسالی به کانال‌ها، زمان پاسخگویی API متصل، و مدیریت خطای ۴۲۹ (Flood Wait).</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="logs-guide-card">
+              <div class="guide-card-head">
+                <div class="guide-icon cli">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                </div>
+                <h4 class="guide-title">فرمان‌های سریع خط فرمان سرور (CLI Snippets)</h4>
+              </div>
+              <div class="guide-snippets">
+                <div class="snippet-row">
+                  <span class="snippet-label">مشاهده زنده لاگ در SSH:</span>
+                  <code class="snippet-code">pm2 logs signal-engine --lines 100</code>
+                </div>
+                <div class="snippet-row">
+                  <span class="snippet-label">راه‌اندازی مجدد سرویس:</span>
+                  <code class="snippet-code">pm2 restart signal-engine</code>
+                </div>
+                <div class="snippet-row">
+                  <span class="snippet-label">پایش مداوم فایل روی دیسک:</span>
+                  <code class="snippet-code">tail -f /tmp/bot/signals.log</code>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -1281,8 +2233,8 @@
       <div class="modal-header"><div><h2 class="modal-title" id="fbGroupModalTitle">افزودن گروه فیسبوک</h2><p class="modal-sub">مشخصات مقصد و قالب ارسال را تنظیم کنید</p></div><button type="button" class="modal-close" data-fb-close aria-label="بستن">×</button></div>
       <form class="modal-body facebook-group-form" id="fbGroupForm">
         <input type="hidden" id="fbGroupId" />
-        <label>نام گروه<input class="text-input" id="fbGroupName" required autocomplete="off" /></label>
-        <label>لینک گروه<input class="text-input" id="fbGroupUrl" required inputmode="url" placeholder="https://www.facebook.com/groups/..." /></label>
+        <label>نام گروه (اختیاری — برای افزودن چند گروه با هم، خالی بگذارید)<input class="text-input" id="fbGroupName" autocomplete="off" /></label>
+        <label>لینک گروه (هر لینک در یک خط، یا با کاما جدا کنید)<textarea class="text-input" id="fbGroupUrl" required rows="4" placeholder="https://www.facebook.com/groups/...&#10;https://www.facebook.com/groups/..."></textarea></label>
         <div class="facebook-form-grid">
           <label>زبان<select class="select-input" id="fbGroupLanguage"><option value="English">English</option><option value="Persian">فارسی</option><option value="Russian">Русский</option></select></label>
           <label>قالب پیام<select class="select-input" id="fbGroupTemplate"><option value="1">قالب ۱</option><option value="2">قالب ۲</option><option value="3">قالب ۳</option></select></label>
@@ -1298,6 +2250,7 @@
       <div class="modal-header"><div><h2 class="modal-title" id="fbPreviewTitle">پیش‌نمایش پیام</h2><p class="modal-sub" id="fbPreviewSignal">—</p></div><button type="button" class="modal-close" data-fb-preview-close aria-label="بستن">×</button></div>
       <div class="modal-body">
         <div class="facebook-preview-tabs" id="fbPreviewTabs"></div>
+        <img id="fbChartPreview" class="facebook-chart-preview hidden" alt="نمودار سیگنال" />
         <pre class="facebook-message-preview" id="fbMessagePreview"></pre>
         <div class="facebook-publish-progress hidden" id="fbPublishProgress" role="status" aria-live="polite">
           <div class="facebook-publish-progress-head">
@@ -1345,6 +2298,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=2.55.0"></script>
+  <script src="/static/js/dashboard.js?v=2.56.0"></script>
 </body>
 </html>

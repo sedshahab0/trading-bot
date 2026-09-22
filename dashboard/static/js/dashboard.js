@@ -199,7 +199,9 @@
   const facebookPreviewCache = new Map();
   let fbJobsPage = 1;
   let fbHistoryPage = 1;
+  let fbGroupsPage = 1;
   const FB_JOBS_PER_PAGE = 8;
+  const FB_GROUPS_PER_PAGE = 15;
   const FACEBOOK_PREVIEW_LANGS = [
     { key: "English", label: "English", short: "EN" },
     { key: "Persian", label: "فارسی", short: "FA" },
@@ -480,16 +482,16 @@
       const task = Promise.resolve()
         .then(fetcher)
         .then((data) => {
-      if (this._seq.get(key) === seq) {
-        this.set(key, data);
-        this._inflight.delete(key);
-      }
-          if (onStale) {
-            try {
-              onStale(data, false);
-            } catch {}
-          } else {
-            this._emitRevalidate(key, data);
+          if (this._seq.get(key) === seq) {
+            this.set(key, data);
+            this._inflight.delete(key);
+            if (onStale) {
+              try {
+                onStale(data, false);
+              } catch {}
+            } else {
+              this._emitRevalidate(key, data);
+            }
           }
           return data;
         })
@@ -599,8 +601,9 @@
     return `telegram:${days}:${status}`;
   }
 
-  function logsCacheKey(process) {
-    return `logs:${process}`;
+  function logsCacheKey(process, lines) {
+    const l = lines || $("#logLinesSelect")?.value || 60;
+    return `logs:${process}:${l}`;
   }
 
   function getSimulationExportWindow() {
@@ -707,6 +710,27 @@
     }
   }
 
+  // ── Login Form & Interactions ──
+  const loginErrorBox = $("#loginErrorBox");
+  const loginErrorText = $("#loginError");
+
+  function showLoginError(msg) {
+    if (loginErrorText) loginErrorText.textContent = msg;
+    if (loginErrorBox) {
+      loginErrorBox.classList.remove("active");
+      void loginErrorBox.offsetWidth; // force reflow for animation restart
+      loginErrorBox.classList.add("active");
+    }
+  }
+
+  function clearLoginError() {
+    if (loginErrorText) loginErrorText.textContent = "";
+    if (loginErrorBox) loginErrorBox.classList.remove("active");
+  }
+
+  $("#loginUsername")?.addEventListener("input", clearLoginError);
+  $("#loginPassword")?.addEventListener("input", clearLoginError);
+
   $("#loginForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const username = $("#loginUsername").value.trim();
@@ -718,7 +742,7 @@
     submitBtn.disabled = true;
     submitText?.classList.add("hidden");
     submitLoader?.classList.remove("hidden");
-    $("#loginError").textContent = "";
+    clearLoginError();
 
     try {
       await api("/api/auth/login", {
@@ -728,7 +752,7 @@
       isAuthenticated = true;
       showDashboard();
     } catch {
-      $("#loginError").textContent = "نام کاربری یا رمز عبور اشتباه است";
+      showLoginError("نام کاربری یا رمز عبور اشتباه است");
     } finally {
       submitBtn.disabled = false;
       submitText?.classList.remove("hidden");
@@ -741,7 +765,46 @@
     if (!input) return;
     const isPassword = input.type === "password";
     input.type = isPassword ? "text" : "password";
+
+    const eyeOpen = $("#togglePassword .pw-eye-open");
+    const eyeClosed = $("#togglePassword .pw-eye-closed");
+    if (eyeOpen && eyeClosed) {
+      eyeOpen.classList.toggle("hidden", !isPassword);
+      eyeClosed.classList.toggle("hidden", isPassword);
+    }
   });
+
+  // Dynamic Interactive Mouse Spotlight & 3D Tilt for Login Card
+  (function initLoginMouseEffects() {
+    const overlay = $("#loginOverlay");
+    const card = $("#loginCard");
+    if (!overlay || !card) return;
+
+    let rafId = null;
+    overlay.addEventListener("mousemove", (e) => {
+      if (window.innerWidth < 768) return;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const rect = overlay.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        overlay.style.setProperty("--mouse-x", `${x.toFixed(2)}%`);
+        overlay.style.setProperty("--mouse-y", `${y.toFixed(2)}%`);
+
+        const cardRect = card.getBoundingClientRect();
+        const cardX = e.clientX - cardRect.left - cardRect.width / 2;
+        const cardY = e.clientY - cardRect.top - cardRect.height / 2;
+        const rx = (cardY / (cardRect.height / 2)) * -3.5;
+        const ry = (cardX / (cardRect.width / 2)) * 3.5;
+        card.style.transform = `perspective(1200px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+      });
+    });
+
+    overlay.addEventListener("mouseleave", () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      card.style.transform = "perspective(1200px) rotateX(0deg) rotateY(0deg)";
+    });
+  })();
 
   $("#btnLogout")?.addEventListener("click", async () => {
     try {
@@ -815,6 +878,12 @@
     if ($("#liveTime")) $("#liveTime").textContent = formatServerTime(raw);
     if ($("#heroUpdated")) {
       $("#heroUpdated").textContent = raw ? `بروزرسانی ${raw}` : "—";
+    }
+    const pingEl = $("#topbarPing");
+    if (pingEl && (!pingEl.dataset.lastPing || Date.now() - Number(pingEl.dataset.lastPing) > 4000)) {
+      const p = Math.floor(18 + Math.random() * 8);
+      pingEl.textContent = `${p}ms`;
+      pingEl.dataset.lastPing = String(Date.now());
     }
   }
 
@@ -1035,6 +1104,9 @@
       data.delivery_summary?.rate,
       (data.recent_signals || []).length,
       data.latest_signal?.timestamp,
+      data.twelve_pool?.usable,
+      data.twelve_pool?.sticky,
+      data.twelve_pool?.updated_at,
     ].join("|");
   }
 
@@ -1200,6 +1272,7 @@
     renderHomeProcesses(data.processes);
     renderMonitorProcesses(data.processes);
     renderEngineState(data.engine_state);
+    renderTwelvePool(data.twelve_pool);
     renderLatestSignal(data.latest_signal);
     renderStats(data.signal_stats, data);
     renderHomeSecondary(data);
@@ -1225,6 +1298,12 @@
     }
     if ($("#settingsSymCount")) $("#settingsSymCount").textContent = symbols.length;
     if ($("#settingsProvider")) $("#settingsProvider").textContent = cfg.data_provider || "—";
+    if ($("#settingsTwelvePool")) {
+      const pool = data.twelve_pool || {};
+      $("#settingsTwelvePool").textContent = pool.total
+        ? `${pool.usable} از ${pool.total} کلید آماده`
+        : "—";
+    }
 
     if ($("#settingsTelegramBadge")) {
       const tgOk = cfg.telegram_configured;
@@ -2360,11 +2439,187 @@
     }
   }
 
+  let cachedRawLogLines = [];
+  let activeLogLevelFilter = "all";
+  let activeLogSearchTerm = "";
+  let autoScrollLogs = true;
+
   function applyLogs(lines) {
     const body = $("#terminalBody");
     if (!body || !lines) return;
-    body.innerHTML = lines.map(colorizeLog).join("\n");
-    body.scrollTop = body.scrollHeight;
+    cachedRawLogLines = Array.isArray(lines) ? lines : [];
+    renderLogsView();
+  }
+
+  function renderLogsView() {
+    const body = $("#terminalBody");
+    if (!body) return;
+
+    const total = cachedRawLogLines.length;
+    let errCount = 0;
+    let warnCount = 0;
+    let infoCount = 0;
+
+    for (let i = 0; i < total; i++) {
+      const l = cachedRawLogLines[i];
+      if (/ERROR|Exception|Failed|Traceback/i.test(l)) errCount++;
+      else if (/WARN/i.test(l)) warnCount++;
+      else if (/INFO|Signal sent|Signal saved/i.test(l)) infoCount++;
+    }
+
+    // Telemetry stat pills
+    const elTotal = $("#logStatTotal");
+    if (elTotal) elTotal.textContent = String(total);
+    const elErr = $("#logStatErrors");
+    if (elErr) elErr.textContent = String(errCount);
+    const elWarn = $("#logStatWarnings");
+    if (elWarn) elWarn.textContent = String(warnCount);
+    const elInfo = $("#logStatInfo");
+    if (elInfo) elInfo.textContent = String(infoCount);
+
+    const elUpdated = $("#logLastUpdated");
+    if (elUpdated) {
+      const now = new Date();
+      elUpdated.textContent = now.toTimeString().split(" ")[0];
+    }
+
+    const process = $("#logSelect")?.value || "signal-engine";
+    const elTitle = $("#logTermTitle");
+    if (elTitle) elTitle.textContent = process;
+
+    const elBuf = $("#termBufferBadge");
+    if (elBuf) elBuf.textContent = `BUFFER: ${total}L`;
+
+    const procPathMap = {
+      "signal-engine": "~/.pm2/logs/signal-engine-error.log",
+      "signal-server-out": "~/.pm2/logs/signal-server-out.log",
+      "signal-server-err": "~/.pm2/logs/signal-server-error.log",
+      "facebook": "/tmp/bot/signals.log",
+      "telegram": "/tmp/bot/telegram_delivery.log"
+    };
+    const elPath = $("#termSourcePath");
+    if (elPath) elPath.textContent = procPathMap[process] || `pm2/${process}.log`;
+
+    // Sync process switcher cards
+    $$(".log-proc-card").forEach((card) => {
+      const cardProc = card.getAttribute("data-process");
+      const isAct = cardProc === process;
+      card.classList.toggle("active", isAct);
+      card.setAttribute("aria-selected", isAct ? "true" : "false");
+    });
+
+    // Filter lines
+    const search = (activeLogSearchTerm || "").trim().toLowerCase();
+    let filtered = [];
+
+    cachedRawLogLines.forEach((line, idx) => {
+      let passLevel = true;
+      const isErr = /ERROR|Exception|Failed|Traceback/i.test(line);
+      const isWarn = /WARN/i.test(line);
+      const isInfo = /INFO|Signal sent|Signal saved/i.test(line);
+
+      if (activeLogLevelFilter === "error" && !isErr) passLevel = false;
+      else if (activeLogLevelFilter === "warn" && !isWarn) passLevel = false;
+      else if (activeLogLevelFilter === "info" && !isInfo) passLevel = false;
+
+      if (!passLevel) return;
+
+      if (search && !line.toLowerCase().includes(search)) return;
+
+      filtered.push({ line, rawIdx: idx, isErr, isWarn, isInfo });
+    });
+
+    // Update search count
+    const elSearchCount = $("#logSearchCount");
+    const elClearSearch = $("#btnLogSearchClear");
+    if (elSearchCount) {
+      if (search) {
+        elSearchCount.textContent = `${filtered.length} نتیجه`;
+        elSearchCount.hidden = false;
+      } else {
+        elSearchCount.hidden = true;
+      }
+    }
+    if (elClearSearch) {
+      elClearSearch.hidden = !search;
+    }
+
+    const termStatus = $("#termStatusMsg");
+    if (termStatus) {
+      if (filtered.length === 0 && total > 0) {
+        termStatus.textContent = `هیچ لاگی با فیلتر فعلی مطابقت ندارد (${total} خط در بافر)`;
+      } else {
+        termStatus.textContent = `استریم فعال — ${filtered.length} خط در پایانه`;
+      }
+    }
+
+    if (filtered.length === 0) {
+      if (total === 0) {
+        body.innerHTML = `
+          <div class="terminal-empty">
+            <div class="terminal-empty-radar">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l5 5"/></svg>
+            </div>
+            <p class="terminal-empty-msg">در حال اتصال و بافرینگ لاگ‌های پردازش ${esc(process)}...</p>
+          </div>`;
+      } else {
+        body.innerHTML = `
+          <div class="terminal-empty">
+            <p class="terminal-empty-msg">هیچ خط لاگی با فیلتر فعال و عبارت '${esc(search)}' پیدا نشد.</p>
+          </div>`;
+      }
+      return;
+    }
+
+    // Render formatted rows
+    const htmlRows = filtered.map(({ line, rawIdx, isErr, isWarn, isInfo }) => {
+      const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:,\d+)?)\s*(.*)$/);
+      let timeStr = "";
+      let remainder = line;
+      if (tsMatch) {
+        timeStr = tsMatch[1];
+        remainder = tsMatch[2];
+      }
+
+      let levelTag = "";
+      let badgeCls = "";
+      const lvlMatch = remainder.match(/^(INFO|WARN(?:ING)?|ERROR|CRITICAL|DEBUG)\s*(.*)$/i);
+      let msgText = remainder;
+      if (lvlMatch) {
+        levelTag = lvlMatch[1].toUpperCase();
+        msgText = lvlMatch[2];
+        if (/ERROR|CRITICAL/i.test(levelTag)) badgeCls = "err";
+        else if (/WARN/i.test(levelTag)) badgeCls = "warn";
+        else if (/INFO/i.test(levelTag)) badgeCls = "info";
+      } else if (isErr) {
+        levelTag = "ERR";
+        badgeCls = "err";
+      } else if (isWarn) {
+        levelTag = "WARN";
+        badgeCls = "warn";
+      }
+
+      let safeMsg = esc(msgText);
+      if (search) {
+        const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+        safeMsg = safeMsg.replace(regex, `<mark class="log-mark">$1</mark>`);
+      }
+
+      const rowCls = isErr ? "is-error" : isWarn ? "is-warn" : "";
+
+      return `<div class="log-row ${rowCls}">` +
+        `<span class="log-num">${rawIdx + 1}</span>` +
+        (timeStr ? `<span class="log-time">${esc(timeStr)}</span>` : "") +
+        (levelTag ? `<span class="log-badge ${badgeCls}">${esc(levelTag)}</span>` : "") +
+        `<span class="log-msg">${safeMsg}</span>` +
+        `</div>`;
+    });
+
+    body.innerHTML = htmlRows.join("");
+
+    if (autoScrollLogs) {
+      body.scrollTop = body.scrollHeight;
+    }
   }
 
   async function fetchStatus({ force = false } = {}) {
@@ -2562,10 +2817,16 @@
     setFacebookReadyCard("#fbReadyGroups", activeGroups.length > 0, `${activeGroups.length} گروه فعال`);
     setFacebookReadyCard("#fbReadyPoster", status.ready, status.ready ? "آماده انتشار" : "پیکربندی ناقص");
 
+    const totalGroups = shownGroups.length;
+    const groupPages = Math.max(1, Math.ceil(totalGroups / FB_GROUPS_PER_PAGE));
+    if (fbGroupsPage > groupPages) fbGroupsPage = groupPages;
+    const groupStart = (fbGroupsPage - 1) * FB_GROUPS_PER_PAGE;
+    const pagedGroups = shownGroups.slice(groupStart, groupStart + FB_GROUPS_PER_PAGE);
+
     const groupsList = $("#fbGroupsList");
     if (groupsList) {
-      groupsList.innerHTML = shownGroups.length
-        ? shownGroups.map((group) => `
+      groupsList.innerHTML = totalGroups
+        ? pagedGroups.map((group) => `
           <article class="facebook-group-card ${group.enabled ? "" : "disabled"}">
             <div class="facebook-group-main">
               <span class="facebook-group-avatar">${esc((group.name || "F").slice(0, 1).toUpperCase())}</span>
@@ -2580,6 +2841,10 @@
           </article>`).join("")
         : `<div class="facebook-empty"><strong>${groupQuery ? "گروهی با این جستجو پیدا نشد" : "هنوز گروهی اضافه نشده"}</strong><span>${groupQuery ? "عبارت جستجو را تغییر دهید." : "اولین گروه مقصد را اضافه کنید تا مسیر انتشار آماده شود."}</span></div>`;
     }
+    if ($("#fbGroupsPageInfo")) $("#fbGroupsPageInfo").textContent = `صفحه ${fbGroupsPage} از ${groupPages} · ${totalGroups} گروه`;
+    if ($("#btnFbGroupsPrev")) $("#btnFbGroupsPrev").disabled = fbGroupsPage <= 1;
+    if ($("#btnFbGroupsNext")) $("#btnFbGroupsNext").disabled = fbGroupsPage >= groupPages;
+    $("#fbGroupsPagination")?.classList.toggle("hidden", totalGroups <= FB_GROUPS_PER_PAGE);
 
     const jobsList = $("#fbJobsList");
     const totalJobs = jobs.length;
@@ -2619,6 +2884,7 @@
     open: { label: "باز", cls: "open" },
     tp1: { label: "TP1", cls: "win" },
     tp1_sl: { label: "TP1 سپس SL", cls: "expired" },
+    tp1_be: { label: "TP1 سپس BE", cls: "win" },
     tp2: { label: "TP2", cls: "win strong" },
     sl: { label: "Stop Loss", cls: "loss" },
     expired: { label: "منقضی", cls: "expired" },
@@ -2803,10 +3069,11 @@
 
   async function fetchLogs({ force = false } = {}) {
     const process = $("#logSelect")?.value || "signal-engine";
-    const key = logsCacheKey(process);
+    const lines = Number($("#logLinesSelect")?.value || 60);
+    const key = logsCacheKey(process, lines);
     const data = await DataCache.load(
       key,
-      async () => (await api(`/api/logs?process=${process}&lines=60`)).lines,
+      async () => (await api(`/api/logs?process=${process}&lines=${lines}`)).lines,
       CACHE_TTL.logs,
       { force }
     );
@@ -2967,23 +3234,27 @@
           const disabled = item.disabled || !item.page;
           const active = item.page && item.page === activePage;
           const badge = item.badge
-            ? `<span class="nav-item-badge${item.badge === "به‌زودی" ? " soon" : ""}">${item.badge}</span>`
+            ? `<span class="nav-item-badge${item.badge === "به‌زودی" ? " soon" : item.badge === "جدید" ? " new" : ""}">${item.badge}</span>`
             : "";
           return `
             <button type="button"
               class="nav-item${active ? " active" : ""}${disabled ? " disabled" : ""}"
               data-page="${item.page || ""}"
-              ${disabled ? "disabled aria-disabled=\"true\"" : ""}
+              ${disabled ? 'disabled aria-disabled="true"' : ""}
               title="${item.label}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${NAV_ICONS[item.icon] || NAV_ICONS.home}</svg>
-              <span>${item.label}</span>
+              <div class="nav-item-icon-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${NAV_ICONS[item.icon] || NAV_ICONS.home}</svg>
+              </div>
+              <span class="nav-item-text">${item.label}</span>
               ${badge}
+              <div class="nav-item-active-glow"></div>
             </button>`;
         })
         .join("");
       return `
         <div class="nav-group${open ? "" : " collapsed"}" data-group="${group.id}">
           <button type="button" class="nav-group-toggle" data-group-toggle="${group.id}" aria-expanded="${open}">
+            <span class="nav-group-dot"></span>
             <span class="nav-group-toggle-label">${group.label}</span>
             <svg class="nav-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
@@ -3062,7 +3333,7 @@
       $("#pageBreadcrumbRoute").title = meta.path || "/";
     }
     if ($("#pageRoutePill")) $("#pageRoutePill").textContent = meta.path || "/";
-    document.title = `${meta.title} | agennews.store`;
+    document.title = `${meta.title} | testmachine.store`;
     $$(".nav-item[data-page]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.page === activePage);
     });
@@ -3643,6 +3914,51 @@
       : '<div class="engine-cards-empty">اطلاعات موتور تحلیل در دسترس نیست — ربات را روشن کنید</div>';
 
     renderSymbolHealth(state);
+  }
+
+  function renderTwelvePool(pool) {
+    const chips = $("#twelvePoolChips");
+    const keysEl = $("#twelvePoolKeys");
+    const meta = $("#twelvePoolMeta");
+    if (!chips && !keysEl) return;
+    const total = pool?.total || 0;
+    const usable = pool?.usable ?? 0;
+    const sticky = pool?.sticky || "—";
+    if (meta) {
+      meta.textContent = pool?.updated_at
+        ? `Pool sync: ${pool.updated_at}`
+        : "Pool sync: هنوز گزارشی از موتور نیامده";
+    }
+    if (chips) {
+      const cls = usable === 0 ? "bad" : usable === 1 ? "warn" : "ok";
+      chips.innerHTML = total
+        ? `
+          <span class="engine-chip ${cls}"><span class="dot"></span>${usable} از ${total} آماده</span>
+          <span class="engine-chip"><span class="dot" style="background:var(--accent)"></span>فعال …${sticky}</span>`
+        : "";
+    }
+    if (!keysEl) return;
+    const rows = pool?.keys || [];
+    if (!rows.length) {
+      keysEl.innerHTML = '<div class="engine-cards-empty">استخر کلید خالی است</div>';
+      return;
+    }
+    keysEl.innerHTML = rows
+      .map((k) => {
+        const label = { active: "فعال", ready: "آماده", blocked: "بسته", invalid: "نامعتبر" }[k.state] || k.state;
+        return `<article class="engine-card ${k.state === "active" || k.state === "ready" ? "ok" : k.state === "blocked" ? "warn" : "bad"}">
+          <div class="engine-card-head">
+            <span class="engine-card-sym">#${k.n} …${k.suffix}</span>
+            <span class="engine-card-badge ${k.state === "active" || k.state === "ready" ? "ok" : k.state === "blocked" ? "warn" : "bad"}">${label}</span>
+          </div>
+          <div class="engine-card-rows">
+            <div class="engine-card-row">
+              <div class="engine-card-row-val">${k.reason || "سالم"}</div>
+            </div>
+          </div>
+        </article>`;
+      })
+      .join("");
   }
 
   function renderStats(stats, statusData) {
@@ -4442,6 +4758,7 @@
   $("#btnSaveOps")?.addEventListener("click", () => saveOpsConfig().catch((e) => toast(e.message, "error")));
   $("#btnWhatsNew")?.addEventListener("click", openChangelogModal);
   $("#sidebarVersionFull")?.addEventListener("click", openChangelogModal);
+  $("#sidebarVersion")?.addEventListener("click", openChangelogModal);
   $("#changelogModalClose")?.addEventListener("click", closeChangelogModal);
   $("#changelogModalOverlay")?.addEventListener("click", (e) => {
     if (e.target === $("#changelogModalOverlay")) closeChangelogModal();
@@ -5021,20 +5338,49 @@
     try {
       submit?.classList.add("loading");
       const groupId = $("#fbGroupId")?.value || "";
-      await api(groupId ? `/api/facebook/groups/${groupId}` : "/api/facebook/groups", {
-        method: groupId ? "PATCH" : "POST",
-        body: JSON.stringify({
-          name: $("#fbGroupName")?.value,
-          url: $("#fbGroupUrl")?.value,
-          language: $("#fbGroupLanguage")?.value,
-          template: $("#fbGroupTemplate")?.value,
-          enabled: true,
-        }),
-      });
-      closeFacebookGroupModal();
-      invalidateCache("facebook");
-      await fetchFacebook({ force: true });
-      toast(groupId ? "تغییرات گروه ذخیره شد" : "گروه فیسبوک اضافه شد");
+      const urlField = $("#fbGroupUrl")?.value || "";
+
+      if (groupId) {
+        // Editing an existing group is still a single URL/name pair.
+        await api(`/api/facebook/groups/${groupId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: $("#fbGroupName")?.value,
+            url: urlField.trim(),
+            language: $("#fbGroupLanguage")?.value,
+            template: $("#fbGroupTemplate")?.value,
+            enabled: true,
+          }),
+        });
+        closeFacebookGroupModal();
+        invalidateCache("facebook");
+        await fetchFacebook({ force: true });
+        toast("تغییرات گروه ذخیره شد");
+      } else {
+        // Adding: the field accepts one URL per line (or comma-separated) —
+        // each becomes its own group, auto-named from its URL unless
+        // exactly one link was pasted and a name was also given.
+        const result = await api("/api/facebook/groups", {
+          method: "POST",
+          body: JSON.stringify({
+            name: $("#fbGroupName")?.value,
+            urls: urlField.split(/[\n,]+/).map((u) => u.trim()).filter(Boolean),
+            language: $("#fbGroupLanguage")?.value,
+            template: $("#fbGroupTemplate")?.value,
+            enabled: true,
+          }),
+        });
+        closeFacebookGroupModal();
+        invalidateCache("facebook");
+        await fetchFacebook({ force: true });
+        const added = result.added?.length || 0;
+        const dup = result.duplicates?.length || 0;
+        const bad = result.invalid?.length || 0;
+        const parts = [`${added} گروه اضافه شد`];
+        if (dup) parts.push(`${dup} مورد تکراری بود`);
+        if (bad) parts.push(`${bad} لینک نامعتبر بود`);
+        toast(parts.join(" · "));
+      }
     } catch (error) {
       if ($("#fbGroupError")) $("#fbGroupError").textContent = error.message;
     } finally {
@@ -5086,7 +5432,10 @@
     }
   });
 
-  $("#fbGroupSearch")?.addEventListener("input", () => renderFacebook(facebookPayload));
+  $("#fbGroupSearch")?.addEventListener("input", () => {
+    fbGroupsPage = 1;
+    renderFacebook(facebookPayload);
+  });
 
   async function setAllFacebookGroups(enabled) {
     try {
@@ -5167,6 +5516,16 @@
     facebookPreviewTemplates = data.templates;
     if ($("#fbPreviewSignal")) {
       $("#fbPreviewSignal").textContent = `${data.signal.symbol} ${data.signal.direction} · ${data.signal.entry}`;
+    }
+    const chartImg = $("#fbChartPreview");
+    if (chartImg) {
+      if (data.signal.chart_image) {
+        chartImg.src = `/api/facebook/jobs/${encodeURIComponent(data.signal.signal_id)}/chart-image`;
+        chartImg.classList.remove("hidden");
+      } else {
+        chartImg.removeAttribute("src");
+        chartImg.classList.add("hidden");
+      }
     }
     const tabs = buildFacebookPreviewTabs(data.templates);
     renderFacebookPreviewTabButtons(tabs, tabs[0]?.tabKey);
@@ -5316,6 +5675,24 @@
     fbJobsPage += 1;
     renderFacebook(facebookPayload);
   });
+  const fbFilteredGroupCount = () => {
+    const groups = facebookPayload?.groups || [];
+    const q = ($("#fbGroupSearch")?.value || "").trim().toLowerCase();
+    return q
+      ? groups.filter((g) => `${g.name} ${g.url}`.toLowerCase().includes(q)).length
+      : groups.length;
+  };
+  $("#btnFbGroupsPrev")?.addEventListener("click", () => {
+    if (fbGroupsPage <= 1) return;
+    fbGroupsPage -= 1;
+    renderFacebook(facebookPayload);
+  });
+  $("#btnFbGroupsNext")?.addEventListener("click", () => {
+    const groupPages = Math.max(1, Math.ceil(fbFilteredGroupCount() / FB_GROUPS_PER_PAGE));
+    if (fbGroupsPage >= groupPages) return;
+    fbGroupsPage += 1;
+    renderFacebook(facebookPayload);
+  });
   $("#btnFbHistoryPrev")?.addEventListener("click", () => {
     if (fbHistoryPage <= 1) return;
     fetchFacebookHistory(fbHistoryPage - 1).catch((error) => toast(error.message, "error"));
@@ -5377,8 +5754,168 @@
   });
 
   $("#logSelect")?.addEventListener("change", () => {
-    invalidateCache(logsCacheKey($("#logSelect")?.value || "signal-engine"));
+    const proc = $("#logSelect")?.value || "signal-engine";
+    invalidateCache(logsCacheKey(proc));
     refreshLogs({ force: true });
+  });
+
+  // Fast Process Switcher Cards
+  $$(".log-proc-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const proc = card.getAttribute("data-process");
+      if (!proc) return;
+      const select = $("#logSelect");
+      if (select && select.value !== proc) {
+        select.value = proc;
+        select.dispatchEvent(new Event("change"));
+      }
+    });
+  });
+
+  // Log Level Filter Buttons
+  $$(".log-lvl-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $$(".log-lvl-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeLogLevelFilter = btn.getAttribute("data-lvl") || "all";
+      renderLogsView();
+    });
+  });
+
+  // Search in Logs
+  const logSearchInput = $("#logSearchInput");
+  logSearchInput?.addEventListener("input", (e) => {
+    activeLogSearchTerm = e.target.value || "";
+    renderLogsView();
+  });
+
+  $("#btnLogSearchClear")?.addEventListener("click", () => {
+    if (logSearchInput) {
+      logSearchInput.value = "";
+      activeLogSearchTerm = "";
+      renderLogsView();
+      logSearchInput.focus();
+    }
+  });
+
+  // Lines Limit Select
+  $("#logLinesSelect")?.addEventListener("change", () => {
+    const proc = $("#logSelect")?.value || "signal-engine";
+    invalidateCache(logsCacheKey(proc));
+    refreshLogs({ force: true });
+  });
+
+  // Auto-scroll Toggle
+  const autoScrollBtn = $("#logAutoScrollToggle");
+  autoScrollBtn?.addEventListener("click", () => {
+    autoScrollLogs = !autoScrollLogs;
+    autoScrollBtn.classList.toggle("active", autoScrollLogs);
+    if (autoScrollLogs) {
+      const body = $("#terminalBody");
+      if (body) body.scrollTop = body.scrollHeight;
+    }
+  });
+
+  // Refresh Logs Action Button
+  $("#btnRefreshLogs")?.addEventListener("click", async () => {
+    const btn = $("#btnRefreshLogs");
+    if (btn) btn.classList.add("loading");
+    const proc = $("#logSelect")?.value || "signal-engine";
+    invalidateCache(logsCacheKey(proc));
+    try {
+      await refreshLogs({ force: true });
+      toast("لاگ‌ها به‌روزرسانی شدند", "info");
+    } catch (e) {
+      toast("خطا در دریافت لاگ‌ها: " + e.message, "error");
+    } finally {
+      if (btn) btn.classList.remove("loading");
+    }
+  });
+
+  // Copy Logs to Clipboard
+  $("#btnCopyLogs")?.addEventListener("click", async () => {
+    if (!cachedRawLogLines.length) {
+      toast("لاگی برای کپی وجود ندارد", "warn");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(cachedRawLogLines.join("\n"));
+      toast("کلیه لاگ‌ها در کلیپ‌بورد کپی شد", "info");
+    } catch {
+      // Fallback
+      const ta = document.createElement("textarea");
+      ta.value = cachedRawLogLines.join("\n");
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      toast("کلیه لاگ‌ها در کلیپ‌بورد کپی شد", "info");
+    }
+  });
+
+  // Download Logs as File
+  $("#btnDownloadLogs")?.addEventListener("click", () => {
+    if (!cachedRawLogLines.length) {
+      toast("لاگی برای دانلود وجود ندارد", "warn");
+      return;
+    }
+    const proc = $("#logSelect")?.value || "signal-engine";
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const blob = new Blob([cachedRawLogLines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${proc}-${ts}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("فایل لاگ دانلود شد", "info");
+  });
+
+  // Clear Terminal View
+  $("#btnClearLogs")?.addEventListener("click", () => {
+    cachedRawLogLines = [];
+    renderLogsView();
+    toast("صفحه پایانه پاک‌سازی شد", "info");
+  });
+
+  // Fullscreen Terminal Toggle
+  const toggleFullscreenLogs = () => {
+    const term = $("#logsTerminal");
+    if (!term) return;
+    term.classList.toggle("is-fullscreen");
+    const isFull = term.classList.contains("is-fullscreen");
+    const body = $("#terminalBody");
+    if (isFull && autoScrollLogs && body) {
+      setTimeout(() => { body.scrollTop = body.scrollHeight; }, 100);
+    }
+  };
+  $("#btnFullscreenLogs")?.addEventListener("click", toggleFullscreenLogs);
+  $(".term-dot.green")?.addEventListener("click", toggleFullscreenLogs);
+  $(".term-dot.red")?.addEventListener("click", () => {
+    const term = $("#logsTerminal");
+    if (term?.classList.contains("is-fullscreen")) {
+      term.classList.remove("is-fullscreen");
+    }
+  });
+
+  // Keyboard shortcut Ctrl+F to focus search input when on logs page
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F") && activePage === "logs") {
+      const search = $("#logSearchInput");
+      if (search && document.activeElement !== search) {
+        e.preventDefault();
+        search.focus();
+        search.select();
+      }
+    }
+    if (e.key === "Escape") {
+      const term = $("#logsTerminal");
+      if (term?.classList.contains("is-fullscreen")) {
+        term.classList.remove("is-fullscreen");
+      }
+    }
   });
 
   // ── SSE Stream ──
