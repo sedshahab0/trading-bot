@@ -301,7 +301,7 @@
   ];
 
   const CHART_FONT = { family: "Vazirmatn", size: 11 };
-  const CHART_COLORS = ["#63ffd0", "#5b9cf6", "#a78bfa", "#fbbf24", "#f87171"];
+  const CHART_COLORS = ["#f4b740", "#6c8cff", "#2ee6a6", "#b58cff", "#ff7a90", "#4fd1ff"];
 
   // ── Smart Cache (stale-while-revalidate + session persist) ──
   const CACHE_TTL = {
@@ -617,12 +617,25 @@
   }
 
   // ── Toast ──
+  const TOAST_ICONS = {
+    success: '<polyline points="20 6 9 17 4 12"/>',
+    error: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    warning: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
+    get warn() { return this.warning; },
+  };
+
   function toast(msg, type = "success") {
     const el = document.createElement("div");
     el.className = `toast ${type}`;
-    el.textContent = msg;
+    el.setAttribute("role", "status");
+    el.innerHTML = `<span class="toast-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${TOAST_ICONS[type] || TOAST_ICONS.info}</svg></span><span class="toast-msg"></span><span class="toast-timer"></span>`;
+    el.querySelector(".toast-msg").textContent = msg;
     $("#toastContainer").appendChild(el);
-    setTimeout(() => el.remove(), 3500);
+    setTimeout(() => {
+      el.classList.add("leaving");
+      setTimeout(() => el.remove(), 320);
+    }, 3500);
   }
 
   // ── API ──
@@ -673,6 +686,7 @@
     $("#loginOverlay").classList.remove("hidden");
     $("#dashboard").classList.add("hidden");
     stopStreams();
+    document.dispatchEvent(new CustomEvent("tc:login"));
   }
 
   function purgeLegacyConfigCache() {
@@ -691,6 +705,7 @@
     $("#loginOverlay").classList.add("hidden");
     $("#dashboard").classList.remove("hidden");
     startStreams();
+    document.dispatchEvent(new CustomEvent("tc:dashboard", { detail: { page: activePage } }));
   }
 
   async function checkAuth() {
@@ -774,37 +789,6 @@
     }
   });
 
-  // Dynamic Interactive Mouse Spotlight & 3D Tilt for Login Card
-  (function initLoginMouseEffects() {
-    const overlay = $("#loginOverlay");
-    const card = $("#loginCard");
-    if (!overlay || !card) return;
-
-    let rafId = null;
-    overlay.addEventListener("mousemove", (e) => {
-      if (window.innerWidth < 768) return;
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const rect = overlay.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-        overlay.style.setProperty("--mouse-x", `${x.toFixed(2)}%`);
-        overlay.style.setProperty("--mouse-y", `${y.toFixed(2)}%`);
-
-        const cardRect = card.getBoundingClientRect();
-        const cardX = e.clientX - cardRect.left - cardRect.width / 2;
-        const cardY = e.clientY - cardRect.top - cardRect.height / 2;
-        const rx = (cardY / (cardRect.height / 2)) * -3.5;
-        const ry = (cardX / (cardRect.width / 2)) * 3.5;
-        card.style.transform = `perspective(1200px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
-      });
-    });
-
-    overlay.addEventListener("mouseleave", () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      card.style.transform = "perspective(1200px) rotateX(0deg) rotateY(0deg)";
-    });
-  })();
 
   $("#btnLogout")?.addEventListener("click", async () => {
     try {
@@ -902,7 +886,8 @@
     if (!el) return;
     const text = String(newVal ?? 0);
     if (el.textContent === text) return;
-    el.textContent = text;
+    if (window.TCMotion?.countTo) window.TCMotion.countTo(el, text);
+    else el.textContent = text;
   }
 
   function updateStatusBanner(overall) {
@@ -1013,7 +998,7 @@
     const signals = state?.last_signal_at || {};
     const symbols = [...new Set([...Object.keys(bars), ...Object.keys(signals)])];
     if (!symbols.length) {
-      el.innerHTML = '<p style="color:var(--text-dim);font-size:var(--text-xs);text-align:center;padding:0.5rem">—</p>';
+      el.innerHTML = '<p class="panel-empty">هنوز داده‌ای از موتور تحلیل برای نمادها نرسیده</p>';
       return;
     }
     el.innerHTML = symbols.map((sym) => {
@@ -1061,24 +1046,71 @@
         labels,
         datasets: [{
           data: totals,
-          borderColor: "#63ffd0",
-          backgroundColor: "rgba(99,255,208,0.1)",
+          borderColor: "#f4b740",
+          backgroundColor: "rgba(244,183,64,0.1)",
           fill: true,
-          tension: 0.45,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          borderWidth: 2,
+          cubicInterpolationMode: "monotone",
+          pointRadius: 3,
+          pointBackgroundColor: "#12151c",
+          pointBorderColor: "#f4b740",
+          pointBorderWidth: 2,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: "#f4b740",
+          pointHoverBorderColor: "#12151c",
+          pointHoverBorderWidth: 3,
+          borderWidth: 2.2,
+          clip: false,
         }],
       },
       options: {
         ...chartDefaults(),
-        plugins: { legend: { display: false } },
+        layout: { padding: { top: 12, right: 6, left: 6, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            padding: { x: 12, y: 8 },
+            callbacks: {
+              title: (items) => items[0]?.label || "",
+              label: (item) => `${item.parsed.y} سیگنال`,
+            },
+          },
+        },
         scales: {
-          x: { display: false },
-          y: { display: false, beginAtZero: true },
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: { color: "#6b7385", font: { family: "JetBrains Mono", size: 10 }, padding: 6 },
+          },
+          y: {
+            position: "right",
+            beginAtZero: true,
+            grace: "20%",
+            border: { display: false },
+            grid: { color: "rgba(255,255,255,0.05)", drawTicks: false },
+            ticks: { color: "#6b7385", font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 4, precision: 0, padding: 8 },
+          },
         },
         interaction: { intersect: false, mode: "index" },
       },
+      plugins: [{
+        id: "homeSparkCrosshair",
+        afterDatasetsDraw(chart) {
+          const active = chart.tooltip?.getActiveElements?.() || [];
+          if (!active.length) return;
+          const { ctx, chartArea } = chart;
+          const x = active[0].element.x;
+          ctx.save();
+          ctx.setLineDash([3, 4]);
+          ctx.strokeStyle = "rgba(244,183,64,0.45)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, chartArea.top);
+          ctx.lineTo(x, chartArea.bottom);
+          ctx.stroke();
+          ctx.restore();
+        },
+      }],
     });
   }
 
@@ -1805,18 +1837,18 @@
         data: {
           labels,
           datasets: [
-            { label: "کل", data: totals, backgroundColor: "rgba(99,255,208,0.55)", borderRadius: 4 },
-            { label: "BUY", data: buys, backgroundColor: "rgba(74,222,128,0.65)", borderRadius: 4 },
-            { label: "SELL", data: sells, backgroundColor: "rgba(248,113,113,0.65)", borderRadius: 4 },
+            { label: "کل", data: totals, backgroundColor: "rgba(244,183,64,0.55)", borderRadius: 4 },
+            { label: "BUY", data: buys, backgroundColor: "rgba(46,230,166,0.65)", borderRadius: 4 },
+            { label: "SELL", data: sells, backgroundColor: "rgba(255,92,122,0.65)", borderRadius: 4 },
           ],
         },
         options: {
           ...chartDefaults(),
           scales: {
-            x: { ticks: { color: "#5c6578", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
-            y: { beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+            x: { ticks: { color: "#6b7385", font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: "#6b7385", stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
           },
-          plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
+          plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#a3abbb", font: chartFont(9), boxWidth: 10 } } },
         },
       });
       logClientEvent("chart-created", {
@@ -2263,17 +2295,17 @@
         data: {
           labels,
           datasets: [
-            { label: "موفق", data: ok, backgroundColor: "rgba(74,222,128,0.75)", borderRadius: 4 },
-            { label: "ناموفق", data: failed, backgroundColor: "rgba(248,113,113,0.75)", borderRadius: 4 },
+            { label: "موفق", data: ok, backgroundColor: "rgba(46,230,166,0.75)", borderRadius: 4 },
+            { label: "ناموفق", data: failed, backgroundColor: "rgba(255,92,122,0.75)", borderRadius: 4 },
           ],
         },
         options: {
           ...chartDefaults(),
           scales: {
-          x: { stacked: true, ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
+          x: { stacked: true, ticks: { color: "#6b7385", font: chartFont(9) }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#6b7385", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
         },
-        plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9) } } },
+        plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#a3abbb", font: chartFont(9) } } },
       },
       });
       logClientEvent("chart-created", {
@@ -2989,8 +3021,8 @@
           datasets: [{
             label: "Equity (R)",
             data: equity.map((point) => point.value),
-            borderColor: totalR >= 0 ? "#63ffd0" : "#f87171",
-            backgroundColor: totalR >= 0 ? "rgba(99,255,208,.09)" : "rgba(248,113,113,.09)",
+            borderColor: totalR >= 0 ? "#f4b740" : "#ff5c7a",
+            backgroundColor: totalR >= 0 ? "rgba(244,183,64,.09)" : "rgba(255,92,122,.09)",
             fill: true,
             tension: .25,
             pointRadius: equity.length > 35 ? 0 : 2.5,
@@ -3341,6 +3373,7 @@
     $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${activePage}`));
     if (syncHistory) syncRoute(activePage);
     closeSidebar();
+    document.dispatchEvent(new CustomEvent("tc:page", { detail: { page: activePage } }));
 
     applyPageFromCache(activePage);
 
@@ -3462,6 +3495,12 @@
   }
 
   window._ctrl = (action, process) => control(action, process);
+  window.TCNav = {
+    go: (page) => switchPage(page),
+    pages: () => PAGE_META,
+    current: () => activePage,
+    control: (action) => control(action, "all"),
+  };
 
   function setGaugeArc(el, pct, max = 214) {
     if (!el) return;
@@ -3612,10 +3651,10 @@
 
   function updateSparkCharts() {
     const configs = [
-      { key: "cpuSparkChart", id: "#cpuSpark", color: "#5b9cf6", bg: "rgba(91,156,246,0.12)", data: resourceHistory.cpu },
-      { key: "ramSparkChart", id: "#ramSpark", color: "#63ffd0", bg: "rgba(99,255,208,0.1)", data: resourceHistory.ram },
-      { key: "diskSparkChart", id: "#diskSpark", color: "#fbbf24", bg: "rgba(251,191,36,0.1)", data: resourceHistory.disk || [] },
-      { key: "netSparkChart", id: "#netSpark", color: "#a78bfa", bg: "rgba(167,139,250,0.1)", data: resourceHistory.net },
+      { key: "cpuSparkChart", id: "#cpuSpark", color: "#6c8cff", bg: "rgba(108,140,255,0.12)", data: resourceHistory.cpu },
+      { key: "ramSparkChart", id: "#ramSpark", color: "#f4b740", bg: "rgba(244,183,64,0.1)", data: resourceHistory.ram },
+      { key: "diskSparkChart", id: "#diskSpark", color: "#4fd1ff", bg: "rgba(79,209,255,0.1)", data: resourceHistory.disk || [] },
+      { key: "netSparkChart", id: "#netSpark", color: "#b58cff", bg: "rgba(181,140,255,0.1)", data: resourceHistory.net },
     ];
     configs.forEach(({ key, id, color, bg, data }) => {
       let chart = { cpuSparkChart, ramSparkChart, diskSparkChart, netSparkChart }[key];
@@ -3651,8 +3690,8 @@
             {
               label: "CPU",
               data: [...resourceHistory.cpu],
-              borderColor: "#5b9cf6",
-              backgroundColor: "rgba(91,156,246,0.08)",
+              borderColor: "#6c8cff",
+              backgroundColor: "rgba(108,140,255,0.08)",
               fill: true,
               tension: 0.35,
               yAxisID: "y",
@@ -3662,8 +3701,8 @@
             {
               label: "RAM",
               data: [...resourceHistory.ram],
-              borderColor: "#63ffd0",
-              backgroundColor: "rgba(99,255,208,0.06)",
+              borderColor: "#f4b740",
+              backgroundColor: "rgba(244,183,64,0.06)",
               fill: true,
               tension: 0.35,
               yAxisID: "y",
@@ -3673,8 +3712,8 @@
             {
               label: "Disk",
               data: [...resourceHistory.disk],
-              borderColor: "#fbbf24",
-              backgroundColor: "rgba(251,191,36,0.06)",
+              borderColor: "#4fd1ff",
+              backgroundColor: "rgba(79,209,255,0.06)",
               fill: false,
               tension: 0.35,
               yAxisID: "y",
@@ -3684,8 +3723,8 @@
             {
               label: "Net KB/s",
               data: [...resourceHistory.net],
-              borderColor: "#a78bfa",
-              backgroundColor: "rgba(167,139,250,0.06)",
+              borderColor: "#b58cff",
+              backgroundColor: "rgba(181,140,255,0.06)",
               fill: false,
               tension: 0.35,
               yAxisID: "y1",
@@ -3715,14 +3754,14 @@
               type: "linear",
               position: "left",
               beginAtZero: true,
-              ticks: { color: "#8b7fd6", font: CHART_FONT },
+              ticks: { color: "#9d8cff", font: CHART_FONT },
               grid: { drawOnChartArea: false },
             },
           },
           plugins: {
             legend: { display: false },
             tooltip: {
-              backgroundColor: "rgba(8,12,24,0.95)",
+              backgroundColor: "rgba(14,16,22,0.96)",
               titleFont: CHART_FONT,
               bodyFont: CHART_FONT,
             },
@@ -4036,8 +4075,8 @@
       responsive: true,
       maintainAspectRatio: false,
       devicePixelRatio: isMobileViewport() ? Math.min(dpr, 1.5) : Math.min(dpr, 2),
-      plugins: { legend: { rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(10) } } },
-      animation: isMobileViewport() ? false : { duration: 300 },
+      plugins: { legend: { rtl: false, textDirection: "ltr", labels: { color: "#a3abbb", font: chartFont(10) } } },
+      animation: isMobileViewport() ? false : { duration: 700, easing: "easeOutQuart" },
     };
   }
 
@@ -4057,7 +4096,7 @@
         labels: ["BUY", "SELL"],
         datasets: [{
           data,
-          backgroundColor: ["rgba(74,222,128,0.85)", "rgba(248,113,113,0.85)"],
+          backgroundColor: ["rgba(46,230,166,0.85)", "rgba(255,92,122,0.85)"],
           borderWidth: 0,
           hoverOffset: 8,
         }],
@@ -4066,7 +4105,7 @@
         ...chartDefaults(),
         cutout: "62%",
         plugins: {
-          legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
+          legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#a3abbb", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
         },
       },
     });
@@ -4100,8 +4139,8 @@
         ...chartDefaults(),
         indexAxis: "y",
         scales: {
-          x: { ticks: { color: "#5c6578", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
-          y: { ticks: { color: "#8b95a8", font: { family: "JetBrains Mono", size: 11 } }, grid: { display: false } },
+          x: { ticks: { color: "#6b7385", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
+          y: { ticks: { color: "#a3abbb", font: { family: "JetBrains Mono", size: 11 } }, grid: { display: false } },
         },
         plugins: { legend: { display: false } },
       },
@@ -4202,18 +4241,18 @@
       data: {
         labels,
         datasets: [
-          { label: "ارسال موفق", data: sent, backgroundColor: "rgba(74,222,128,0.75)", borderRadius: 4, stack: "s" },
-          { label: "خطا", data: failed, backgroundColor: "rgba(248,113,113,0.75)", borderRadius: 4, stack: "s" },
-          { label: "بدون تأیید", data: unsent, backgroundColor: "rgba(251,191,36,0.65)", borderRadius: 4, stack: "s" },
+          { label: "ارسال موفق", data: sent, backgroundColor: "rgba(46,230,166,0.75)", borderRadius: 4, stack: "s" },
+          { label: "خطا", data: failed, backgroundColor: "rgba(255,92,122,0.75)", borderRadius: 4, stack: "s" },
+          { label: "بدون تأیید", data: unsent, backgroundColor: "rgba(79,209,255,0.65)", borderRadius: 4, stack: "s" },
         ],
       },
       options: {
         ...chartDefaults(),
         scales: {
-          x: { stacked: true, ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, ticks: { color: "#5c6578", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
+          x: { stacked: true, ticks: { color: "#6b7385", font: chartFont(9) }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#6b7385", stepSize: 1, font: chartFont(9) }, grid: { color: "rgba(255,255,255,0.04)" } },
         },
-        plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), boxWidth: 10 } } },
+        plugins: { legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#a3abbb", font: chartFont(9), boxWidth: 10 } } },
       },
     });
   }
@@ -4243,7 +4282,7 @@
         labels: ["BUY", "SELL"],
         datasets: [{
           data: [buy, sell],
-          backgroundColor: ["rgba(74,222,128,0.85)", "rgba(248,113,113,0.85)"],
+          backgroundColor: ["rgba(46,230,166,0.85)", "rgba(255,92,122,0.85)"],
           borderWidth: 0,
           hoverOffset: 8,
         }],
@@ -4252,7 +4291,7 @@
         ...chartDefaults(),
         cutout: "62%",
         plugins: {
-          legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#8b95a8", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
+          legend: { position: "bottom", rtl: false, textDirection: "ltr", labels: { color: "#a3abbb", font: chartFont(9), padding: isMobileViewport() ? 8 : 16 } },
         },
       },
     });
@@ -4481,8 +4520,8 @@
             {
               label: "کل",
               data: totals,
-              borderColor: "#63ffd0",
-              backgroundColor: "rgba(99,255,208,0.08)",
+              borderColor: "#f4b740",
+              backgroundColor: "rgba(244,183,64,0.08)",
               fill: true,
               tension: 0.4,
               pointRadius: 4,
@@ -4491,7 +4530,7 @@
             {
               label: "BUY",
               data: buys,
-              borderColor: "#4ade80",
+              borderColor: "#2ee6a6",
               backgroundColor: "transparent",
               tension: 0.4,
               pointRadius: 3,
@@ -4499,7 +4538,7 @@
             {
               label: "SELL",
               data: sells,
-              borderColor: "#f87171",
+              borderColor: "#ff5c7a",
               backgroundColor: "transparent",
               tension: 0.4,
               pointRadius: 3,
@@ -4510,8 +4549,8 @@
           ...chartDefaults(),
           interaction: { mode: "index", intersect: false },
           scales: {
-            x: { ticks: { color: "#5c6578", font: chartFont(9) }, grid: { display: false } },
-            y: { beginAtZero: true, ticks: { color: "#5c6578", font: chartFont(9), stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
+            x: { ticks: { color: "#6b7385", font: chartFont(9) }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: "#6b7385", font: chartFont(9), stepSize: 1 }, grid: { color: "rgba(255,255,255,0.04)" } },
           },
           animation: { duration: 700 },
         },

@@ -12981,6 +12981,12 @@ body.auth-pending .app-shell {
     opacity: 0;
     transform: translateY(8px) scale(0.996);
   }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* ── 7. Persian Typography Craft Standards & Tabular Numerals ── */
 [dir="rtl"] h1,
 [dir="rtl"] h2,
@@ -13002,10 +13008,318 @@ body.auth-pending .app-shell {
 .live-badge,
 .telemetry-ping,
 .sim-kpi strong,
-.sig-kpi-num {
+.sig-kpi-num,
+.mon-gauge-num,
+.price-tag,
+.score-num {
   font-family: 'JetBrains Mono', 'Outfit', monospace !important;
   font-variant-numeric: tabular-nums !important;
   font-feature-settings: "tnum" !important;
 }
+
+/* ==========================================================================
+   TRADECHI ULTIMATE DESIGN ELEVATION (3D, GSAP, & HIGH-TECH QUANT FINTECH)
+   ========================================================================== */
+
+/* ── 8. Three.js 3D Interactive Canvases ── */
+.login-three-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.85 !important;
+}
+
+/* ── Login Split Layout: Modal Completely Fills Right Side (Full-Height Docked Cockpit) ── */
+@media (min-width: 1024px) {
+  .login-overlay {
+    display: flex !important;
+    align-items: stretch !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  [dir="rtl"] .login-overlay {
+    justify-content: flex-start !important; /* Right edge in RTL */
+  }
+
+  [dir="ltr"] .login-overlay {
+    justify-content: flex-end !important;   /* Right edge in LTR */
+  }
+
+  .login-wrap {
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    width: clamp(740px, 48vw, 860px) !important;
+    max-width: 52vw !important;
+    margin: 0 !important;
+    margin-inline-start: auto !important;
+    margin-inline-end: 0 !important;
+    border-radius: 36px 0 0 36px !important;
+    border-right: none !important;
+    border-top: none !important;
+    border-bottom: none !important;
+    border-left: 1px solid rgba(0, 242, 254, 0.28) !important;
+    box-shadow:
+      -25px 0 80px -10px rgba(0, 0, 0, 0.9),
+      -5px 0 40px -5px rgba(0, 242, 254, 0.16) !important;
+    background: rgba(8, 14, 28, 0.94) !important;
+    backdrop-filter: blur(36px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(36px) saturate(190%) !important;
+    overflow-y: auto !important;
+    align-content: center !important;
+    transform: none !important;
+  }
+
+  .login-brand,
+  .login-panel {
+    min-height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    padding: 3rem 2.4rem !important;
+  }
+
+  .login-three-canvas {
+    opacity: 0.95 !important;
+  }
+}
+
+.hero-three-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.55 !important;
+  border-radius: inherit !important;
+}
+
+.home-hero .hero-body {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* ── 9. Micro-Animations & Tactile Interactions ── */
+button,
+.btn,
+.quick-btn,
+.ctrl-quick-btn,
+.mgmt-card,
+.nav-item,
+.log-lvl-btn,
+.btn-terminal-action {
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease !important;
+  will-change: transform;
+}
+
+button:active,
+.btn:active,
+.quick-btn:active,
+.ctrl-quick-btn:active,
+.mgmt-card:active {
+  transform: scale(0.97) !important;
+}
+
+/* ── 10. Glowing Card Elevations & Subtle Depth ── */
+.panel,
+.kpi-card,
+.process-card,
+.mgmt-card,
+.sig-row {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+
+.panel:hover {
+  border-color: rgba(0, 242, 254, 0.22) !important;
+  box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.65), 0 0 24px -6px rgba(0, 242, 254, 0.12) !important;
+}
+
+.kpi-card:hover {
+  transform: translateY(-3px) scale(1.01) !important;
+  border-color: rgba(0, 242, 254, 0.32) !important;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.75), 0 0 30px -5px rgba(0, 242, 254, 0.2) !important;
+}
+
+/* ── 11. Ultra-Refined Data Tables ── */
+.data-table,
+.signals-table,
+.telegram-table,
+.simulation-table {
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 4px !important;
+}
+
+.data-table th,
+.signals-table th,
+.telegram-table th,
+.simulation-table th {
+  background: rgba(8, 14, 28, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  color: #94a3b8 !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding: 0.85rem 1rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+}
+
+.data-table tr,
+.signals-table tr,
+.telegram-table tr,
+.simulation-table tr {
+  background: rgba(12, 19, 36, 0.65) !important;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.data-table tbody tr:hover,
+.signals-table tbody tr:hover,
+.telegram-table tbody tr:hover,
+.simulation-table tbody tr:hover {
+  background: rgba(18, 28, 54, 0.9) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(0, 242, 254, 0.22) !important;
+}
+
+.data-table td,
+.signals-table td,
+.telegram-table td,
+.simulation-table td {
+  padding: 0.85rem 1rem !important;
+  font-size: 0.84rem !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+.data-table td:first-child,
+.signals-table td:first-child,
+.telegram-table td:first-child,
+.simulation-table td:first-child {
+  border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-top-right-radius: 10px !important;
+  border-bottom-right-radius: 10px !important;
+}
+
+.data-table td:last-child,
+.signals-table td:last-child,
+.telegram-table td:last-child,
+.simulation-table td:last-child {
+  border-left: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-top-left-radius: 10px !important;
+  border-bottom-left-radius: 10px !important;
+}
+
+/* ── 12. Direction Badges (BUY & SELL Glowing Pills) ── */
+.sig-dir-badge.buy,
+.dir-badge.buy,
+.badge-buy {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  color: #34d399 !important;
+  box-shadow: 0 0 12px -2px rgba(16, 185, 129, 0.3) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+}
+
+.sig-dir-badge.sell,
+.dir-badge.sell,
+.badge-sell {
+  background: rgba(244, 63, 94, 0.15) !important;
+  border: 1px solid rgba(244, 63, 94, 0.4) !important;
+  color: #fb7185 !important;
+  box-shadow: 0 0 12px -2px rgba(244, 63, 94, 0.3) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* ── 13. High-Tech Cyber Terminal Styling ── */
+.terminal {
+  border-radius: 20px !important;
+  border: 1px solid rgba(0, 242, 254, 0.25) !important;
+  background: #040711 !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 40px -10px rgba(0, 242, 254, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+.terminal::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03)) !important;
+  background-size: 100% 3px, 6px 100% !important;
+  pointer-events: none !important;
+  z-index: 5 !important;
+  opacity: 0.7 !important;
+}
+
+.terminal-header {
+  background: linear-gradient(180deg, rgba(14, 23, 44, 0.98) 0%, rgba(8, 13, 26, 0.98) 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09) !important;
+  padding: 0.75rem 1.25rem !important;
+}
+
+.terminal-body {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.83rem !important;
+  line-height: 1.65 !important;
+  color: #cbd5e1 !important;
+  padding: 1.25rem !important;
+  background: transparent !important;
+}
+
+/* ── 14. Modals & Overlays Glass Aesthetics ── */
+.modal-overlay {
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  background: rgba(3, 6, 15, 0.78) !important;
+}
+
+.modal-sheet {
+  border-radius: 24px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: linear-gradient(145deg, rgba(14, 22, 42, 0.96) 0%, rgba(7, 12, 24, 0.98) 100%) !important;
+  box-shadow: 0 35px 80px -15px rgba(0, 0, 0, 0.9), 0 0 60px -10px rgba(0, 242, 254, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 1.35rem 1.65rem !important;
+}
+
+.modal-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 1.15rem 1.65rem !important;
+}
+
+/* ── 15. Sleek Custom Scrollbars ── */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(5, 8, 16, 0.4);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(0, 242, 254, 0.3) 0%, rgba(59, 130, 246, 0.3) 100%);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0, 242, 254, 0.6) 0%, rgba(59, 130, 246, 0.6) 100%);
+}
+
 
 
